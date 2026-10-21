@@ -56,7 +56,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    container: public.ecr.aws/docker/library/swift:6.2  # Docker's official image via ECR Public (no Docker Hub pull limit); GRDB (AegisStorage, ADR-0012) and MLX need Swift 6.1+
+    container: mirror.gcr.io/library/swift:6.2  # Docker's official image via Google's Docker Hub mirror: anonymous pulls from Docker Hub and ECR Public both hit toomanyrequests on shared runners; GRDB (AegisStorage, ADR-0012) and MLX need Swift 6.1+
     steps:
       - uses: actions/checkout@v7
       - name: Install system SQLite headers
@@ -75,7 +75,7 @@ jobs:
     name: swift-cache
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    container: public.ecr.aws/docker/library/swift:6.2
+    container: mirror.gcr.io/library/swift:6.2
     steps:
       - uses: actions/checkout@v7
       - id: lookup
