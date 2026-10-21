@@ -68,6 +68,8 @@ extension CoreEngine {
             return await people()
         case let .draftReply(personID):
             return await draftReply(personID: personID)
+        case let .activity(hours):
+            return await activity(hours: hours)
         default:
             return nil
         }
