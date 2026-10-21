@@ -1,0 +1,4 @@
+// Team signing for local builds (ADR-0013). The team ID lives only in the gitignored
+// Signing.local.xcconfig, written by `make signing-config`. Without it, Xcode signs to run locally,
+// and Aegis.app refuses to register AegisCore and ModelService (BackgroundParts).
+#include? "Signing.local.xcconfig"

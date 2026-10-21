@@ -1,0 +1,25 @@
+name: Research question
+description: A question for ChatGPT (with web/deep research) or DeepSeek to investigate.
+title: "[Research] "
+labels: ["type:research"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters / what it unblocks
+    validations:
+      required: true
+  - type: textarea
+    id: answer-format
+    attributes:
+      label: What a good answer contains
+      value: |
+        - Direct answer first, then evidence with sources
+        - macOS/iOS versions it applies to
+        - APIs, permissions, limitations

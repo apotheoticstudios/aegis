@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.aegis.xpcsigned.model</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/model-agent</string>
+    <!-- On demand: launchd starts it when a client looks up this Mach service. No RunAtLoad, no KeepAlive. -->
+    <key>MachServices</key>
+    <dict>
+        <key>dev.aegis.xpcsigned.model</key>
+        <true/>
+    </dict>
+    <!-- Variant B of the spike: launchd's default 10 s throttle delayed relaunches after a short run. -->
+    <key>ThrottleInterval</key>
+    <integer>1</integer>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>dev.aegis.xpcsigned</string>
+    </array>
+</dict>
+</plist>

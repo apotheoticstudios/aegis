@@ -1,0 +1,42 @@
+{
+  "originHash" : "e00f605913b5511bd7aefc3c5900fb7cadf9db1ef8edbbc6f3a39f5ef58264f8",
+  "pins" : [
+    {
+      "identity" : "cbor",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/edgeengineer/cbor.git",
+      "state" : {
+        "revision" : "a64323cc11eb8b4d7005dfd2feadacfd5f59f547",
+        "version" : "0.0.6"
+      }
+    },
+    {
+      "identity" : "kokoro-coreml",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Jud/kokoro-coreml.git",
+      "state" : {
+        "revision" : "6bfc02afb237a311caee927482e58c028edb6acb",
+        "version" : "0.11.2"
+      }
+    },
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
+      "state" : {
+        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version" : "1.8.2"
+      }
+    },
+    {
+      "identity" : "swift-bart-g2p",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Jud/swift-bart-g2p.git",
+      "state" : {
+        "revision" : "1ed781e05fba7b4042212aecb6124a3aab83ce45",
+        "version" : "0.4.0"
+      }
+    }
+  ],
+  "version" : 3
+}

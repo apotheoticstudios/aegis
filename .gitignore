@@ -1,0 +1,47 @@
+# Generated Xcode project (ADR-0003) — regenerate with `make generate`
+*.xcodeproj/
+*.xcworkspace/
+!Packages/**/*.xcworkspace/
+
+# Build output
+build/
+DerivedData/
+.build/
+.swiftpm/
+*.xcresult
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Personal files: stay on this Mac only (never commit). Put anything personal in Private/.
+docs/history/
+Private/
+
+# Secrets and signing (never commit)
+Config/Signing.local.xcconfig
+.env
+*.p12
+*.cer
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+
+# Prototype outputs from real data (never commit)
+Prototype/output/
+Prototype/.venv/
+__pycache__/
+
+# Local agent notes
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Node (World sidecar, later)
+node_modules/
+
+# Local tool logs (never committed)
+*.log

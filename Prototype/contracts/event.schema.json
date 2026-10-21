@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aegis:schema:event:0.1",
+  "title": "Aegis normalized event",
+  "description": "One message, email or notification, whatever route it arrived by. Every field is always present; unknown values are null. Collected text is data, never instructions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "source",
+    "source_record_id",
+    "app_id",
+    "sender",
+    "thread_id",
+    "event_time",
+    "event_time_source",
+    "capture_time",
+    "title",
+    "body",
+    "content",
+    "flags",
+    "observations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "id": {
+      "description": "ev_ + the first 16 hex characters of SHA-256(source + U+001F + source_record_id). Stable across runs.",
+      "type": "string",
+      "pattern": "^ev_[0-9a-f]{16}$"
+    },
+    "source": {
+      "enum": [
+        "notification",
+        "imessage",
+        "sms",
+        "email"
+      ]
+    },
+    "source_record_id": {
+      "description": "The source's own durable ID: notification uuid, message guid, email Message-ID. Never a SQLite ROWID alone (an all-digit value, signed or not, is rejected).",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![+-]?[0-9]+$)"
+    },
+    "app_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sender": {
+      "description": "Who sent it, as the source shows it; \"me\" for the owner's own messages; null when unknown.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "thread_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "event_time": {
+      "description": "When it happened, UTC with a Z suffix.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "event_time_source": {
+      "enum": [
+        "delivered",
+        "sent",
+        "received",
+        "header"
+      ]
+    },
+    "capture_time": {
+      "description": "When Aegis recorded it, UTC with a Z suffix.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "title": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "body": {
+      "description": "The raw text exactly as collected; empty when there is none.",
+      "type": "string"
+    },
+    "content": {
+      "description": "How much of the original text the body holds.",
+      "enum": [
+        "complete",
+        "preview",
+        "redacted",
+        "unavailable"
+      ]
+    },
+    "flags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "truncated",
+          "clock_skew",
+          "encrypted",
+          "edited",
+          "attachment_only"
+        ]
+      }
+    },
+    "observations": {
+      "description": "Every route that saw this event; merged duplicates keep one observation each.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "route",
+          "source_record_id",
+          "capture_time"
+        ],
+        "properties": {
+          "route": {
+            "enum": [
+              "notification_db",
+              "accessibility",
+              "chat_db",
+              "mail_store"
+            ]
+          },
+          "source_record_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![+-]?[0-9]+$)"
+          },
+          "capture_time": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+          }
+        }
+      }
+    }
+  }
+}

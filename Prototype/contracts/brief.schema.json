@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aegis:schema:brief:0.1",
+  "title": "Aegis brief",
+  "description": "What the model writes from a window of events. Every item cites the events it rests on. There is deliberately no field for actions or tool calls.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "window_start", "window_end", "items", "omitted_events"],
+  "properties": {
+    "schema_version": { "const": "0.1" },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "window_start": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "window_end": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "model": {
+      "description": "Which model wrote the brief, for benchmarks.",
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "priority", "event_ids"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "priority": { "enum": ["urgent", "reply", "fyi"] },
+          "event_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^ev_[0-9a-f]{16}$" }
+          }
+        }
+      }
+    },
+    "omitted_events": {
+      "description": "Events in the window left out of the model's input (input limits), so a brief never looks more complete than it is.",
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

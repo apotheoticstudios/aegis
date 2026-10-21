@@ -1,0 +1,198 @@
+# XcodeGen spec. Edit this, never Aegis.xcodeproj (it is generated and gitignored). See ADR-0003.
+# AegisCore and ModelService are launch agents inside Aegis.app (ADR-0010, ADR-0013); HomeHelper and Widgets come later.
+name: Aegis
+options:
+  bundleIdPrefix: dev.aegis            # change to your own reverse-domain before signing
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+# Team signing comes from Config/Signing.local.xcconfig (gitignored; `make signing-config`).
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    DEAD_CODE_STRIPPING: YES
+
+packages:
+  AegisKit:
+    path: Packages/AegisKit
+  SharedIPC:
+    path: Packages/SharedIPC
+  MacSources:
+    path: Packages/MacSources
+  WakeRuntime:
+    path: Packages/WakeRuntime
+  VoiceRuntime:
+    path: Packages/VoiceRuntime
+
+targets:
+  AegisApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: Apps/AegisApp/Sources
+      - path: Apps/AegisApp/Resources/VoiceLicences
+        type: folder
+        buildPhase: resources
+      # The World view's one-time setup script (#265, ADR-0024).
+      - path: Apps/AegisApp/Resources/World
+        type: folder
+        buildPhase: resources
+      # launchd plists for SMAppService: Aegis.app/Contents/Library/LaunchAgents
+      - path: Apps/AegisApp/LaunchAgents
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
+    info:
+      path: Apps/AegisApp/Info.plist
+    # The hardened runtime needs these to ask for Contacts and EventKit access.
+    entitlements:
+      path: Apps/AegisApp/Aegis.entitlements
+      properties:
+        com.apple.security.personal-information.addressbook: true
+        com.apple.security.personal-information.calendars: true
+        # Ask by voice (#178): the microphone, only after the owner clicks the mic in the open panel.
+        com.apple.security.device.audio-input: true
+        # "Set my home here" (#265): the Mac's location, once, only when the owner asks.
+        com.apple.security.personal-information.location: true
+        # "… and send it" (#276): Aegis sends through Messages or Mail, after two confirmations.
+        com.apple.security.automation.apple-events: true
+    dependencies:
+      - package: AegisKit
+      - package: SharedIPC
+      - package: WakeRuntime
+      - target: AegisVoice
+        embed: true
+      # The agents' executables go into Aegis.app/Contents/MacOS, where their plists point.
+      - target: AegisCore
+        copy:
+          destination: executables
+      - target: ModelService
+        copy:
+          destination: executables
+    settings:
+      base:
+        PRODUCT_NAME: Aegis
+        PRODUCT_BUNDLE_IDENTIFIER: dev.aegis.app
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "Project: Aegis"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_LSUIElement: YES   # menu bar only: no Dock icon, silent until the panel opens
+        # Shown once when Aegis asks; the grants also reach AegisCore (#66).
+        INFOPLIST_KEY_NSContactsUsageDescription: "Aegis shows who messaged you by name, using your contacts. Nothing leaves this Mac."
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: "Aegis shows today's events in your brief. Nothing leaves this Mac."
+        INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: "Aegis shows today's reminders in your brief. Nothing leaves this Mac."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Aegis listens only after you click the mic in its panel. Nothing is recorded or leaves this Mac."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Aegis turns what you say into a question, on this Mac only."
+        INFOPLIST_KEY_NSAppleEventsUsageDescription: "When you ask Aegis to send a text or email itself and confirm twice, it sends it through Messages or Mail."
+        INFOPLIST_KEY_NSLocationUsageDescription: "When you say “set my home here”, Aegis notes where this Mac is, once, to show home on the World view. It stays on this Mac."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "When you say “set my home here”, Aegis notes where this Mac is, once, to show home on the World view. It stays on this Mac."
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.0.1"
+        CURRENT_PROJECT_VERSION: "1"
+
+  # Always-on launch agent: collectors, store, scheduler, brief job (skeleton until step 3.1).
+  AegisCore:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Apps/AegisCore/Sources
+    dependencies:
+      - package: AegisKit
+      - package: AegisKit
+        product: AegisStorage
+      - package: SharedIPC
+      - package: MacSources
+    # The hardened runtime needs these for Contacts and EventKit.
+    entitlements:
+      path: Apps/AegisCore/AegisCore.entitlements
+      properties:
+        com.apple.security.personal-information.addressbook: true
+        com.apple.security.personal-information.calendars: true
+    settings:
+      base:
+        PRODUCT_NAME: AegisCore
+        PRODUCT_BUNDLE_IDENTIFIER: dev.aegis.core
+        # An Info.plist inside the binary makes dev.aegis.core its signing identifier, which the XPC
+        # code-signing requirements check (ADR-0013).
+        GENERATE_INFOPLIST_FILE: YES
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+
+  # On-demand launch agent that runs the model and exits (skeleton until step 2.12).
+  ModelService:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Apps/ModelService/Sources
+    dependencies:
+      - package: AegisKit
+      - package: SharedIPC
+    settings:
+      base:
+        PRODUCT_NAME: ModelService
+        PRODUCT_BUNDLE_IDENTIFIER: dev.aegis.model
+        # An Info.plist inside the binary makes dev.aegis.model its signing identifier, which the XPC
+        # code-signing requirements check (ADR-0013).
+        GENERATE_INFOPLIST_FILE: YES
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+
+  # Bundled speech service: starts on panel open and exits on disconnect to release CoreML caches.
+  AegisVoice:
+    type: xpc-service
+    platform: macOS
+    info:
+      path: Apps/AegisVoice/Info.plist
+      properties:
+        XPCService:
+          ServiceType: Application
+    sources:
+      - path: Apps/AegisVoice/Sources
+    dependencies:
+      - package: SharedIPC
+      - package: VoiceRuntime
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.aegis.voice
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+
+  AegisAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Apps/AegisApp/Tests
+      - path: Apps/AegisCore/Sources/MailKeeper.swift
+    dependencies:
+      - target: AegisApp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Aegis.app/Contents/MacOS/Aegis"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  AegisApp:
+    build:
+      targets:
+        AegisApp: all
+    test:
+      # Never inherit the owner's opt-in microphone setting in the unsigned, synthetic test host.
+      commandLineArguments:
+        "-listenForHeyAegis NO": true
+      targets:
+        - AegisAppTests
+      gatherCoverageData: true

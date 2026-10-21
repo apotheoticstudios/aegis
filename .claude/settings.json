@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/Library/Messages/**)",
+      "Read(~/Library/Mail/**)",
+      "Read(~/Library/Group Containers/group.com.apple.usernoted/**)",
+      "Read(~/Library/Application Support/AddressBook/**)",
+      "Read(~/Library/Calendars/**)",
+      "Read(~/Library/Photos/**)",
+      "Read(~/Library/Containers/**)",
+      "Read(~/Library/Keychains/**)",
+      "Read(~/.ssh/**)",
+      "Read(**/*.p12)",
+      "Read(**/*.cer)",
+      "Read(**/*.mobileprovision)",
+      "Read(**/.env)",
+      "Edit(~/Library/**)",
+      "Bash(sqlite3 ~/Library/*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(csrutil *)",
+      "Bash(tccutil *)"
+    ],
+    "allow": [
+      "Bash(make test-core)",
+      "Bash(make guard)",
+      "Bash(make lint)",
+      "Bash(make generate)",
+      "Bash(make build)",
+      "Bash(make test)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ]
+  }
+}

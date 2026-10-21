@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- ModelService: started on demand when AegisCore connects; exits by itself (ADR-0013). -->
+    <key>Label</key>
+    <string>dev.aegis.model</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/ModelService</string>
+    <key>MachServices</key>
+    <dict>
+        <key>dev.aegis.model</key>
+        <true/>
+    </dict>
+    <!-- launchd's default 10 s throttle delayed a relaunch by up to 9.4 s after a crash (spike 1.5). -->
+    <key>ThrottleInterval</key>
+    <integer>1</integer>
+    <key>ProcessType</key>
+    <string>Adaptive</string>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>dev.aegis.app</string>
+    </array>
+</dict>
+</plist>

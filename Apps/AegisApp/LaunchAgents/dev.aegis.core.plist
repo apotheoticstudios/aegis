@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- AegisCore: always on (ADR-0010, ADR-0013). The app registers it with SMAppService. -->
+    <key>Label</key>
+    <string>dev.aegis.core</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/AegisCore</string>
+    <key>MachServices</key>
+    <dict>
+        <key>dev.aegis.core</key>
+        <true/>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <!-- Background priority while idle; boosted while it answers the app over XPC. -->
+    <key>ProcessType</key>
+    <string>Adaptive</string>
+    <!-- macOS attributes its privacy access to the app, so the app's grants reach it (#66). -->
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>dev.aegis.app</string>
+    </array>
+</dict>
+</plist>

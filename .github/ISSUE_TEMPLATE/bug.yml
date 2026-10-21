@@ -1,0 +1,26 @@
+name: Bug
+description: Something is broken.
+title: "[Bug] "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce (using fixtures where possible)
+  - type: input
+    id: env
+    attributes:
+      label: Mac model, macOS version, commit
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: I removed any real personal data from logs and screenshots above
+          required: true

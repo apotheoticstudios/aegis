@@ -1,0 +1,29 @@
+# macOS app build + tests, started manually only (Actions › Run workflow). A macOS minute counts as 10 on a
+# private repo and the owner's Actions budget is US$15 a month (owner, 2026-10-12), so PRs no longer start it:
+# Claude builds the signed app and runs its tests on the owner's Mac before every merge.
+name: App (macOS)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: app
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tools
+        run: brew install xcodegen swiftlint
+      - name: Generate project
+        run: xcodegen generate
+      - name: Lint
+        run: swiftlint lint --quiet
+      - name: Build and test
+        run: |
+          xcodebuild -project Aegis.xcodeproj -scheme AegisApp \
+            -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO test

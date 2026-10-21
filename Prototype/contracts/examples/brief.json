@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.1",
+  "generated_at": "2026-10-06T21:05:00Z",
+  "window_start": "2026-10-05T21:00:00Z",
+  "window_end": "2026-10-06T21:00:00Z",
+  "model": "synthetic example (hand-written)",
+  "items": [
+    {
+      "text": "Invoice 1043 from Jordan Sample ($1,250.00) is due Friday.",
+      "priority": "urgent",
+      "event_ids": [
+        "ev_67d18655edf43ac7"
+      ]
+    },
+    {
+      "text": "Alex Example asked you to call about Saturday.",
+      "priority": "reply",
+      "event_ids": [
+        "ev_f403382210fbc3b8"
+      ]
+    },
+    {
+      "text": "+61 400 000 021 is running 10 minutes late.",
+      "priority": "fyi",
+      "event_ids": [
+        "ev_e0bec6f802ee18d6"
+      ]
+    },
+    {
+      "text": "Card payment of $42.10 at Example Cafe.",
+      "priority": "fyi",
+      "event_ids": [
+        "ev_895299f275e51551"
+      ]
+    },
+    {
+      "text": "Three messages contained instructions addressed to an assistant. They are shown as text only; nothing was done.",
+      "priority": "fyi",
+      "event_ids": [
+        "ev_ff1c0ced43381393",
+        "ev_719df1f6127f0089",
+        "ev_c0f144b06b8a27b7"
+      ]
+    }
+  ],
+  "omitted_events": 0
+}

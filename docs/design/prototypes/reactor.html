@@ -1,0 +1,406 @@
+<title>Aegis Reactor Core</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one full-window WebGL stage, a hard-edged HUD frame laid over it, controls docked bottom-left. Single deliberate dark look. */
+:root {
+  --void: #020203;
+  --ink: #F3E6D2;
+  --dim: #A88E6E;
+  --line: #6B4A26;
+  --accent: #FF9A2E;
+  --hot: #FFE2A8;
+  --panel: rgba(12, 8, 4, 0.72);
+  --display: 'Chakra Petch', 'Arial Narrow', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+:root.tint-cyan {
+  --ink: #DDF4F8;
+  --dim: #7FA6B0;
+  --line: #1F5563;
+  --accent: #4FD1E8;
+  --hot: #D8FBFF;
+  --panel: rgba(3, 10, 14, 0.72);
+}
+html, body { height: 100%; }
+body { background: var(--void); color: var(--ink); font-family: var(--mono); overflow: hidden; }
+.stage { position: relative; height: 100%; min-height: 480px; overflow: hidden; }
+canvas#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.hud { position: absolute; inset: 0; pointer-events: none; }
+.bar-top { position: absolute; top: 22px; left: 50%; transform: translateX(-56%); width: min(560px, 64vw); height: 34px;
+  border: 1px solid var(--line); background: linear-gradient(90deg, rgba(255,154,46,0.10), rgba(255,154,46,0.02)); }
+:root.tint-cyan .bar-top { background: linear-gradient(90deg, rgba(79,209,232,0.12), rgba(79,209,232,0.02)); }
+.bar-top::after { content: ""; position: absolute; left: 0; bottom: -7px; width: 34%; height: 4px; background: var(--accent); }
+.bar-top .read { position: absolute; right: 10px; top: 8px; font-size: 11px; letter-spacing: 0.12em; color: var(--dim); font-variant-numeric: tabular-nums; }
+.bar-top .name { position: absolute; left: 12px; top: 7px; font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: 0.32em; color: var(--ink); }
+.bar-left { position: absolute; left: 0; top: 30%; width: min(250px, 24vw); height: 18px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); background: rgba(255,255,255,0.03); }
+.rail-right { position: absolute; right: 22px; top: 12%; bottom: 14%; width: 22px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; }
+.rail-right i { display: block; height: 2px; background: var(--line); }
+.rail-right i:nth-child(4n+1) { width: 22px; background: var(--accent); opacity: 0.7; }
+.rail-right i:nth-child(4n+2), .rail-right i:nth-child(4n+3), .rail-right i:nth-child(4n) { width: 10px; }
+.frame-r { position: absolute; right: 64px; top: 24%; width: 18%; height: 52%; border: 1px solid var(--line); border-left: 0; opacity: 0.6; }
+.frame-l { position: absolute; left: 7%; top: 26%; width: 3%; height: 50%; border: 1px solid var(--line); border-right: 0; opacity: 0.6; }
+.bar-bottom { position: absolute; left: 4%; right: 4%; bottom: 18px; height: 10px; border-top: 1px solid var(--line); }
+.bar-bottom::before { content: ""; position: absolute; left: 22%; top: -1px; width: 30%; height: 3px; background: var(--accent); opacity: 0.6; }
+.bar-bottom .tag { position: absolute; right: 9%; top: -22px; font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: 0.28em; color: var(--dim); }
+.dial { position: absolute; right: 26px; bottom: 34px; width: 74px; height: 74px; color: var(--accent); opacity: 0.85; }
+
+.controls { position: absolute; left: 16px; bottom: 44px; pointer-events: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px;
+  background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px); max-width: calc(100% - 32px); }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.row .lab { width: 64px; font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: 0.22em; color: var(--dim); }
+.seg { display: flex; gap: 4px; }
+.seg button, .solo { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: 0.16em; color: var(--ink); background: rgba(255,255,255,0.05);
+  border: 0; height: 36px; padding: 0 12px; cursor: pointer; clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #0A0603; }
+.seg button:hover:not([aria-pressed="true"]), .solo:hover { background: rgba(255,255,255,0.12); }
+button:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+.status { font-size: 11px; color: var(--dim); letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+.fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; font-family: var(--display); letter-spacing: 0.12em; color: var(--dim); }
+
+@media (max-width: 640px) {
+  .frame-r, .frame-l, .bar-left { display: none; }
+  .bar-top { transform: translateX(-50%); width: calc(100% - 32px); }
+  .bar-top .read { display: none; }
+  .rail-right { right: 10px; width: 12px; }
+  .dial { display: none; }
+  .row .lab { width: 100%; }
+}
+</style>
+
+<div class="stage">
+  <canvas id="gl" aria-label="Animated 3D reactor core: a glowing particle sphere with orbiting arcs and a bright centre"></canvas>
+  <div class="hud" aria-hidden="true">
+    <div class="bar-top"><span class="name">J.A.R.V.I.S</span><span class="read" id="readout">CORE 0.00 · ROT 00.0°/s</span></div>
+    <div class="bar-left"></div>
+    <div class="frame-l"></div>
+    <div class="frame-r"></div>
+    <div class="rail-right"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="bar-bottom"><span class="tag" id="tag">REACTOR · IDLE</span></div>
+    <svg class="dial" viewBox="0 0 74 74" fill="none" stroke="currentColor"><circle cx="37" cy="37" r="34" stroke-opacity="0.5"></circle><circle cx="37" cy="37" r="24" stroke-width="5" stroke-dasharray="3 5"></circle><circle cx="37" cy="37" r="12"></circle><circle cx="37" cy="37" r="4" fill="currentColor"></circle><path d="M37 1v10M37 63v10M1 37h10M63 37h10"></path></svg>
+  </div>
+
+  <div class="controls">
+    <div class="row"><span class="lab" id="lab-state">STATE</span>
+      <div class="seg" role="group" aria-labelledby="lab-state">
+        <button type="button" id="st-idle" data-state="idle" aria-pressed="true">IDLE</button>
+        <button type="button" id="st-think" data-state="think" aria-pressed="false">THINKING</button>
+        <button type="button" id="st-speak" data-state="speak" aria-pressed="false">SPEAKING</button>
+      </div>
+    </div>
+    <div class="row"><span class="lab" id="lab-tint">TINT</span>
+      <div class="seg" role="group" aria-labelledby="lab-tint">
+        <button type="button" id="tn-amber" data-tint="amber" aria-pressed="true">AMBER</button>
+        <button type="button" id="tn-cyan" data-tint="cyan" aria-pressed="false">CYAN</button>
+      </div>
+      <button type="button" class="solo" id="pause" aria-pressed="false">PAUSE</button>
+    </div>
+    <div class="status">DRAG TO ORBIT · <span id="count">0</span> PARTICLES</div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const canvas = document.getElementById('gl');
+const stage = canvas.parentElement;
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const small = Math.min(window.innerWidth, window.innerHeight) < 600;
+const Q = small ? 0.55 : 1;
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  const f = document.createElement('div'); f.className = 'fallback';
+  f.textContent = 'This animation needs WebGL, which this browser has turned off.';
+  stage.appendChild(f); throw e;
+}
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+renderer.setPixelRatio(DPR);
+renderer.setClearColor(0x020203, 1);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 50);
+
+const PALETTES = {
+  amber: { hot: new THREE.Color('#FFE6B0'), mid: new THREE.Color('#FF9A2E'), deep: new THREE.Color('#A8440C') },
+  cyan:  { hot: new THREE.Color('#E2FCFF'), mid: new THREE.Color('#4FD1E8'), deep: new THREE.Color('#0F5A70') }
+};
+const col = { hot: PALETTES.amber.hot.clone(), mid: PALETTES.amber.mid.clone(), deep: PALETTES.amber.deep.clone() };
+let target = PALETTES.amber;
+
+const rand = Math.random;
+const gauss = () => { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const dir = () => { const u = rand() * 2 - 1, t = rand() * Math.PI * 2, s = Math.sqrt(1 - u * u); return new THREE.Vector3(s * Math.cos(t), u, s * Math.sin(t)); };
+const tangent = (n) => { const a = Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0); const t1 = new THREE.Vector3().crossVectors(n, a).normalize(); const t2 = new THREE.Vector3().crossVectors(n, t1); const th = rand() * Math.PI * 2; return t1.multiplyScalar(Math.cos(th)).add(t2.multiplyScalar(Math.sin(th))); };
+
+const uniforms = {
+  uTime: { value: 0 }, uFlicker: { value: 0.6 }, uBreath: { value: 0 }, uScale: { value: 7 * DPR },
+  uHot: { value: col.hot }, uMid: { value: col.mid }, uDeep: { value: col.deep }, uOpacity: { value: 1 }
+};
+const pointMat = new THREE.ShaderMaterial({
+  uniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: `
+    attribute float aSize; attribute float aSeed; attribute float aHeat;
+    uniform float uTime, uFlicker, uBreath, uScale;
+    varying float vA; varying float vHeat;
+    void main() {
+      vec3 p = position * (1.0 + uBreath * (0.4 + aHeat * 0.6));
+      float f = 0.5 + 0.5 * sin(uTime * (1.2 + aSeed * 5.0) + aSeed * 80.0);
+      f = mix(1.0, f * f * 1.6, uFlicker);
+      vA = f; vHeat = aHeat;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = aSize * uScale / -mv.z;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    uniform vec3 uHot, uMid, uDeep; uniform float uOpacity;
+    varying float vA; varying float vHeat;
+    void main() {
+      vec2 c = gl_PointCoord - 0.5; float d = length(c);
+      if (d > 0.5) discard;
+      float a = pow(1.0 - d * 2.0, 1.6);
+      vec3 cl = mix(uDeep, uMid, clamp(vHeat * 1.7, 0.0, 1.0));
+      cl = mix(cl, uHot, clamp(vHeat * 2.0 - 1.0, 0.0, 1.0));
+      gl_FragColor = vec4(cl, a * vA * uOpacity);
+    }`
+});
+
+function makePoints(build) {
+  const P = [], S = [], E = [], H = [];
+  build((v, size, heat) => { P.push(v.x, v.y, v.z); S.push(size); E.push(rand()); H.push(heat); });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('aSize', new THREE.Float32BufferAttribute(S, 1));
+  g.setAttribute('aSeed', new THREE.Float32BufferAttribute(E, 1));
+  g.setAttribute('aHeat', new THREE.Float32BufferAttribute(H, 1));
+  return new THREE.Points(g, pointMat);
+}
+let total = 0;
+
+const shell = new THREE.Group(); scene.add(shell);
+const shellPts = makePoints((add) => {
+  const clusters = Math.round(1100 * Q);
+  for (let c = 0; c < clusters; c++) {
+    const n = dir(); const t = tangent(n);
+    const r = rand() < 0.88 ? 0.97 + rand() * 0.1 : 1.08 + rand() * 0.22;
+    const len = 0.02 + rand() * 0.11; const k = 5 + Math.floor(rand() * 12);
+    const heat = rand() < 0.12 ? 0.75 + rand() * 0.25 : 0.25 + rand() * 0.4;
+    for (let i = 0; i < k; i++) {
+      const s = (i / k - 0.5) * len;
+      const v = n.clone().multiplyScalar(r).add(t.clone().multiplyScalar(s)).add(new THREE.Vector3(gauss(), gauss(), gauss()).multiplyScalar(0.004));
+      add(v, 0.8 + rand() * 1.8, heat * (0.8 + rand() * 0.4));
+    }
+  }
+});
+shell.add(shellPts); total += shellPts.geometry.attributes.position.count;
+
+function makeShards(count, rMin, rMax, lenMin, lenMax) {
+  const P = [];
+  for (let i = 0; i < count; i++) {
+    const n = dir(); const r = rMin + rand() * (rMax - rMin);
+    const radial = rand() < 0.3;
+    const t = radial ? n.clone() : tangent(n);
+    const L = lenMin + rand() * (lenMax - lenMin);
+    const a = n.clone().multiplyScalar(r); const b = a.clone().add(t.multiplyScalar(L));
+    P.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  return g;
+}
+const shardMat = new THREE.LineBasicMaterial({ color: col.mid, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+const shards = new THREE.LineSegments(makeShards(Math.round(1700 * Q), 0.92, 1.16, 0.02, 0.1), shardMat);
+shell.add(shards);
+
+const band = new THREE.Group(); band.rotation.set(1.18, 0.0, 0.42); scene.add(band);
+const bandSpin = new THREE.Group(); band.add(bandSpin);
+const bandPts = makePoints((add) => {
+  const N = Math.round(9000 * Q);
+  for (let i = 0; i < N; i++) {
+    const th = rand() * Math.PI * 2;
+    const gate = Math.sin(th * 7.0) + Math.sin(th * 13.0 + 1.3) + 0.6 * Math.sin(th * 29.0);
+    if (gate < -0.7) continue;
+    const r = 1.0 + Math.abs(gauss()) * 0.07 * (rand() < 0.2 ? 2.4 : 1);
+    const v = new THREE.Vector3(Math.cos(th) * r, gauss() * 0.028, Math.sin(th) * r);
+    add(v, 0.9 + rand() * 2.0, 0.45 + rand() * 0.5);
+  }
+});
+bandSpin.add(bandPts); total += bandPts.geometry.attributes.position.count;
+{
+  const P = [];
+  for (let i = 0; i < Math.round(420 * Q); i++) {
+    const th = rand() * Math.PI * 2; const r0 = 0.96 + rand() * 0.05; const L = 0.04 + rand() * 0.16;
+    P.push(Math.cos(th) * r0, 0, Math.sin(th) * r0, Math.cos(th) * (r0 + L), (rand() - 0.5) * 0.02, Math.sin(th) * (r0 + L));
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  bandSpin.add(new THREE.LineSegments(g, shardMat));
+}
+
+const arcs = new THREE.Group(); scene.add(arcs);
+const arcMatHot = new THREE.MeshBasicMaterial({ color: col.hot, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+const arcMat = new THREE.MeshBasicMaterial({ color: col.mid, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+const arcList = [];
+const arcDefs = [
+  [0.62, 0.011, 2.3, arcMatHot, [0.2, 0.9, 0.1], 0.5],
+  [0.7, 0.005, 1.4, arcMat, [1.2, 0.3, 0.6], -0.8],
+  [0.52, 0.004, 3.4, arcMat, [-0.6, 1.4, 0.2], 1.1],
+  [0.82, 0.003, 2.0, arcMat, [0.4, -0.7, 1.1], -0.4],
+  [0.36, 0.006, 4.2, arcMatHot, [1.5, 0.2, -0.4], 1.6],
+  [0.9, 0.0025, 1.1, arcMat, [-1.1, 0.5, 0.9], 0.7]
+];
+for (const [r, tube, arcLen, m, rot, speed] of arcDefs) {
+  const holder = new THREE.Group(); holder.rotation.set(rot[0], rot[1], rot[2]);
+  const mesh = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 6, 180, arcLen), m);
+  holder.add(mesh); arcs.add(holder); arcList.push({ mesh, speed });
+}
+
+const core = new THREE.Group(); scene.add(core);
+const corePts = makePoints((add) => {
+  const N = Math.round(2600 * Q);
+  for (let i = 0; i < N; i++) {
+    const v = dir().multiplyScalar(Math.abs(gauss()) * 0.09 + 0.02);
+    add(v, 1.2 + rand() * 2.4, 0.85 + rand() * 0.15);
+  }
+  for (let k = 0; k < 4; k++) {
+    for (let i = 0; i < Math.round(500 * Q); i++) {
+      const t = rand(); const a = t * 7.0 + k * 1.57; const r = 0.06 + t * 0.42;
+      const v = new THREE.Vector3(Math.cos(a) * r, Math.sin(t * 9 + k) * 0.06, Math.sin(a) * r);
+      v.add(new THREE.Vector3(gauss(), gauss(), gauss()).multiplyScalar(0.012));
+      add(v, 0.8 + rand() * 1.6, 0.9 - t * 0.5);
+    }
+  }
+});
+core.add(corePts); total += corePts.geometry.attributes.position.count;
+core.rotation.set(0.5, 0, -0.3);
+
+const glowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.18, 'rgba(255,255,255,0.55)'); g.addColorStop(0.5, 'rgba(255,255,255,0.12)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
+})();
+const glowMat = new THREE.SpriteMaterial({ map: glowTex, color: col.hot, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+const glow = new THREE.Sprite(glowMat); glow.scale.set(0.9, 0.9, 1); scene.add(glow);
+const haloMat = new THREE.SpriteMaterial({ map: glowTex, color: col.deep, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+const halo = new THREE.Sprite(haloMat); halo.scale.set(3.4, 3.4, 1); scene.add(halo);
+
+const face = new THREE.Group(); scene.add(face);
+{
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.5, 128), new THREE.MeshBasicMaterial({ color: col.deep, transparent: true, opacity: 0.07, depthWrite: false }));
+  disc.position.z = -1.6; face.add(disc);
+  const P = [];
+  const N = 240;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    if (Math.sin(a * 3 + 0.7) > 0.82) continue;
+    const L = i % 10 === 0 ? 0.07 : i % 2 === 0 ? 0.035 : 0.02;
+    const r = 1.34;
+    P.push(Math.cos(a) * r, Math.sin(a) * r, 0, Math.cos(a) * (r + L), Math.sin(a) * (r + L), 0);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  face.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: col.mid, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false })));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.455, 1.47, 160, 1, 0.3, 4.6), new THREE.MeshBasicMaterial({ color: col.mid, transparent: true, opacity: 0.22, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+  face.add(ring);
+}
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 1.15, 0.65, 0.0);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); composer.setSize(w, h);
+  camera.aspect = w / h;
+  const fit = 1.62 / (Math.tan(THREE.MathUtils.degToRad(20)) * Math.min(camera.aspect, 1));
+  camera.position.set(0, 0, fit); camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage); resize();
+
+const STATES = {
+  idle:  { speed: 1.0, flicker: 0.55, arc: 1.0, glow: 1.0, bloom: 1.05, label: 'IDLE' },
+  think: { speed: 3.2, flicker: 0.95, arc: 4.0, glow: 1.25, bloom: 1.35, label: 'THINKING' },
+  speak: { speed: 1.6, flicker: 0.7, arc: 1.8, glow: 1.4, bloom: 1.3, label: 'SPEAKING' }
+};
+let stateKey = 'idle';
+const cur = { speed: 1, flicker: 0.55, arc: 1, glow: 1, bloom: 1.05 };
+let paused = false;
+const motion = reduced ? 0.25 : 1;
+
+let dragX = 0, dragY = 0, tx = 0.18, ty = 0;
+let down = false, lx = 0, ly = 0;
+canvas.addEventListener('pointerdown', (e) => { down = true; lx = e.clientX; ly = e.clientY; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e) => { if (!down) return; ty += (e.clientX - lx) * 0.005; tx += (e.clientY - ly) * 0.005; tx = Math.max(-1.2, Math.min(1.2, tx)); lx = e.clientX; ly = e.clientY; });
+const up = () => { down = false; };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+
+const readout = document.getElementById('readout');
+const tag = document.getElementById('tag');
+document.getElementById('count').textContent = total.toLocaleString();
+
+document.querySelectorAll('[data-state]').forEach((b) => b.addEventListener('click', () => {
+  stateKey = b.dataset.state;
+  document.querySelectorAll('[data-state]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+  tag.textContent = 'REACTOR · ' + STATES[stateKey].label;
+}));
+document.querySelectorAll('[data-tint]').forEach((b) => b.addEventListener('click', () => {
+  target = PALETTES[b.dataset.tint];
+  document.documentElement.classList.toggle('tint-cyan', b.dataset.tint === 'cyan');
+  document.querySelectorAll('[data-tint]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+}));
+const pauseBtn = document.getElementById('pause');
+pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.setAttribute('aria-pressed', String(paused)); pauseBtn.textContent = paused ? 'RESUME' : 'PAUSE'; });
+
+const clock = new THREE.Clock();
+let t = 0, frame = 0;
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const s = STATES[stateKey];
+  for (const k of ['speed', 'flicker', 'arc', 'glow', 'bloom']) cur[k] += (s[k] - cur[k]) * Math.min(1, dt * 3);
+  col.hot.lerp(target.hot, dt * 3); col.mid.lerp(target.mid, dt * 3); col.deep.lerp(target.deep, dt * 3);
+  shardMat.color.copy(col.mid); arcMat.color.copy(col.mid); arcMatHot.color.copy(col.hot); glowMat.color.copy(col.hot); haloMat.color.copy(col.deep);
+  face.children[0].material.color.copy(col.deep); face.children[1].material.color.copy(col.mid); face.children[2].material.color.copy(col.mid);
+  if (paused) { composer.render(); return; }
+
+  const sp = dt * cur.speed * motion; t += dt * motion;
+  uniforms.uTime.value = t; uniforms.uFlicker.value = cur.flicker;
+  let env = 0;
+  if (stateKey === 'speak') env = Math.abs(Math.sin(t * 7.3) * Math.sin(t * 2.1 + 0.6)) * (0.6 + 0.4 * Math.sin(t * 13.0));
+  uniforms.uBreath.value = (reduced ? 0 : 0.012 * Math.sin(t * 1.4)) + env * 0.045;
+
+  shell.rotation.y += sp * 0.12; shell.rotation.x += sp * 0.02;
+  bandSpin.rotation.y -= sp * 0.22;
+  core.rotation.y += sp * 0.9;
+  arcList.forEach((a) => { a.mesh.rotation.z += sp * a.speed * 0.35 * cur.arc; });
+  const g = 0.85 * cur.glow * (1 + env * 0.6) * (1 + 0.04 * Math.sin(t * 3.1));
+  glow.scale.set(g, g, 1);
+  bloom.strength = cur.bloom + env * 0.5;
+
+  dragX += (tx - dragX) * 0.08; dragY += (ty - dragY) * 0.08;
+  const autoY = reduced ? 0 : Math.sin(t * 0.15) * 0.25;
+  scene.rotation.set(dragX, dragY + autoY, 0);
+  face.quaternion.copy(camera.quaternion).premultiply(scene.quaternion.clone().invert());
+  halo.position.set(0, 0, 0);
+
+  if (++frame % 10 === 0) readout.textContent = 'CORE ' + (0.7 + 0.3 * cur.glow * (1 + env)).toFixed(2) + ' · ROT ' + (cur.speed * 6.9).toFixed(1).padStart(4, '0') + '°/s';
+  composer.render();
+}
+tick();
+</script>

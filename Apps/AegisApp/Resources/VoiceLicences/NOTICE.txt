@@ -1,0 +1,12 @@
+Aegis's bundled speech engine
+
+KokoroCoreML 0.11.2 — https://github.com/Jud/kokoro-coreml
+Kokoro-82M model and voice embeddings by hexgrad — https://huggingface.co/hexgrad/Kokoro-82M
+CoreML conversion and packaged models — https://github.com/Jud/kokoro-coreml/releases/tag/models-2026-03-23
+BART G2P weights by PeterReid — https://huggingface.co/PeterReid/graphemes_to_phonemes_en_us
+swift-bart-g2p 0.4.0 — https://github.com/Jud/swift-bart-g2p
+MisakiSwift English phonemizer by mlalma (included by KokoroCoreML) — https://github.com/mlalma/MisakiSwift
+
+These components are licensed under Apache License 2.0, included alongside this notice.
+The upstream packages are used unmodified. Kokoro is the engine underlying Voicebox's default Aegis preset;
+Aegis embeds the native engine and model directly. No Voicebox application code is redistributed.

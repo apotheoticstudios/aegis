@@ -1,0 +1,59 @@
+{
+  "tool": "Built-in image_gen",
+  "reference": "00-approved-reference.png",
+  "sharedDirection": "Use case logo-brand. Reference is the approved PROJECT: AEGIS retro ATHENA identity. Faithfully preserve the EXACT tall pointed shield, angular Greek helmet, negative-space A, separate side rails and symmetrical proportions. This is a production variant of the same logo, never redesign it. Retro 1970s/1980s space-computer graphic style, flat crisp edges, warm ivory #EEE2CB, muted aluminium #A5A6A0, burnt orange #CD4B17. Minimal print grain only within filled shapes. No neon, no photorealistic 3D, no added ornaments, no watermark. ",
+  "variants": [
+    {
+      "name": "01-emblem-colour",
+      "transparent_background": true,
+      "direction": "Create ONLY the large standalone approved emblem, original ivory/silver/orange colors. Square image, entire mark centered with 12 percent safe margin. No lettering, no small secondary mark. Genuine transparent background; empty areas and internal negative space transparent."
+    },
+    {
+      "name": "03-horizontal-dark",
+      "transparent_background": false,
+      "direction": "Wide 3:1 horizontal logo lockup on solid warm charcoal #151613. The emblem at left, exact wordmark 'PROJECT: AEGIS' at right in the approved wide geometric retro sci-fi lettering, ivory type. Balanced emblem and text heights, plenty of clear space, no subtitle, no other marks. One logo only."
+    },
+    {
+      "name": "04-horizontal-light",
+      "transparent_background": false,
+      "direction": "Wide 3:1 horizontal logo lockup on warm ivory #EEE2CB background. The emblem at left recolored charcoal and muted silver with the orange accents retained; exact wordmark 'PROJECT: AEGIS' to its right in solid charcoal, approved wide geometric retro sci-fi lettering. Strong contrast, generous margins, no subtitle, no other marks. One logo only."
+    },
+    {
+      "name": "05-app-icon",
+      "transparent_background": false,
+      "direction": "Square macOS app icon artwork. Single warm charcoal rounded-square tile centered, occupying 88 percent of canvas, neutral ivory background outside tile. Approved emblem centered inside the tile, 65 percent of tile height, ivory/silver/orange. Clean edges with restrained flat bevel on tile, subtle fine print texture. Absolutely no lettering, no small secondary logo, no platform UI mockup, no drop shadow outside canvas. The mark must remain recognizable at small sizes."
+    },
+    {
+      "name": "06-social-avatar",
+      "transparent_background": false,
+      "direction": "Square social profile avatar. Solid warm charcoal background edge to edge, approved emblem centered occupying 68 percent of image height, ivory/silver/orange, no tile or frame, no text, no secondary logo. Generous clear margin so circular avatar crops never clip the logo. Simplify only the tiny three-line shoulder details for clear small-size readability, preserve shape."
+    },
+    {
+      "name": "07-promo-banner",
+      "transparent_background": false,
+      "direction": "Wide 3:1 promotional header. Exact approved emblem large on left, exact wordmark 'PROJECT: AEGIS' on right above smaller line 'YOUR AEGIS. YOUR MAC.' Ivory geometric retro typography, charcoal background, restrained burnt-orange horizontal speed stripes and extremely subtle space-computer registration lines. Keep all words and mark within central 80 percent safe area. A polished retro space-program poster aesthetic, excellent spacing, no fake UI, no subtitle 'retro study', no other text."
+    },
+    {
+      "name": "08-social-poster",
+      "transparent_background": false,
+      "direction": "Portrait 2:3 promotional poster. Approved emblem large, centered in upper half. Exact headline 'PROJECT: AEGIS' below, then exact small line 'YOUR AEGIS. YOUR MAC.' Huge tasteful breathing room, warm charcoal fine paper grain, ivory type, muted silver emblem with orange side accents, a few minimal vintage orange geometric stripes near bottom. Highly designed 1980s computer-launch poster, no other text or secondary logos."
+    },
+    {
+      "name": "09-stacked-lockup",
+      "transparent_background": false,
+      "direction": "Square stacked primary brand logo on solid warm charcoal. Approved emblem centered in upper 65 percent of the canvas, ivory/silver/orange with very subtle print texture. Below the emblem, exact 'PROJECT: AEGIS' in the approved wide geometric retro sci-fi type, generous breathing room. No subtitle, no small duplicate marks, no decorative lines. Clean professional brand asset."
+    },
+    {
+      "name": "02-emblem-ivory",
+      "transparent_background": false,
+      "direction": "One solid warm ivory logo on completely solid charcoal background. The black spaces in the original become same charcoal as background. Only two exact flat colors ivory and charcoal. Strictly no print texture.",
+      "sharedDirection": "Use case logo-brand. Derive a pristine FLAT GRAPHIC VERSION of the small lower-right Athena emblem in the reference. Preserve its angular Greek helmet and shield outline, symmetrical negative-space A and pointed base. Clean precise vector-like edges, no gradient, no speckles, no distress, no shadows, no highlights, no texture. Single emblem centered with 12 percent safe margin on a square canvas, no text, no wordmark."
+    },
+    {
+      "name": "10-emblem-orange",
+      "transparent_background": false,
+      "direction": "One solid burnt-orange #CD4B17 logo on completely solid warm ivory #EEE2CB background. All parts of logo the SAME burnt orange, all negative space ivory. Only two exact flat colors. A clean vintage manufacturer stamp, strict flat clean graphic, no print texture.",
+      "sharedDirection": "Use case logo-brand. Derive a pristine FLAT GRAPHIC VERSION of the small lower-right Athena emblem in the reference. Preserve its angular Greek helmet and shield outline, symmetrical negative-space A and pointed base. Clean precise vector-like edges, no gradient, no speckles, no distress, no shadows, no highlights, no texture. Single emblem centered with 12 percent safe margin on a square canvas, no text, no wordmark."
+    }
+  ]
+}

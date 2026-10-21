@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Runs before every commit (enabled by `make bootstrap`).
+set -e
+./scripts/privacy-guard.sh --staged
+if command -v swiftformat >/dev/null 2>&1; then
+  staged_swift=$(git diff --cached --name-only --diff-filter=ACMR -- '*.swift')
+  if [[ -n "$staged_swift" ]]; then
+    echo "$staged_swift" | xargs swiftformat --lint --quiet || { echo "Run: make format"; exit 1; }
+  fi
+fi

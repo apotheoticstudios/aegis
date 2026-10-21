@@ -1,0 +1,6 @@
+brew "xcodegen"
+brew "swiftlint"
+brew "swiftformat"
+brew "gh"
+brew "python@3.12"
+brew "node"

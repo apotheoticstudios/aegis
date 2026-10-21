@@ -1,0 +1,21 @@
+included:
+  - Apps
+  - Packages/AegisKit/Sources
+  - Packages/AegisKit/Tests
+excluded:
+  - "**/.build"
+  - DerivedData
+  - build
+disabled_rules:
+  - trailing_comma
+  - todo
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - fatal_error_message
+line_length:
+  warning: 140
+  error: 200
+identifier_name:
+  min_length: 2

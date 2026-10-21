@@ -1,0 +1,29 @@
+# Tests for the macOS-only packages (XPC, EventKit, Contacts), started manually only (Actions › Run workflow).
+# A macOS minute counts as 10 on a private repo and the owner's Actions budget is US$15 a month (owner,
+# 2026-10-12), so PRs no longer start it: AegisKit runs on Linux in ci.yml, and Claude runs `make test-core`
+# and `make test-ipc` on the Mac before merging.
+name: Packages (macOS)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: packages-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-macos:
+    name: core-macos
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: AegisKit tests (macOS)
+        working-directory: Packages/AegisKit
+        run: swift test
+      - name: SharedIPC tests (macOS only, XPC)
+        working-directory: Packages/SharedIPC
+        run: swift test
+      - name: MacSources tests (macOS only, EventKit and Contacts mapping)
+        working-directory: Packages/MacSources
+        run: swift test

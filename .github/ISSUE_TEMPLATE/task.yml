@@ -1,0 +1,63 @@
+name: Task
+description: One piece of work for one AI (or the human). One task → one branch → one PR.
+title: "[Stage N] "
+labels: []
+body:
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner
+      description: Also add the matching agent:* label.
+      options:
+        - Claude (needs Mac/Xcode, integration, contracts)
+        - Codex (Linux-buildable code, scripts, docs, sidecar)
+        - ChatGPT (research, assets)
+        - DeepSeek (edge cases, fixture text, second opinion)
+        - Human (real data, real Mac, secrets)
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Stage
+      options: ["0", "1", "2", "3", "4", "5", "6", "7", "8"]
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What this task achieves, in one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Files / module in scope
+      description: Only these may change. Anything else needs a new issue.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete checks that prove it's done (tests, commands, observable results).
+      value: |
+        - [ ]
+        - [ ] `make test-core` and `make guard` pass
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and links
+      description: Relevant DESIGN.md sections, ADRs, research comments, related issues.
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Rules
+      options:
+        - label: Uses only synthetic data from Fixtures/ (no real personal data)
+          required: true
+        - label: No new network calls or telemetry unless stated above
+          required: true

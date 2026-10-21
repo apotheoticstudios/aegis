@@ -1,0 +1,114 @@
+# Cheap Linux checks. The repo is private, so every minute counts against the monthly allowance:
+# PRs get the guard, plus core and prototype unless only docs (docs/, *.md) changed. A push to main
+# (an already-checked PR being merged) gets the guard, and rebuilds the Swift dependency cache only
+# when AegisKit's dependencies changed, so PRs start from compiled dependencies.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Privacy guard (changed files on PRs, all files on main)
+        run: |
+          chmod +x scripts/privacy-guard.sh
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="${{ github.base_ref }}" scripts/privacy-guard.sh
+          else
+            scripts/privacy-guard.sh --all
+          fi
+
+  changes:
+    name: changes
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        name: Anything besides docs?
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -v -E '^docs/|\.md$' || true)
+          else
+            changed=all
+          fi
+          if [ -n "$changed" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; else echo "code=false" >> "$GITHUB_OUTPUT"; fi
+
+  core:
+    name: core
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    container: public.ecr.aws/docker/library/swift:6.2  # Docker's official image via ECR Public (no Docker Hub pull limit); GRDB (AegisStorage, ADR-0012) and MLX need Swift 6.1+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install system SQLite headers
+        run: apt-get update && apt-get install -y libsqlite3-dev pkg-config
+      - name: Restore compiled dependencies (saved from main by swift-cache)
+        uses: actions/cache/restore@v4
+        with:
+          path: Packages/AegisKit/.build
+          key: aegiskit-swift6.2-${{ hashFiles('Packages/AegisKit/Package.resolved', 'Packages/AegisKit/Package.swift') }}
+          restore-keys: aegiskit-swift6.2-
+      - name: AegisKit tests (Linux)
+        working-directory: Packages/AegisKit
+        run: swift test
+
+  swift-cache:
+    name: swift-cache
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    container: public.ecr.aws/docker/library/swift:6.2
+    steps:
+      - uses: actions/checkout@v7
+      - id: lookup
+        name: Is the cache for these dependencies already saved?
+        uses: actions/cache/restore@v4
+        with:
+          path: Packages/AegisKit/.build
+          key: aegiskit-swift6.2-${{ hashFiles('Packages/AegisKit/Package.resolved', 'Packages/AegisKit/Package.swift') }}
+          lookup-only: true
+      - name: Install system SQLite headers
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: apt-get update && apt-get install -y libsqlite3-dev pkg-config
+      - name: Build AegisKit and its tests
+        if: steps.lookup.outputs.cache-hit != 'true'
+        working-directory: Packages/AegisKit
+        run: swift build --build-tests
+      - name: Save compiled dependencies
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: Packages/AegisKit/.build
+          key: aegiskit-swift6.2-${{ hashFiles('Packages/AegisKit/Package.resolved', 'Packages/AegisKit/Package.swift') }}
+
+  prototype:
+    name: prototype
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prototype tests (Python, synthetic data only)
+        run: make test-prototype
+      - name: Privacy guard regression tests
+        run: make test-scripts
+      - name: Fixture generator tests
+        run: make test-fixtures
