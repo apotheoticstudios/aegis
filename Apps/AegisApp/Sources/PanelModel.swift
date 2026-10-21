@@ -605,7 +605,7 @@ enum BriefPresentation {
         let format = DateFormatter()
         format.calendar = calendar
         format.timeZone = calendar.timeZone
-        format.locale = Locale(identifier: "en_AU")
+        format.locale = .autoupdatingCurrent
         format.dateFormat = "EEE"
         if date < now {
             return calendar.isDate(date, inSameDayAs: now) ? "due earlier today" : "overdue since " + format.string(from: date)
@@ -736,7 +736,7 @@ enum BriefPresentation {
     }
 
     /// "Written today, 6:58 am", "Written yesterday, 9:12 pm" or "Written 6 Oct, 7:00 am".
-    static func written(_ date: Date, now: Date, calendar: Calendar, locale: Locale = Locale(identifier: "en_AU")) -> String {
+    static func written(_ date: Date, now: Date, calendar: Calendar, locale: Locale = .autoupdatingCurrent) -> String {
         var time = Date.FormatStyle(date: .omitted, time: .shortened, locale: locale, calendar: calendar, timeZone: calendar.timeZone)
         time.calendar = calendar
         let clock = date.formatted(time)

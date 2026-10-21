@@ -13,7 +13,7 @@ public enum WorldBrief {
     }
 
     /// "Weather at home: 18 to 27°. Rain likely from 3 pm (70%)." Nil when the answer can't be read.
-    public static func weather(_ data: Data, now: Date) -> String? {
+    public static func weather(_ data: Data, now: Date, locale: Locale = .autoupdatingCurrent) -> String? {
         struct Forecast: Decodable {
             struct Daily: Decodable {
                 let temperature2mMax: [Double?]
@@ -53,7 +53,7 @@ public enum WorldBrief {
         parse.timeZone = zone
         parse.dateFormat = "yyyy-MM-dd'T'HH:mm"
         let speak = DateFormatter()
-        speak.locale = Locale(identifier: "en_AU")
+        speak.locale = locale
         speak.timeZone = zone
         speak.dateFormat = "h a"
         let wet = forecast.hourly.map { hourly in
@@ -81,7 +81,9 @@ public enum WorldBrief {
     }
 
     /// "QF520 is in the air at 34,000 ft." or when it's due, from the tracker's answer.
-    public static func flight(_ data: Data?, number: String, start: Date, now: Date, calendar: Calendar) -> String {
+    public static func flight(
+        _ data: Data?, number: String, start: Date, now: Date, calendar: Calendar, locale: Locale = .autoupdatingCurrent
+    ) -> String {
         struct Answer: Decodable {
             struct Aircraft: Decodable {
                 let altBaro: AltitudeValue?
@@ -104,7 +106,7 @@ public enum WorldBrief {
         let time = DateFormatter()
         time.calendar = calendar
         time.timeZone = calendar.timeZone
-        time.locale = Locale(identifier: "en_AU")
+        time.locale = locale
         time.dateFormat = "h:mm a"
         let due = time.string(from: start).lowercased()
         let decoder = JSONDecoder()
@@ -112,7 +114,7 @@ public enum WorldBrief {
         if let data, let answer = try? decoder.decode(Answer.self, from: data), let plane = answer.ac?.first {
             if case let .feet(feet)? = plane.altBaro, feet > 500 {
                 let rounded = Int((feet / 1000).rounded()) * 1000
-                return "\(number) is in the air at \(rounded.formatted(.number.locale(Locale(identifier: "en_AU")))) ft."
+                return "\(number) is in the air at \(rounded.formatted(.number.locale(locale))) ft."
             }
             return "\(number) is on the ground with its transponder on (due \(due))."
         }

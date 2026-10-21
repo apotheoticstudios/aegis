@@ -215,7 +215,7 @@ public enum CloudHandOff {
         let day = DateFormatter()
         day.calendar = calendar
         day.timeZone = calendar.timeZone
-        day.locale = Locale(identifier: "en_AU")
+        day.locale = Locale(identifier: "en_US_POSIX")
         day.dateFormat = "yyyy-MM-dd HHmm"
         let skip: Set = [
             "a", "an", "the", "to", "for", "me", "my", "please", "make", "create", "build", "write", "draft", "of",

@@ -54,8 +54,8 @@ final class ActionCommandTests: XCTestCase {
 
     func testTheCardSaysExactlyWhatWillBeAdded() {
         let reminder = ActionCommand.reminder(title: "Call Mum", due: at(19, 17))
-        XCTAssertTrue(reminder.summary(calendar: calendar).hasPrefix("Add the reminder “Call Mum”, "))
-        XCTAssertTrue(reminder.summary(calendar: calendar).hasSuffix("at 5:00 pm?"))
+        XCTAssertTrue(reminder.summary(calendar: calendar, locale: Locale(identifier: "en_AU")).hasPrefix("Add the reminder “Call Mum”, "))
+        XCTAssertTrue(reminder.summary(calendar: calendar, locale: Locale(identifier: "en_AU")).hasSuffix("at 5:00 pm?"))
         XCTAssertEqual(
             ActionPolicy.decision(for: ActionRequest(payload: reminder.payload, origin: .ownerTyped), settings: .init(panelIsOpen: true))
                 .tier,

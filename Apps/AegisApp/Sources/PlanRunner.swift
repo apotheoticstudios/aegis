@@ -148,7 +148,8 @@ actor PlanRunner {
             "WorkingDirectory": folder.path,
             "EnvironmentVariables": [
                 "HOME": home.path, "CODEX_HOME": NSHomeDirectory() + "/.codex", "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-                "LANG": "en_AU.UTF-8", "TMPDIR": temporary.path,
+                "LANG": "\(Locale.current.language.languageCode?.identifier ?? "en")_\(Locale.current.region?.identifier ?? "US").UTF-8",
+                "TMPDIR": temporary.path,
             ],
             "StandardOutPath": transcript.path,
             "StandardErrorPath": transcript.path,

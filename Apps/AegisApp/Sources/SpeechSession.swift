@@ -23,7 +23,7 @@ final class LegacySpeechSession: SpeechSession, @unchecked Sendable {
 
     @MainActor
     func start(heard: @escaping @MainActor @Sendable (String, Bool) -> Void) async -> Bool {
-        let recognizer = [Locale.current.identifier, "en-AU", "en-GB", "en-US"]
+        let recognizer = [Locale.current.identifier, "en-GB", "en-US"]
             .compactMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
             .first { $0.isAvailable && $0.supportsOnDeviceRecognition }
         guard let recognizer else {

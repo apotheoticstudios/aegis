@@ -206,7 +206,7 @@ public struct MemoryBook: Codable, Sendable, Equatable {
         let day = DateFormatter()
         day.calendar = calendar
         day.timeZone = calendar.timeZone
-        day.locale = Locale(identifier: "en_AU")
+        day.locale = Locale.autoupdatingCurrent
         day.dateFormat = "EEE d MMM"
         var lines = preferences.map {
             ($0.isLearned ? "You learned from the owner (preference): " : "The owner asked you to remember (preference): ") + $0.text

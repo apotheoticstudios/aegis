@@ -250,9 +250,11 @@ final class AegisAppTests: XCTestCase {
         let morning = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 9, hour: 6, minute: 58)))
         let lastNight = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 8, hour: 21, minute: 12)))
         let earlier = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 6, hour: 7, minute: 0)))
-        XCTAssertTrue(BriefPresentation.written(morning, now: now, calendar: calendar).hasPrefix("Written today, 6:58"))
-        XCTAssertTrue(BriefPresentation.written(lastNight, now: now, calendar: calendar).hasPrefix("Written yesterday, 9:12"))
-        XCTAssertTrue(BriefPresentation.written(earlier, now: now, calendar: calendar).hasPrefix("Written 6 Oct"))
+        let australian = Locale(identifier: "en_AU")
+        XCTAssertTrue(BriefPresentation.written(morning, now: now, calendar: calendar, locale: australian).hasPrefix("Written today, 6:58"))
+        XCTAssertTrue(BriefPresentation.written(lastNight, now: now, calendar: calendar, locale: australian)
+            .hasPrefix("Written yesterday, 9:12"))
+        XCTAssertTrue(BriefPresentation.written(earlier, now: now, calendar: calendar, locale: australian).hasPrefix("Written 6 Oct"))
     }
 }
 

@@ -139,7 +139,10 @@ final class WorldHomeAndBriefTests: XCTestCase {
             + #""precipitation_probability_max":[70],"weather_code":[61]},"hourly":{"time":["2026-10-19T13:00","2026-10-19T14:00","#
             + #""2026-10-19T15:00"],"precipitation_probability":[10,20,70]}}"#
         let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-19T02:00:00Z")) // 12 pm in Brisbane
-        XCTAssertEqual(WorldBrief.weather(Data(json.utf8), now: now), "Weather at home: 18 to 27°. Rain likely from 3 pm (70%).")
+        XCTAssertEqual(
+            WorldBrief.weather(Data(json.utf8), now: now, locale: Locale(identifier: "en_AU")),
+            "Weather at home: 18 to 27°. Rain likely from 3 pm (70%)."
+        )
         let dry = #"{"daily":{"temperature_2m_max":[25],"temperature_2m_min":[15],"precipitation_probability_max":[5],"weather_code":[1]}}"#
         XCTAssertEqual(WorldBrief.weather(Data(dry.utf8), now: now), "Weather at home: 15 to 25°. No rain expected.")
         XCTAssertNil(WorldBrief.weather(Data("{}".utf8), now: now))
@@ -149,14 +152,22 @@ final class WorldHomeAndBriefTests: XCTestCase {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Australia/Brisbane"))
         let start = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-19T23:05:00Z")) // 9:05 am
+        let australian = Locale(identifier: "en_AU")
         let flying = Data(#"{"ac":[{"flight":"QFA520  ","alt_baro":34150,"gs":451.2}],"total":1}"#.utf8)
         XCTAssertEqual(
-            WorldBrief.flight(flying, number: "QF520", start: start, now: start, calendar: calendar),
+            WorldBrief.flight(flying, number: "QF520", start: start, now: start, calendar: calendar, locale: australian),
             "QF520 is in the air at 34,000 ft."
         )
         let none = Data(#"{"ac":[],"total":0}"#.utf8)
         XCTAssertEqual(
-            WorldBrief.flight(none, number: "QF520", start: start, now: start.addingTimeInterval(-3600), calendar: calendar),
+            WorldBrief.flight(
+                none,
+                number: "QF520",
+                start: start,
+                now: start.addingTimeInterval(-3600),
+                calendar: calendar,
+                locale: australian
+            ),
             "QF520 is due at 9:05 am and isn't in the air yet."
         )
         XCTAssertEqual(WorldBrief.flightURL(callsign: "qfa520")?.absoluteString, "https://api.adsb.lol/v2/callsign/QFA520")
