@@ -11,6 +11,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
 | — | Real mornings and feedback on the new features | agent:human | — | Owner's reviews drive the next fixes |
+| #8 | The Project: Aegis design system: five screens, tokens, fonts (ADR-0029) | agent:claude | claude/8-design-foundation | In review; next: the design's motion, settings windows, theme picker |
 | #223 | Hand complex, non-personal questions to Claude or ChatGPT (ADR-0017) | agent:claude | merged (PRs #225, #236) | ChatGPT works on the owner's plan (no key); Claude needs a key or Claude Code installed |
 
 ## Up next

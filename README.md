@@ -50,4 +50,4 @@ scripts/              bootstrap, guard, worktrees, handoffs, labels
 
 ## Licence
 
-MIT, see `LICENSE`. Third-party code keeps its own licence (`THIRD_PARTY_NOTICES.md`).
+MIT, see `LICENSE`. Third-party code and fonts keep their own licences (`THIRD_PARTY_NOTICES.md`).
