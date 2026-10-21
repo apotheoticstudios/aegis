@@ -25,7 +25,7 @@ Your assistant is **your Aegis**. Give it a personal name, a style and a form of
 
 ## ▌ What it does
 
-| | |
+| Feature | What you get |
 | --- | --- |
 | **The brief** | A morning and evening brief: who's waiting on you, what you said you'd do, what's done today, today's calendar and reminders. Noise, junk and bulk mail stay out. |
 | **Conversation** | Ask anything by text or voice. Spoken answers with a bundled on-device voice, natural interruptions, instant answers for time, dates, maths and conversions. |
