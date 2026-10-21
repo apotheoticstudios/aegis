@@ -13,7 +13,7 @@ final class QuickAnswerTests: XCTestCase {
     }
 
     private func ask(_ text: String) -> String? {
-        QuickAnswer.answer(text, now: now, calendar: calendar)
+        QuickAnswer.answer(text, now: now, calendar: calendar, locale: Locale(identifier: "en_AU"))
     }
 
     func testTimeAndDate() {

@@ -26,7 +26,7 @@ import Speech
         /// Apple's on-device model for the owner's English, installed if it isn't yet. Nil when this Mac can't.
         static func transcriber() async -> SpeechTranscriber? {
             guard SpeechTranscriber.isAvailable else { return nil }
-            for id in [Locale.current.identifier, "en-AU", "en-GB", "en-US"] {
+            for id in [Locale.current.identifier, "en-GB", "en-US"] {
                 guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: id)) else { continue }
                 let transcriber = SpeechTranscriber(
                     locale: locale, transcriptionOptions: [], reportingOptions: [.volatileResults, .fastResults], attributeOptions: []

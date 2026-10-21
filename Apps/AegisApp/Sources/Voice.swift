@@ -343,7 +343,7 @@ final class Voice {
 
     /// The first recognizer for the owner's English that runs on this Mac.
     private static func onDeviceRecognizer() -> SFSpeechRecognizer? {
-        for id in [Locale.current.identifier, "en-AU", "en-GB", "en-US"] {
+        for id in [Locale.current.identifier, "en-GB", "en-US"] {
             if let recognizer = SFSpeechRecognizer(locale: Locale(identifier: id)), recognizer.isAvailable,
                recognizer.supportsOnDeviceRecognition
             {
@@ -357,8 +357,7 @@ final class Voice {
     private static func bestVoice() -> AVSpeechSynthesisVoice? {
         let english = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("en") }
         let rank: (AVSpeechSynthesisVoice) -> (Int, Int) = { voice in
-            let region = voice.language == "en-GB" ? 0 : (voice.language == "en-AU" ? 1 : 2)
-            return (region, -voice.quality.rawValue)
+            (voice.language == "en-GB" ? 0 : 1, -voice.quality.rawValue)
         }
         return english.min { rank($0) < rank($1) } ?? AVSpeechSynthesisVoice(language: "en-GB")
     }

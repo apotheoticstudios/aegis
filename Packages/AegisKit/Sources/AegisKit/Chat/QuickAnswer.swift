@@ -3,28 +3,28 @@ import Foundation
 /// Instant answers that need no model (#227): the time and date, days until a date, arithmetic and percentages, and
 /// common unit conversions. Deterministic and exact; nil for anything else, which goes to the conversation.
 public enum QuickAnswer {
-    public static func answer(_ text: String, now: Date, calendar: Calendar) -> String? {
+    public static func answer(_ text: String, now: Date, calendar: Calendar, locale: Locale = .autoupdatingCurrent) -> String? {
         let line = cleaned(text)
         guard !line.isEmpty, line.count <= 120 else { return nil }
         if line.range(
             of: #"^(?:what(?:'s| is) the time|what time is it|whats the time)(?: now| right now)?$"#,
             options: .regularExpression
         ) != nil {
-            return "It's " + format("h:mm a", now, calendar) + "."
+            return "It's " + format("h:mm a", now, calendar, locale) + "."
         }
         if line.range(
             of: #"^(?:what(?:'s| is) (?:the date|today'?s date)|whats the date|what day is it|what(?:'s| is) today)(?: today)?$"#,
             options: .regularExpression
         ) != nil {
-            return "It's " + format("EEEE d MMMM yyyy", now, calendar) + "."
+            return "It's " + format("EEEE d MMMM yyyy", now, calendar, locale) + "."
         }
         if let target = capture(#"^how (?:many days|long) (?:is it )?(?:until|till|til|to|before) (.+)$"#, line) {
             return daysUntil(target, now: now, calendar: calendar)
         }
-        if let conversion = convert(line) {
+        if let conversion = convert(line, locale) {
             return conversion
         }
-        return arithmetic(line)
+        return arithmetic(line, locale)
     }
 
     // MARK: - Days until
@@ -199,7 +199,7 @@ public enum QuickAnswer {
     }
 
     /// "10 km in miles", "convert 30 c to f", "how many pounds in 5 kg".
-    private static func convert(_ line: String) -> String? {
+    private static func convert(_ line: String, _ locale: Locale) -> String? {
         let amount = #"(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)"#
         var value: Double?
         var from: Unit?
@@ -223,13 +223,13 @@ public enum QuickAnswer {
         } else {
             value * from.factor / to.factor
         }
-        return "\(number(value)) \(value == 1 ? from.singular : from.plural) is \(number(result)) \(result == 1 ? to.singular : to.plural)."
+        return "\(number(value, locale)) \(value == 1 ? from.singular : from.plural) is \(number(result, locale)) \(result == 1 ? to.singular : to.plural)."
     }
 
     // MARK: - Arithmetic
 
     /// "what's 15% of 240", "12 times 37", "square root of 144", "(3 + 4) * 2".
-    private static func arithmetic(_ line: String) -> String? {
+    private static func arithmetic(_ line: String, _ locale: Locale) -> String? {
         var expression = line.replacingOccurrences(
             of: #"^(?:what(?:'s| is)|whats|calculate|compute|work out|how much is)\s+"#,
             with: "",
@@ -263,7 +263,7 @@ public enum QuickAnswer {
             return parser.dividedByZero ? "That's undefined: you can't divide by zero."
                 : "That's undefined or too large to calculate."
         }
-        return "That's \(number(value))."
+        return "That's \(number(value, locale))."
     }
 
     /// A small recursive-descent calculator: + - * / ^, brackets, unary minus and sqrt.
@@ -356,9 +356,9 @@ public enum QuickAnswer {
             .trimmingCharacters(in: .whitespaces)
     }
 
-    private static func number(_ value: Double) -> String {
+    private static func number(_ value: Double, _ locale: Locale) -> String {
         let format = NumberFormatter()
-        format.locale = Locale(identifier: "en_AU")
+        format.locale = locale
         if value != 0, abs(value) < 1e-12 {
             format.numberStyle = .scientific
             format.maximumFractionDigits = 4
@@ -370,11 +370,11 @@ public enum QuickAnswer {
         return format.string(from: NSNumber(value: value)) ?? String(value)
     }
 
-    private static func format(_ pattern: String, _ date: Date, _ calendar: Calendar) -> String {
+    private static func format(_ pattern: String, _ date: Date, _ calendar: Calendar, _ locale: Locale) -> String {
         let format = DateFormatter()
         format.calendar = calendar
         format.timeZone = calendar.timeZone
-        format.locale = Locale(identifier: "en_AU")
+        format.locale = locale
         format.dateFormat = pattern
         return format.string(from: date)
     }

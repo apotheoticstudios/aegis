@@ -9,7 +9,7 @@ public enum OwnerPlaces {
         let day = DateFormatter()
         day.calendar = calendar
         day.timeZone = calendar.timeZone
-        day.locale = Locale(identifier: "en_AU")
+        day.locale = Locale.autoupdatingCurrent
         day.dateFormat = "EEE d MMM"
         let placed = occurrences.filter { $0.coordinate != nil && $0.end >= now && $0.status != .cancelled }
             .sorted { $0.start < $1.start }.prefix(24)

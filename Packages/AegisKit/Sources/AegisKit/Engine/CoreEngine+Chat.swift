@@ -84,7 +84,7 @@ extension CoreEngine {
         let format = DateFormatter()
         format.calendar = calendar
         format.timeZone = calendar.timeZone
-        format.locale = Locale(identifier: "en_AU")
+        format.locale = Locale.autoupdatingCurrent
         format.dateFormat = "EEE HH:mm"
         let occurrences = await (try? store.occurrences(from: now, to: end)) ?? []
         let reminders = await (try? store.reminders(from: now.addingTimeInterval(-86400), to: end)) ?? []

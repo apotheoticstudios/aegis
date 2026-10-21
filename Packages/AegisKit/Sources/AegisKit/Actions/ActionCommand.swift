@@ -24,17 +24,18 @@ public enum ActionCommand: Sendable, Equatable {
     }
 
     /// "Add reminder “Call Mum”, today at 5:00 pm?" for the confirmation card.
-    public func summary(calendar: Calendar) -> String {
+    public func summary(calendar: Calendar, locale: Locale = .autoupdatingCurrent) -> String {
         switch self {
         case let .reminder(title, due):
-            "Add the reminder “\(title)”" + (due.map { ", " + Self.when($0, calendar: calendar) } ?? "") + "?"
+            "Add the reminder “\(title)”" + (due.map { ", " + Self.when($0, calendar: calendar, locale: locale) } ?? "") + "?"
         case let .event(title, start, end):
-            "Add “\(title)” to your calendar, " + Self.when(start, calendar: calendar) + " to "
-                + Self.time(end, calendar: calendar) + "?"
+            "Add “\(title)” to your calendar, " + Self.when(start, calendar: calendar, locale: locale) + " to "
+                + Self.time(end, calendar: calendar, locale: locale) + "?"
         case let .openApp(name):
             "Open \(name)?"
         case let .moveLast(date, allDay):
-            "Move it to " + (allDay ? Self.day(date, calendar: calendar) : Self.when(date, calendar: calendar)) + "?"
+            "Move it to " + (allDay ? Self.day(date, calendar: calendar, locale: locale)
+                : Self.when(date, calendar: calendar, locale: locale)) + "?"
         case .removeLast:
             "Remove it?"
         }
@@ -115,8 +116,8 @@ public enum ActionCommand: Sendable, Equatable {
         return nil
     }
 
-    private static func day(_ date: Date, calendar: Calendar) -> String {
-        when(date, calendar: calendar).replacingOccurrences(of: #" at .*$"#, with: "", options: .regularExpression)
+    private static func day(_ date: Date, calendar: Calendar, locale: Locale) -> String {
+        when(date, calendar: calendar, locale: locale).replacingOccurrences(of: #" at .*$"#, with: "", options: .regularExpression)
     }
 
     // MARK: - Dates and times
@@ -295,25 +296,25 @@ public enum ActionCommand: Sendable, Equatable {
         return String(text[range]).trimmingCharacters(in: .whitespaces)
     }
 
-    private static func when(_ date: Date, calendar: Calendar) -> String {
+    private static func when(_ date: Date, calendar: Calendar, locale: Locale) -> String {
         let format = DateFormatter()
         format.calendar = calendar
         format.timeZone = calendar.timeZone
-        format.locale = Locale(identifier: "en_AU")
+        format.locale = locale
         let start = calendar.startOfDay(for: Date())
         let day = calendar.startOfDay(for: date)
         let prefix = day == start ? "today" : day == calendar.date(byAdding: .day, value: 1, to: start) ? "tomorrow" : {
             format.dateFormat = "EEEE d MMMM"
             return format.string(from: date)
         }()
-        return prefix + " at " + time(date, calendar: calendar)
+        return prefix + " at " + time(date, calendar: calendar, locale: locale)
     }
 
-    private static func time(_ date: Date, calendar: Calendar) -> String {
+    private static func time(_ date: Date, calendar: Calendar, locale: Locale) -> String {
         let format = DateFormatter()
         format.calendar = calendar
         format.timeZone = calendar.timeZone
-        format.locale = Locale(identifier: "en_AU")
+        format.locale = locale
         format.dateFormat = "h:mm a"
         return format.string(from: date).lowercased()
     }
