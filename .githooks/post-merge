@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Runs after `git merge` and `git pull`: a new merge commit gets the same UTC re-dating as any commit.
+# Fast-forwards bring no new commit of ours, so only a merge commit (two or more parents) is touched.
+[[ $(git rev-list --parents -n1 HEAD | wc -w) -gt 2 ]] || exit 0
+exec "$(dirname "$0")/post-commit"

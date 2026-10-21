@@ -1,4 +1,7 @@
 {
+  "env": {
+    "TZ": "UTC"
+  },
   "permissions": {
     "deny": [
       "Read(~/Library/Messages/**)",

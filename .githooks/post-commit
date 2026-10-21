@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Runs after every commit (enabled by `make bootstrap`): re-dates the commit to UTC so the public repo never
+# shows a committer's time zone. Rebuilds the same commit (tree, parents, message, author) with +0000 dates.
+# Rebases and cherry-picks are left alone mid-way; agents cover those with TZ=UTC (.claude/settings.json).
+[[ "$(git log -1 --format='%ai%n%ci' | cut -d' ' -f3 | sort -u)" == "+0000" ]] && exit 0
+dir=$(git rev-parse --git-dir)
+[[ -e "$dir/CHERRY_PICK_HEAD" || -e "$dir/REVERT_HEAD" || -d "$dir/rebase-merge" || -d "$dir/rebase-apply" ]] && exit 0
+[[ -n "$(git branch -r --contains HEAD 2>/dev/null)" ]] && exit 0   # never rewrite a commit already pushed
+
+old=$(git rev-parse HEAD)
+parents=()
+for parent in $(git log -1 --format=%P); do parents+=(-p "$parent"); done
+new=$(git cat-file commit HEAD | sed '1,/^$/d' |
+  GIT_AUTHOR_NAME="$(git log -1 --format=%an)" GIT_AUTHOR_EMAIL="$(git log -1 --format=%ae)" \
+  GIT_AUTHOR_DATE="$(git log -1 --format='@%at +0000')" \
+  GIT_COMMITTER_NAME="$(git log -1 --format=%cn)" GIT_COMMITTER_EMAIL="$(git log -1 --format=%ce)" \
+  GIT_COMMITTER_DATE="$(git log -1 --format='@%ct +0000')" \
+  git commit-tree "HEAD^{tree}" "${parents[@]}") && git update-ref -m "re-date to UTC" HEAD "$new" "$old"

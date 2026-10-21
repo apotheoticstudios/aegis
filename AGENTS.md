@@ -88,7 +88,7 @@ Spend effort on code, not paperwork (owner's rule, 2026-10-09):
 - **One writer per branch.** Never push to another agent's branch; comment on its PR instead.
 - **Stay in your module.** Only touch files the issue names. If you need a change elsewhere (especially in AegisKit's shared types), stop and ask for a contract change issue.
 - **Small PRs** (aim < 400 changed lines). The PR body is short: what changed, tests run, which AI wrote it.
-- **Cross-vendor review, once per PR.** A PR is reviewed by a different company's AI than the one that wrote it (Claude ↔ Codex; DeepSeek as optional third), in one batched pass. Docs-only PRs need no cross-vendor review. The human (or Claude, when the owner has delegated it) merges after green CI.
+- **Cross-vendor review, once per PR.** A PR is reviewed by a different company's AI than the one that wrote it (Claude ↔ Codex; DeepSeek as optional third), in one batched pass. Docs-only PRs need no cross-vendor review. The human (or Claude, when the owner has delegated it) merges after green CI. Merge by pushing the up-to-date branch to `main` (fast-forward), never GitHub's merge button: GitHub stamps its own commits with the account's email and time zone. The repo is public and the owner anonymous: commits are dated in UTC (`.githooks/post-commit`; agents run with `TZ=UTC`).
 - **Codex writes code and tests only.** No handoff notes or STATUS edits: Claude integrates and records state.
 - **Handoffs only at the end of a session**, a few lines (what changed, what's next), and update the one STATUS line for your issue. Don't restate what the PR or issue already says.
 - **Record decisions.** Anything that changes architecture, dependencies, privacy or the safety system needs an ADR in `docs/decisions/`.
