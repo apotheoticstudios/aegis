@@ -43,3 +43,7 @@ Prototype/            Stage 0 scripts
 docs/                 design, workflow, decisions, stages, handoffs, status
 scripts/              bootstrap, guard, worktrees, handoffs, labels
 ```
+
+## Licence
+
+MIT, see `LICENSE`. Third-party code keeps its own licence (`THIRD_PARTY_NOTICES.md`).
