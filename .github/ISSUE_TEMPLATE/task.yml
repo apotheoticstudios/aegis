@@ -1,5 +1,5 @@
 name: Task
-description: One piece of work for one AI (or the human). One task → one branch → one PR.
+description: (Maintainers) One piece of work for one AI (or the human). One task → one branch → one PR.
 title: "[Stage N] "
 labels: []
 body:

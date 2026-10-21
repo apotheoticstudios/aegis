@@ -2,26 +2,30 @@
 
 Project: Aegis is private assistant software for macOS. Your assistant is **your Aegis**, and you can give it a personal name in Personality settings. It reads your messages, email, notifications and calendar, works out what matters with local AI models, and shows it in a sci-fi HUD. Everything stays on your Mac.
 
-**Status:** framework and development setup only. No app features yet. Next: Stage 0 (prototype and risk tests).
+**Status:** early and in active development. The brief and triage, voice conversation, wake word, memory, skills, the HUD and the World view work end to end on a development Mac. There's no installer yet: the setup wizard is next.
+
+Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Start here
 
 | If you are… | Read |
 | --- | --- |
-| Setting up for the first time | [`docs/workflow/SETUP.md`](docs/workflow/SETUP.md) |
+| Contributing code, tests, docs or ideas | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Reporting a security or privacy problem | [`SECURITY.md`](SECURITY.md) |
 | Any AI agent | [`AGENTS.md`](AGENTS.md), then [`docs/STATUS.md`](docs/STATUS.md) |
 | Planning or assigning work | [`docs/workflow/MULTI_AGENT.md`](docs/workflow/MULTI_AGENT.md) |
 | Looking for the spec | [`docs/design/DESIGN.md`](docs/design/DESIGN.md) |
 
-## Who builds what
+## How it's built
 
-| AI | Role |
+| Who | Role |
 | --- | --- |
 | Claude (Claude Code, on the Mac) | Hub: Mac/Xcode builder, planner, integrator, reviews Codex's work |
-| Codex (ChatGPT Plus) | Cloud builder for Linux-buildable work; automatic reviewer of Claude's PRs |
+| Codex | Cloud builder for Linux-buildable work; automatic reviewer of Claude's PRs |
 | ChatGPT | Research, images and assets, independent plans |
 | DeepSeek | Third opinion, edge cases, synthetic fixture text |
-| You | Approve plans, merge, run on real data, hold secrets |
+| Maintainer | Approves plans, merges, runs Aegis on real data, holds secrets |
+| Contributors | Anything in [`CONTRIBUTING.md`](CONTRIBUTING.md): code, tests, docs, ideas |
 
 ## Everyday commands
 
@@ -37,7 +41,7 @@ make guard       # privacy guard
 
 ```
 Packages/AegisKit/   Linux-testable core (shared types, logic)
-Apps/AegisApp/       macOS app (scaffold)
+Apps/                macOS app, AegisCore and ModelService agents, voice
 Fixtures/             synthetic test data only
 Prototype/            Stage 0 scripts
 docs/                 design, workflow, decisions, stages, handoffs, status

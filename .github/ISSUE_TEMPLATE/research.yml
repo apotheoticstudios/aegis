@@ -1,5 +1,5 @@
 name: Research question
-description: A question for ChatGPT (with web/deep research) or DeepSeek to investigate.
+description: (Maintainers) A question for ChatGPT (with web/deep research) or DeepSeek to investigate.
 title: "[Research] "
 labels: ["type:research"]
 body:

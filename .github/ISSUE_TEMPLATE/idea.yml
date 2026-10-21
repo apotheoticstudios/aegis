@@ -1,0 +1,30 @@
+name: Idea
+description: Suggest a feature or a change, before writing code for it.
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem it solves
+      description: Who it helps and when. Use invented examples, never real messages or people.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What Aegis should do, and roughly how. Mention the part of the code if you know it.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and safety
+      description: Does it need new data, a network call, a new permission or an action (sending, deleting, home control)? See AGENTS.md › Core principles.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to build this myself
