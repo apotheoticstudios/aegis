@@ -17,7 +17,8 @@ final class QuickAnswerTests: XCTestCase {
     }
 
     func testTimeAndDate() {
-        XCTAssertEqual(ask("What time is it?"), "It's 4:05 pm.")
+        // en_AU's am/pm is lowercase on macOS and uppercase in Linux Foundation's CLDR data.
+        XCTAssertEqual(ask("What time is it?")?.lowercased(), "it's 4:05 pm.")
         XCTAssertEqual(ask("Hey Aegis, what's the date today"), "It's Monday 12 October 2026.")
         XCTAssertNil(ask("What time is it in London?"), "time zones go to the conversation")
     }
