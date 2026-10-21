@@ -42,6 +42,14 @@ targets:
       - path: Apps/AegisApp/Resources/VoiceLicences
         type: folder
         buildPhase: resources
+      # The design system's fonts and their licences, registered for the app's own process (ADR-0029).
+      - path: Apps/AegisApp/Resources/Fonts
+        type: folder
+        buildPhase: resources
+      # The emblem from the design system's logo kit, and the same in characters (ADR-0029).
+      - path: Apps/AegisApp/Resources/Brand
+        type: folder
+        buildPhase: resources
       # The World view's one-time setup script (#265, ADR-0024).
       - path: Apps/AegisApp/Resources/World
         type: folder

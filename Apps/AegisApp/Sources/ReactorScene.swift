@@ -1,7 +1,7 @@
 import SceneKit
 
 /// The reactor's scene and animation, ported from the prototype's three.js scene and tick loop (#292). SceneKit calls
-/// `renderer(_:updateAtTime:)` on its render thread; `mode` is the only state shared with the main thread.
+/// `renderer(_:updateAtTime:)` on its render thread; `mode` and `theme` are the only state shared with the main thread.
 final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendable {
     let scene = SCNScene()
     let cameraNode = SCNNode()
@@ -11,12 +11,19 @@ final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendabl
         set { lock.withLock { wanted = newValue } }
     }
 
+    /// The colours come from the interface's theme (ADR-0029).
+    var theme: HUDTheme {
+        get { lock.withLock { wantedTheme } }
+        set { lock.withLock { wantedTheme = newValue } }
+    }
+
     private let lock = NSLock()
     private var wanted = ReactorView.Mode.idle
+    private var wantedTheme = HUDTheme.arc
 
     // Render-thread state.
     private var tuning = Tuning(.idle)
-    private var palette = Palette.cyan
+    private var palette = Palette(.arc, listening: false)
     private var last: TimeInterval?
     private var clock: Float = 0
     private let root = SCNNode()
@@ -80,7 +87,7 @@ final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendabl
         let mode = mode
         let ease = min(1, step * 3)
         tuning.approach(Tuning(mode), ease)
-        let colours: Palette = mode == .listening ? .amber : .cyan
+        let colours = Palette(theme, listening: mode == .listening)
         if palette != colours {
             palette.approach(colours, ease)
             apply(palette)
@@ -393,12 +400,22 @@ private struct Tuning {
     }
 }
 
-/// Hot, mid and deep colours: cyan normally, amber while listening.
+/// Hot, mid and deep colours from the theme: ink at the hottest points, primary for the body and a primary-soft
+/// haze; the accent takes the body and haze while listening.
 private struct Palette: Equatable {
     var hot: SIMD3<Float>, mid: SIMD3<Float>, deep: SIMD3<Float>
 
-    static let cyan = Palette(hot: SIMD3(0.886, 0.988, 1), mid: SIMD3(0.31, 0.82, 0.91), deep: SIMD3(0.059, 0.353, 0.439))
-    static let amber = Palette(hot: SIMD3(1, 0.902, 0.69), mid: SIMD3(1, 0.604, 0.18), deep: SIMD3(0.659, 0.267, 0.047))
+    init(_ theme: HUDTheme, listening: Bool) {
+        hot = Self.vector(theme.rgba(.ink))
+        mid = Self.vector(theme.rgba(listening ? .accent : .primary))
+        // Lifted a quarter of the way to the body: added light this dark would vanish against the void.
+        let haze = Self.vector(theme.rgba(listening ? .accentSoft : .primarySoft))
+        deep = haze + (mid - haze) * 0.25
+    }
+
+    private static func vector(_ rgba: UInt32) -> SIMD3<Float> {
+        SIMD3(Float(rgba >> 24 & 0xFF), Float(rgba >> 16 & 0xFF), Float(rgba >> 8 & 0xFF)) / 255
+    }
 
     mutating func approach(_ target: Palette, _ ease: Float) {
         hot += (target.hot - hot) * ease

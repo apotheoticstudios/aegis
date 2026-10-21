@@ -1,0 +1,15 @@
+Aegis's bundled fonts (the Project: Aegis design system's type, ADR-0029)
+
+Xirod 3.001 by Ray Larabie (Typodermic Fonts) — https://typodermicfonts.com/public-domain/
+  Public domain (CC0 1.0); no notice required.
+Chakra Petch 1.000 (SemiBold) by Cadson Demak — https://github.com/m4rc1e/Chakra-Petch
+  SIL Open Font License 1.1, see ChakraPetch-OFL.txt. Google Fonts' Latin WOFF2 file.
+Kode Mono 1.206 (Regular, SemiBold) by Isa Ozler — https://github.com/isaozler/kode-mono
+  SIL Open Font License 1.1, see KodeMono-OFL.txt. Google Fonts' static WOFF2 instances.
+Share Tech Mono 1.003 by Carrois Type Design — https://github.com/google/fonts/tree/main/ofl/sharetechmono
+  SIL Open Font License 1.1, see ShareTechMono-OFL.txt. The original file, unmodified
+  (google/fonts commit 1b86e1e716445daccc346253911955073b0d254a).
+VT323 2.000 by Peter Hull — https://github.com/google/fonts/tree/main/ofl/vt323
+  SIL Open Font License 1.1, see VT323-OFL.txt. Google Fonts' WOFF2 file.
+
+The fonts keep their own licences; Aegis's MIT licence does not cover them.
