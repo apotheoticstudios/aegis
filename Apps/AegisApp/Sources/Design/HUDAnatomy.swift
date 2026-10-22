@@ -3,7 +3,7 @@ import Foundation
 /// An anatomical heart: ventricles, atria, the aorta and its branches, the pulmonary trunk, the venae cavae and
 /// coronary vessels that flush with each beat. It beats lub-dub at about 67 a minute.
 enum HUDAnatomy {
-    private struct Point {
+    fileprivate struct Point {
         let across: Double
         let down: Double
     }
@@ -16,34 +16,55 @@ enum HUDAnatomy {
     }
 
     static func density(_ across0: Double, _ down0: Double, _ time: Double) -> Double {
-        let at = Point(across: across0 * 1.04 + 0.05, down: down0 * 1.06 - 0.06)
+        density(Fixed(across0, down0), time)
+    }
+
+    /// The parts of a cell that don't beat: where it sits, how solid the vessels are there, and whether it lies on a
+    /// coronary vessel or the groove. Worked out once per cell, so each frame only reshapes the chambers.
+    struct Fixed: Sendable {
+        fileprivate let at: Point
+        fileprivate let vessels: Double
+        fileprivate let coronary: Bool
+        fileprivate let groove: Bool
+
+        init(_ across0: Double, _ down0: Double) {
+            let at = Point(across: across0 * 1.04 + 0.05, down: down0 * 1.06 - 0.06)
+            self.at = at
+            vessels = [
+                tube(at, [(0.08, -0.15), (0.1, -0.62), (-0.12, -0.8), (-0.38, -0.72), (-0.48, -0.42), (-0.5, -0.15)], 0.13, 0.1),
+                tube(at, [(-0.06, -0.78), (-0.04, -1.02)], 0.045, 0.035),
+                tube(at, [(-0.2, -0.8), (-0.22, -1.02)], 0.045, 0.035),
+                tube(at, [(-0.33, -0.74), (-0.4, -0.98)], 0.04, 0.03),
+                tube(at, [(-0.12, -0.1), (-0.2, -0.45), (-0.36, -0.55), (-0.7, -0.52)], 0.12, 0.07),
+                tube(at, [(-0.22, -0.48), (-0.12, -0.6), (0.0, -0.58)], 0.06, 0.05),
+                tube(at, [(0.42, -0.36), (0.44, -1.0)], 0.1, 0.09),
+                tube(at, [(0.55, 0.15), (0.62, 0.55)], 0.08, 0.07),
+            ].max() ?? 0
+            coronary = min(
+                segment(at, (0.02, -0.08), (-0.12, 0.3)).distance, segment(at, (-0.12, 0.3), (-0.32, 0.62)).distance,
+                segment(at, (0.02, -0.08), (0.3, 0.2)).distance, segment(at, (0.3, 0.2), (0.25, 0.55)).distance
+            ) < 0.03
+            groove = abs(at.down - (0.02 + 0.25 * at.across * at.across - 0.1 * at.across)) < 0.025 && abs(at.across) < 0.5
+        }
+    }
+
+    static func density(_ fixed: Fixed, _ time: Double) -> Double {
+        let at = fixed.at
         let phase = time.truncatingRemainder(dividingBy: 0.9) / 0.9
         let beat = exp(-pow((phase - 0.08) / 0.06, 2)) + 0.55 * exp(-pow((phase - 0.3) / 0.06, 2))
         let squeeze = 1 - 0.07 * beat
         let swell = 1 + 0.05 * beat
         let ventricles = blob(at, 0.02, 0.2, 0.52, 0.6, 0.55, squeeze, taper: true)
-        let parts = [
+        var best = max(
             ventricles,
             blob(at, 0.4, -0.2, 0.25, 0.27, 0, swell, taper: false),
             blob(at, -0.32, -0.24, 0.2, 0.18, 0.3, swell, taper: false),
-            tube(at, [(0.08, -0.15), (0.1, -0.62), (-0.12, -0.8), (-0.38, -0.72), (-0.48, -0.42), (-0.5, -0.15)], 0.13, 0.1),
-            tube(at, [(-0.06, -0.78), (-0.04, -1.02)], 0.045, 0.035),
-            tube(at, [(-0.2, -0.8), (-0.22, -1.02)], 0.045, 0.035),
-            tube(at, [(-0.33, -0.74), (-0.4, -0.98)], 0.04, 0.03),
-            tube(at, [(-0.12, -0.1), (-0.2, -0.45), (-0.36, -0.55), (-0.7, -0.52)], 0.12, 0.07),
-            tube(at, [(-0.22, -0.48), (-0.12, -0.6), (0.0, -0.58)], 0.06, 0.05),
-            tube(at, [(0.42, -0.36), (0.44, -1.0)], 0.1, 0.09),
-            tube(at, [(0.55, 0.15), (0.62, 0.55)], 0.08, 0.07),
-        ]
-        var best = parts.max() ?? 0
+            fixed.vessels
+        )
         if best > 0, ventricles > 0 {
-            let coronary = min(
-                segment(at, (0.02, -0.08), (-0.12, 0.3)).distance, segment(at, (-0.12, 0.3), (-0.32, 0.62)).distance,
-                segment(at, (0.02, -0.08), (0.3, 0.2)).distance, segment(at, (0.3, 0.2), (0.25, 0.55)).distance
-            )
-            if coronary < 0.03 {
+            if fixed.coronary {
                 best = 0.75 + 0.25 * beat
-            } else if abs(at.down - (0.02 + 0.25 * at.across * at.across - 0.1 * at.across)) < 0.025, abs(at.across) < 0.5 {
+            } else if fixed.groove {
                 // The groove between the atria and the ventricles.
                 best = 0.1
             }

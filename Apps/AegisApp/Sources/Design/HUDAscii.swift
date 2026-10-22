@@ -20,11 +20,13 @@ enum HUDAscii {
         let aspect = Double(cols) * cellAspect / Double(rows)
         let live = (time * 8).rounded(.down)
         let grid = Grid.cached(cols: cols, rows: rows, seed: seed, grit: grit)
+        let heart = shape == .anatomy ? grid.heart : []
         var line = [UInt8](repeating: 0, count: cols)
         return (0 ..< rows).map { row in
             for col in 0 ..< cols {
                 let cell = row * cols + col
-                var level = density(shape, grid.across[col], grid.down[row], time, aspect)
+                var level = heart.isEmpty ? density(shape, grid.across[col], grid.down[row], time, aspect)
+                    : HUDAnatomy.density(heart[cell], time)
                 if level > 0 {
                     level += grid.grain[cell]
                     if grid.dropped[cell] {
@@ -51,12 +53,25 @@ enum HUDAscii {
         let down: [Double]
         let grain: [Double]
         let dropped: [Bool]
+        /// The heart's unbeating parts per cell, worked out the first time a heart is drawn on this grid.
+        var heart: [HUDAnatomy.Fixed] {
+            Self.hearts.withLock { hearts in
+                let key = Key(cols: across.count, rows: down.count, seed: 0, grit: 0)
+                if let cells = hearts[key] {
+                    return cells
+                }
+                let cells = down.flatMap { down in across.map { HUDAnatomy.Fixed($0, down) } }
+                hearts[key] = cells
+                return cells
+            }
+        }
 
         private struct Key: Hashable {
             let cols: Int, rows: Int, seed: Double, grit: Double
         }
 
         private static let cache = Mutex<[Key: Grid]>([:])
+        private static let hearts = Mutex<[Key: [HUDAnatomy.Fixed]]>([:])
 
         static func cached(cols: Int, rows: Int, seed: Double, grit: Double) -> Grid {
             let key = Key(cols: cols, rows: rows, seed: seed, grit: grit)
