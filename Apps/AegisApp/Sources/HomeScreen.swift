@@ -9,6 +9,8 @@ struct HomeScreen: View {
     @Binding var screen: HUDScreen
     @State private var monitor = SystemMonitor.shared
     @State private var activity = ActivityPresence.shared
+    /// Today's whole schedule, not just its first rows.
+    @State private var wholeDay = false
 
     var body: some View {
         HUDShell {
@@ -17,7 +19,7 @@ struct HomeScreen: View {
             HStack(alignment: .top, spacing: HUD.space8) {
                 machine.frame(width: 250)
                 centre.frame(maxWidth: .infinity)
-                world.frame(width: 250)
+                ScrollView { world }.scrollIndicators(.never).frame(width: 250)
             }
         } bottom: {
             HUDParticleField(
@@ -135,9 +137,10 @@ struct HomeScreen: View {
                 today
             }
             HUDSection(title: "Inbox", code: "MSG.12") {
-                let inbox = activity.hours([.imessage, .sms, .email])
+                let inbox: [Event.Source] = [.imessage, .sms, .email]
                 HUDSparkline(
-                    label: "Per hour", data: Array(inbox.suffix(16)), display: "\(Int(inbox.reduce(0, +))) today",
+                    label: "Per hour", data: Array(activity.hours(inbox).suffix(16)),
+                    display: "\(Int(activity.today(inbox).reduce(0, +))) today",
                     variant: .bars, tone: HUD.accent
                 )
             }
@@ -162,7 +165,7 @@ struct HomeScreen: View {
                 HUDReadout(label: "Items", value: model.isSample ? "----" : "\(rows.count)")
             }
             HUDTag(word: overdue > 0 ? "\(overdue) overdue" : rows.isEmpty ? "Clear" : "On track", tone: overdue > 0 ? HUD.warn : HUD.ok)
-            ForEach(Array(rows.prefix(4).enumerated()), id: \.offset) { _, row in
+            ForEach(Array(rows.prefix(wholeDay ? rows.count : 4).enumerated()), id: \.offset) { _, row in
                 HStack(alignment: .firstTextBaseline, spacing: HUD.space2) {
                     Text(row.time).hudType(.data).foregroundStyle(row.kind == .overdue ? HUD.warn : HUD.inkMuted).frame(
                         width: 58,
@@ -176,6 +179,10 @@ struct HomeScreen: View {
                             .help("What's recent with the people in this meeting")
                     }
                 }
+            }
+            if rows.count > 4 {
+                Button(wholeDay ? "Fewer" : "\(rows.count - 4) more") { wholeDay.toggle() }
+                    .buttonStyle(HUDChipStyle(muted: true))
             }
             let upcoming = MemoryBook(notes: model.memories).upcoming(now: Date(), calendar: .current)
             ForEach(upcoming, id: \.note.id) { item in
