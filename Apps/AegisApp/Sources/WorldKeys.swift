@@ -2,12 +2,12 @@ import AppKit
 import Security
 import SwiftUI
 
-/// The World view's optional keys (#265), in the Mac's Keychain only: Cesium ion (3D cities), AISStream (ships),
-/// NASA FIRMS (fires) and TomTom (traffic). They go only to God's Eye View's local server, which uses them with
-/// those providers.
+/// The World view's optional keys (#265), stored only in the Mac's Keychain.
+/// Keys enable 3D cities, ships, fires, traffic, and Queensland traffic/flood cameras.
+/// They go only to God's Eye View's local server for use with those providers.
 enum WorldKeys {
     enum Key: String, CaseIterable {
-        case cesium, aisstream, firms, tomtom
+        case cesium, aisstream, firms, tomtom, qldtraffic
 
         var title: String {
             switch self {
@@ -15,6 +15,7 @@ enum WorldKeys {
             case .aisstream: "AISStream key (ships)"
             case .firms: "NASA FIRMS map key (fires)"
             case .tomtom: "TomTom key (traffic)"
+            case .qldtraffic: "Queensland traffic and flood camera key"
             }
         }
 
@@ -24,6 +25,7 @@ enum WorldKeys {
             case .aisstream: "aisstream.io"
             case .firms: "firms.modaps.eosdis.nasa.gov/api/map_key"
             case .tomtom: "my.tomtom.com/keys"
+            case .qldtraffic: "qldtraffic.qld.gov.au/more/Developers-and-Data"
             }
         }
 
@@ -34,6 +36,7 @@ enum WorldKeys {
             case .aisstream: "AISSTREAM_API_KEY"
             case .firms: "FIRMS_MAP_KEY"
             case .tomtom: "TOMTOM_API_KEY"
+            case .qldtraffic: "QLDTRAFFIC_API_KEY"
             }
         }
     }
