@@ -157,9 +157,17 @@ private struct HUDArtInk {
 
     /// The first and last solid character on a line; spaces and the faintest marks don't count.
     static func solidColumns(_ line: String) -> ClosedRange<Int>? {
-        let columns = line.enumerated().filter { !" .:-".contains($0.element) }.map(\.offset)
-        guard let low = columns.first, let high = columns.last else { return nil }
-        return low ... high
+        var low: Int?
+        var high = 0
+        for (offset, character) in line.enumerated() {
+            switch character {
+            case " ", ".", ":", "-": continue
+            default:
+                low = low ?? offset
+                high = offset
+            }
+        }
+        return low.map { $0 ... high }
     }
 
     func anchor(dir: Double, index: Int, count: Int) -> CGPoint? {
