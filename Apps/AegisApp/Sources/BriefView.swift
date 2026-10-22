@@ -17,7 +17,7 @@ struct BriefView: View {
             } else if case .loading = model.phase {
                 BootScreen(model: model)
             } else {
-                current.padding(HUD.space6)
+                HUDFit { current.padding(HUD.space6) }
             }
         }
         .frame(minWidth: 1120, minHeight: 700)
@@ -51,6 +51,22 @@ struct BriefView: View {
         case .comms: CommsScreen(model: model, screen: $screen)
         case .chat: ChatScreen(model: model, screen: $screen)
         case .logs: LogsScreen(model: model, screen: $screen)
+        }
+    }
+}
+
+/// Lays a screen out at least `height` tall and scales it down to the window, so a screen taller than the panel
+/// shows whole, slightly smaller, instead of cut off.
+struct HUDFit<Content: View>: View {
+    var height: CGFloat = 910
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scale = min(1, proxy.size.height / height)
+            content
+                .frame(width: proxy.size.width / scale, height: proxy.size.height / scale)
+                .scaleEffect(scale, anchor: .topLeading)
         }
     }
 }

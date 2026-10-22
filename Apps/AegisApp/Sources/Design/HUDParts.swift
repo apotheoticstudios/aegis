@@ -348,11 +348,4 @@ enum HUDFormat {
     static func percent(_ fraction: Double, capped: Bool = true) -> String {
         "\(Int((min(max(fraction, 0), capped ? 1 : .infinity) * 100).rounded()))%"
     }
-
-    /// "6d 04:21", or "04:21" under a day.
-    static func uptime(_ seconds: TimeInterval) -> String {
-        let total = Int(max(0, seconds)) / 60
-        let clock = String(format: "%02d:%02d", total / 60 % 24, total % 60)
-        return total >= 1440 ? "\(total / 1440)d " + clock : clock
-    }
 }
