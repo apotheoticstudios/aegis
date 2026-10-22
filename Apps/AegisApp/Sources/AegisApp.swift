@@ -84,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             guard let voice = self?.model.voice else { return false }
             return voice.speaking || voice.isListening
         }
-        // App tests run inside Aegis with the owner's settings: they must not open the microphone (#305).
+        // App tests run inside Aegis: they must not open the microphone (#305).
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             Task { [wake] in await wake.start() }
             model.voice.prepare(enabled: wake.enabled)
@@ -120,6 +120,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 private func persistUnhandledException(_: NSException) {
     DiagnosticLog.shared.record(.uncaughtException)
     DiagnosticLog.shared.flush()
+}
+
+extension UserDefaults {
+    /// Aegis's settings. App tests run inside the real Aegis.app, so the test host gets its own domain, emptied at
+    /// launch: a test never reads or changes the owner's settings.
+    nonisolated(unsafe) static let aegis: UserDefaults = { // UserDefaults is thread-safe, just not marked Sendable.
+        let tests = "dev.aegis.app.tests"
+        guard WorldSidecar.isTestHost, let store = UserDefaults(suiteName: tests) else { return .standard }
+        store.removePersistentDomain(forName: tests)
+        return store
+    }()
 }
 
 /// The menu bar menu.

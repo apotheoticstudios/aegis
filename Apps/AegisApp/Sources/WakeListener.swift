@@ -717,7 +717,7 @@ extension WakeListener {
 
     /// The owner's one-word custom wake name; "Hey Aegis" remains available.
     static var customName: String? {
-        UserDefaults.standard.string(forKey: PanelModel.wakeNameKey)
+        UserDefaults.aegis.string(forKey: PanelModel.wakeNameKey)
     }
 }
 
@@ -742,12 +742,12 @@ extension WakeListener {
 
 extension WakeListener {
     var enabled: Bool {
-        UserDefaults.standard.bool(forKey: Self.enabledKey)
+        UserDefaults.aegis.bool(forKey: Self.enabledKey)
     }
 
     /// Switches hands-free voice on or off (the owner's choice, remembered).
     func set(enabled: Bool) async {
-        UserDefaults.standard.set(enabled, forKey: Self.enabledKey)
+        UserDefaults.aegis.set(enabled, forKey: Self.enabledKey)
         if enabled {
             await start()
         } else {

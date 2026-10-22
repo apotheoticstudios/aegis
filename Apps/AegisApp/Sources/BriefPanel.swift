@@ -7,6 +7,7 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
     private let panel: NSPanel
     private let model: PanelModel
     private var hudFrame: NSRect?
+    private var reportedVisible = false
     /// Opened (true) or closed (false); the wake listener follows it (#313).
     var visibilityChanged: (Bool) -> Void = { _ in }
     var isVisible: Bool {
@@ -30,9 +31,14 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
         panel.level = .floating
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
-        panel.backgroundColor = .clear
+        // The HUD's ground fills the whole window, so the window server needn't blend the desktop behind it.
+        panel.isOpaque = true
+        panel.backgroundColor = .black
         super.init()
         panel.delegate = self
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(occlusionChanged), name: NSWindow.didChangeOcclusionStateNotification, object: panel
+        )
         panel.contentView = NSHostingView(rootView: BriefView(model: model, close: { [weak self] in
             self?.hide()
         }))
@@ -54,7 +60,7 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
         NSApp.activate()
         HUDPresence.shared.open = true
         panel.makeKeyAndOrderFront(nil)
-        visibilityChanged(true)
+        report(visible: true)
         Task { await model.opened() }
     }
 
@@ -78,8 +84,22 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
     private func hide() {
         HUDPresence.shared.open = false
         panel.orderOut(nil)
-        visibilityChanged(false)
+        report(visible: false)
         model.panelClosed()
+    }
+
+    /// macOS also hides the panel by itself when another app becomes active, so presence follows what is really on
+    /// screen: everything that moves or samples stops while the panel is hidden or fully covered, and the wake
+    /// listener leaves its open-panel mode while it is hidden.
+    @objc private func occlusionChanged() {
+        HUDPresence.shared.open = panel.isVisible && panel.occlusionState.contains(.visible)
+        report(visible: panel.isVisible)
+    }
+
+    private func report(visible: Bool) {
+        guard visible != reportedVisible else { return }
+        reportedVisible = visible
+        visibilityChanged(visible)
     }
 
     func windowShouldClose(_: NSWindow) -> Bool {

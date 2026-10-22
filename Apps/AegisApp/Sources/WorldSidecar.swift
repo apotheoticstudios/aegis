@@ -17,7 +17,7 @@ final class WorldSidecar {
             .appendingPathComponent("Library/Application Support/Aegis/World", isDirectory: true)
     }
 
-    /// The app tests run inside Aegis itself, sharing its settings: they must never start or stop the owner's real server.
+    /// The app tests run inside Aegis itself: they must never start or stop the owner's real server.
     nonisolated static let isTestHost = NSClassFromString("XCTestCase") != nil
 
     private(set) var address: URL?
@@ -77,7 +77,7 @@ final class WorldSidecar {
         )
         let step = (try? String(contentsOf: status, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard finished, step == "done", Self.isInstalled else { throw Problem.setupFailed(step) }
-        UserDefaults.standard.set(false, forKey: WorldKeys.rebuildKey)
+        UserDefaults.aegis.set(false, forKey: WorldKeys.rebuildKey)
         log.notice("world: setup done")
     }
 
@@ -93,14 +93,14 @@ final class WorldSidecar {
         let home = Self.folder.appendingPathComponent("home", isDirectory: true)
         let keys = WorldKeys.environment
         // The Cesium token is built into the globe's page: rebuild once after it changes (about 3 seconds).
-        if UserDefaults.standard.bool(forKey: WorldKeys.rebuildKey) {
+        if UserDefaults.aegis.bool(forKey: WorldKeys.rebuildKey) {
             let built = await Self.runToEnd(
                 label: Self.label + ".build",
                 program: [node, app.appendingPathComponent("node_modules/vite/bin/vite.js").path, "build", "--logLevel", "silent"],
                 directory: app, environment: Self.environment(home: home, node: node, keys: keys), minutes: 2
             )
             if built {
-                UserDefaults.standard.set(false, forKey: WorldKeys.rebuildKey)
+                UserDefaults.aegis.set(false, forKey: WorldKeys.rebuildKey)
             }
         }
         try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])

@@ -111,8 +111,8 @@ final class AegisAppTests: XCTestCase {
     }
 
     @MainActor func testGlowForANewUrgentBriefUntilThePanelOpens() async {
-        UserDefaults.standard.removeObject(forKey: "lastSeenBrief")
-        UserDefaults.standard.removeObject(forKey: "glowForUrgent")
+        UserDefaults.aegis.removeObject(forKey: "lastSeenBrief")
+        UserDefaults.aegis.removeObject(forKey: "glowForUrgent")
         let now = Date()
         let model = PanelModel(service: RecordingCore(storedAt: now.addingTimeInterval(-60)))
         await model.checkForNewBrief()
@@ -123,8 +123,8 @@ final class AegisAppTests: XCTestCase {
         XCTAssertFalse(model.glow, "the same brief doesn't glow again")
         model.glowEnabled = false
         XCTAssertFalse(model.glow)
-        UserDefaults.standard.removeObject(forKey: "lastSeenBrief")
-        UserDefaults.standard.removeObject(forKey: "glowForUrgent")
+        UserDefaults.aegis.removeObject(forKey: "lastSeenBrief")
+        UserDefaults.aegis.removeObject(forKey: "glowForUrgent")
     }
 
     @MainActor
@@ -258,6 +258,30 @@ final class AegisAppTests: XCTestCase {
     }
 }
 
+/// App tests run inside the real Aegis.app: what they do must never change the owner's settings or fetch the
+/// brief's weather and flight status.
+final class TestHostTests: XCTestCase {
+    @MainActor
+    func testTheTestHostKeepsTheOwnersSettingsAndStaysOffline() async throws {
+        XCTAssertNotIdentical(UserDefaults.aegis, UserDefaults.standard, "the test host has its own settings")
+        let domain = try XCTUnwrap(Bundle.main.bundleIdentifier)
+        let owner = UserDefaults.standard.persistentDomain(forName: domain) as NSDictionary?
+        await PanelModel(service: SampleCoreService(), actions: nil).opened(now: Date())
+        let model = PanelModel(service: NamedCore(), actions: nil)
+        await model.refresh()
+        model.glowEnabled.toggle()
+        WorldPresence.briefEnabled = true
+        await model.refreshWorldBrief()
+        // Compared without printing: the owner's values stay out of test logs.
+        XCTAssertTrue(UserDefaults.standard.persistentDomain(forName: domain) as NSDictionary? == owner, "the owner's settings changed")
+        XCTAssertEqual(WakeListener.customName, "Friday", "the wake listener reads the settings the panel wrote")
+        XCTAssertEqual(WorldPresence.shared.briefFetched, .distantPast, "the test host fetched the World brief")
+        for key in [PanelModel.wakeNameKey, "lastSeenBrief", "glowForUrgent", "worldBriefEnabled"] {
+            UserDefaults.aegis.removeObject(forKey: key)
+        }
+    }
+}
+
 /// A AegisCore stand-in that records whether a refresh was asked for.
 final class RecordingCore: CoreService, @unchecked Sendable {
     private let lock = NSLock()
@@ -328,6 +352,14 @@ final class RecordingCore: CoreService, @unchecked Sendable {
         case .activity:
             return .activity(HourlyActivity(start: storedAt, counts: [:]))
         }
+    }
+}
+
+/// The sample with a one-word custom name, which the panel saves as a wake name.
+private struct NamedCore: CoreService {
+    func handle(_ request: CoreRequest) async -> CoreResponse {
+        guard case .personality = request else { return await SampleCoreService().handle(request) }
+        return .personality(Personality(name: "Friday", style: .classic, callOwner: "", notes: ""))
     }
 }
 

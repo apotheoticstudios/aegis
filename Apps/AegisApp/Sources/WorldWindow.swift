@@ -30,8 +30,8 @@ final class WorldPresence {
 
     /// Whether weather and flight status go in the brief (on unless turned off under World view settings).
     static var briefEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: "worldBriefEnabled") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "worldBriefEnabled") }
+        get { UserDefaults.aegis.object(forKey: "worldBriefEnabled") as? Bool ?? true }
+        set { UserDefaults.aegis.set(newValue, forKey: "worldBriefEnabled") }
     }
 }
 
@@ -207,7 +207,7 @@ final class WorldWindow {
     /// The panel opened: if the World view was used in the last week, its server starts now so WORLD opens at once.
     func prewarm() {
         guard web == nil, WorldSidecar.isInstalled,
-              Date().timeIntervalSince1970 - UserDefaults.standard.double(forKey: "worldLastUsed") < 7 * 86400
+              Date().timeIntervalSince1970 - UserDefaults.aegis.double(forKey: "worldLastUsed") < 7 * 86400
         else { return }
         Task { _ = try? await sidecar.start() }
     }
@@ -298,7 +298,7 @@ final class WorldWindow {
         if let web {
             return web
         }
-        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "worldLastUsed")
+        UserDefaults.aegis.set(Date().timeIntervalSince1970, forKey: "worldLastUsed")
         let configuration = WKWebViewConfiguration()
         // God's Eye View keeps its own settings (welcome seen, layers, styles) in this Mac's web storage (#295).
         configuration.websiteDataStore = .default()

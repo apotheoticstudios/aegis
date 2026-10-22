@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Synchronization
 
 /// Character art, the design system's signature: pictures built from the density ramp ` .:-=+*#%@`, ported from its
 /// generators. Every shape moves at 12 frames a second, a deliberately terminal-like rate, only while the panel shows.
@@ -18,22 +19,75 @@ enum HUDAscii {
     static func art(_ shape: Shape, cols: Int, rows: Int, seed: Double = 1, grit: Double = 0.35, time: Double = 0) -> [String] {
         let aspect = Double(cols) * cellAspect / Double(rows)
         let live = (time * 8).rounded(.down)
+        let grid = Grid.cached(cols: cols, rows: rows, seed: seed, grit: grit)
+        var line = [UInt8](repeating: 0, count: cols)
         return (0 ..< rows).map { row in
-            String((0 ..< cols).map { col in
-                let across = (Double(col) + 0.5) / Double(cols) * 2 - 1
-                let down = (Double(row) + 0.5) / Double(rows) * 2 - 1
-                var level = density(shape, across, down, time, aspect)
+            for col in 0 ..< cols {
+                let cell = row * cols + col
+                var level = density(shape, grid.across[col], grid.down[row], time, aspect)
                 if level > 0 {
-                    level += (hash(Double(col), Double(row), seed) - 0.5) * grit
-                    if hash(Double(row), Double(col), seed + 3) < grit * 0.18 {
+                    level += grid.grain[cell]
+                    if grid.dropped[cell] {
                         level = 0
                     }
                     if time > 0 {
                         level += (hash(Double(col), Double(row), seed + live) - 0.5) * 0.08
                     }
                 }
-                return ramp[Int(min(max(level, 0), 0.999) * Double(ramp.count))]
-            }).replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
+                line[col] = rampBytes[Int(min(max(level, 0), 0.999) * Double(rampBytes.count))]
+            }
+            // Trailing spaces dropped, as the design's generators do.
+            let end = (line.lastIndex { $0 != 0x20 } ?? -1) + 1
+            return String(decoding: line[..<end], as: UTF8.self)
+        }
+    }
+
+    private static let rampBytes = Array(" .:-=+*#%@".utf8)
+
+    /// What never changes for one piece of art, worked out once instead of every frame: each cell's place and its
+    /// hand-made grain and gaps.
+    private struct Grid: Sendable {
+        let across: [Double]
+        let down: [Double]
+        let grain: [Double]
+        let dropped: [Bool]
+
+        private struct Key: Hashable {
+            let cols: Int, rows: Int, seed: Double, grit: Double
+        }
+
+        private static let cache = Mutex<[Key: Grid]>([:])
+
+        static func cached(cols: Int, rows: Int, seed: Double, grit: Double) -> Grid {
+            let key = Key(cols: cols, rows: rows, seed: seed, grit: grit)
+            if let grid = cache.withLock({ $0[key] }) {
+                return grid
+            }
+            let grid = Grid(cols: cols, rows: rows, seed: seed, grit: grit)
+            cache.withLock { grids in
+                if grids.count >= 64 {
+                    grids.removeAll()
+                }
+                grids[key] = grid
+            }
+            return grid
+        }
+
+        private init(cols: Int, rows: Int, seed: Double, grit: Double) {
+            across = (0 ..< cols).map { (Double($0) + 0.5) / Double(cols) * 2 - 1 }
+            down = (0 ..< rows).map { (Double($0) + 0.5) / Double(rows) * 2 - 1 }
+            var grain: [Double] = []
+            var dropped: [Bool] = []
+            grain.reserveCapacity(cols * rows)
+            dropped.reserveCapacity(cols * rows)
+            for row in 0 ..< rows {
+                for col in 0 ..< cols {
+                    grain.append((HUDAscii.hash(Double(col), Double(row), seed) - 0.5) * grit)
+                    dropped.append(HUDAscii.hash(Double(row), Double(col), seed + 3) < grit * 0.18)
+                }
+            }
+            self.grain = grain
+            self.dropped = dropped
         }
     }
 
