@@ -187,7 +187,7 @@ struct HUDAsciiArt: View {
             let time = moving ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600) : 0
             let lines = HUDAscii.art(shape, cols: cols * detail, rows: rows * detail, seed: seed, grit: grit, time: time)
             let shown = arrival.elapsed(context.date).map {
-                HUDMotion.resolve(lines, HUDMotion.progress($0, 0, 1.1), tick: Int($0 / 0.06), seed: seed)
+                HUDMotion.resolve(lines, HUDMotion.progress($0, 0, 1.1), tick: Int($0 * 12), seed: seed)
             } ?? lines
             // Links plug into the whole drawing, not the part resolved so far.
             if hub {

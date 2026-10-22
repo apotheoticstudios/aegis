@@ -91,16 +91,32 @@ enum HUDMotion {
         return 1 - 0.45 * ambient(half < 1 ? half : 2 - half)
     }
 
-    /// jh-blink: on for the first half of each `period`, off for the second.
+    /// jh-blink: on for the first half of each `period`, off for the second (a hair early, so a redraw due exactly on
+    /// the half never lands on the wrong side of it).
     static func blink(_ seconds: Double, period: Double = 1) -> Bool {
-        seconds.truncatingRemainder(dividingBy: period) < period / 2
+        Int((seconds * 2 / period + 1e-6).rounded(.down)).isMultiple(of: 2)
+    }
+
+    /// The moments a part of the build redraws: `fps` times a second from `now` until it settles, `until` seconds
+    /// after its section arrives, and two frames past that, as a timeline can leave out its last moment. None once
+    /// built.
+    static func frames(start: Date?, at: Double, until: Double, fps: Double, now: Date) -> [Date] {
+        guard let start else { return [] }
+        let end = start.addingTimeInterval(at + until)
+        guard end > now else { return [] }
+        return Array(stride(from: now, to: end.addingTimeInterval(2 / fps), by: 1 / fps))
     }
 
     private static let letters = Array("ABCDEFGHJKLMNPQRSTUVWXYZ")
     private static let digits = Array("0123456789")
 
+    /// ScrambleText's frames, 20 a second over its 650 ms, worked out at once so no frame does string work.
+    static func scrambles(_ text: String) -> [String] {
+        (0 ..< 13).map { scramble(text, Double($0) / 13, tick: $0) }
+    }
+
     /// ScrambleText: the first `resolved` share of the characters read true; letters and digits after them cycle
-    /// through others of their kind, a new draw each `tick` (45 ms). Everything else holds still.
+    /// through others of their kind, a new draw each `tick`. Everything else holds still.
     static func scramble(_ text: String, _ resolved: Double, tick: Int) -> String {
         guard resolved < 1 else { return text }
         let done = Int(Double(text.count) * resolved)
@@ -113,11 +129,11 @@ enum HUDMotion {
     }
 
     /// Character art arriving top to bottom: rows below the front are blank, rows at the front are ramp noise
-    /// (redrawn each `tick`, 60 ms), rows above it read true.
+    /// (redrawn each `tick`), rows above it read true. Only the few rows at the front are rewritten, byte by byte
+    /// (art is ASCII); the rest are dropped or passed through untouched.
     static func resolve(_ lines: [String], _ progress: Double, tick: Int, seed: Double = 1) -> [String] {
         guard progress < 1 else { return lines }
         let front = progress * Double(lines.count + 8) - 4
-        let ramp = HUDAscii.ramp
         return lines.enumerated().map { row, line in
             let down = Double(row)
             if down > front + 2 {
@@ -126,31 +142,15 @@ enum HUDMotion {
             if down < front - 2 {
                 return line
             }
-            return String(line.enumerated().map { col, character in
-                guard character != " ", HUDAscii.hash(Double(col), down, seed + Double(tick)) < 0.7 else { return character }
-                return ramp[1 + Int(HUDAscii.hash(down, Double(col), Double(tick)) * Double(ramp.count - 1))]
-            })
+            var bytes = Array(line.utf8)
+            for col in bytes.indices where bytes[col] != 0x20 && HUDAscii.hash(Double(col), down, seed + Double(tick)) < 0.7 {
+                bytes[col] = rampBytes[1 + Int(HUDAscii.hash(down, Double(col), Double(tick)) * Double(rampBytes.count - 1))]
+            }
+            return String(bytes: bytes, encoding: .utf8) ?? line
         }
     }
 
-    /// A line of TypeText: what's typed, the underscore cursor standing in for the next character, and the rest,
-    /// held invisible so the lines never re-wrap.
-    struct Typing: Equatable {
-        var typed: String
-        var cursor = ""
-        var rest: String
-    }
-
-    /// TypeText with the first `progress` share of the text typed, the cursor showing while `cursor` is on.
-    static func typing(_ text: String, _ progress: Double, cursor: Bool) -> Typing {
-        let count = Int(Double(text.count) * progress)
-        let rest = text.dropFirst(count)
-        // A space keeps its place, so the cursor never joins two words into one.
-        guard progress > 0, progress < 1, cursor, let next = rest.first, !next.isWhitespace else {
-            return Typing(typed: String(text.prefix(count)), rest: String(rest))
-        }
-        return Typing(typed: String(text.prefix(count)), cursor: "_", rest: String(rest.dropFirst()))
-    }
+    private static let rampBytes = Array(" .:-=+*#%@".utf8)
 }
 
 /// The build-on: plays the first time a screen shows in the open panel after launch; every later open is instant.
@@ -165,10 +165,18 @@ final class HUDBuild {
         guard !played else { return }
         played = true
         start = Date()
-        Task {
-            try? await Task.sleep(for: .seconds(HUDMotion.built))
-            start = nil
+    }
+
+    /// Ends the build once it has run its course. It waits only as long as the calling task, which lives while the
+    /// panel shows, so no timer runs while it's hidden.
+    func settle() async {
+        guard let start else { return }
+        do {
+            try await Task.sleep(for: .seconds(max(0, start.timeIntervalSinceNow + HUDMotion.built)))
+        } catch {
+            return
         }
+        self.start = nil
     }
 }
 
@@ -188,32 +196,40 @@ extension EnvironmentValues {
     @Entry var hudArrival = HUDArrival()
 }
 
-/// Redraws `content` through the build-on with the seconds since its section arrived, at most `fps` times a second
-/// and only while the panel shows; nil once built.
+/// Redraws `content` through its own part of the build-on with the seconds since its section arrived (nil once
+/// built): at most 20 times a second (the cables' rate), only while the panel shows, and only until the part settles
+/// `until` seconds after its section arrives.
 struct HUDBuildClock<Content: View>: View {
-    var fps = 60.0
+    var until: Double
+    var fps = 20.0
     @ViewBuilder var content: (Double?) -> Content
     @Environment(\.hudArrival) private var arrival
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / fps, paused: arrival.start == nil || !HUDPresence.shared.open)) { context in
+        let frames = HUDPresence.shared.open
+            ? HUDMotion.frames(start: arrival.start, at: arrival.at, until: until, fps: fps, now: Date()) : []
+        TimelineView(.explicit(frames)) { context in
             content(arrival.elapsed(context.date))
         }
     }
 }
 
-/// Redraws `content` with the time while `running`, the panel shows and Reduce Motion is off (nil otherwise): the
-/// loops of live things, like the breathing dot and the caret.
+/// Redraws `content` every `every` seconds, with the seconds since it started, while `running`, the panel shows and
+/// Reduce Motion is off (nil otherwise): the loops of live things, like the breathing dot and the caret.
 struct HUDLiveClock<Content: View>: View {
     var running = true
-    var fps = 30.0
+    var every = 1.0 / 20
     @ViewBuilder var content: (Double?) -> Content
     @Environment(\.accessibilityReduceMotion) private var still
 
     var body: some View {
-        let live = running && !still && HUDPresence.shared.open
-        TimelineView(.animation(minimumInterval: 1 / fps, paused: !live)) { context in
-            content(live ? context.date.timeIntervalSinceReferenceDate : nil)
+        if running, !still, HUDPresence.shared.open {
+            let anchor = Date()
+            TimelineView(.periodic(from: anchor, by: every)) { context in
+                content(context.date.timeIntervalSince(anchor))
+            }
+        } else {
+            content(nil)
         }
     }
 }
@@ -230,12 +246,22 @@ enum HUDMove {
     case type
     /// A soft-edged wipe left to right over a duration.
     case wipe(Double)
-    /// Opens from a line across the middle over a duration (jh-open); `traces` adds the shell's glowing edges.
+    /// Opens from a line across the middle over a duration (jh-open); `traces` adds the shell's traced edges.
     case open(Double, traces: Bool)
 
     /// Chat messages rise into place; notifications slide in from the left.
     static let rise = HUDMove.shift(0, 6)
     static let slide = HUDMove.shift(-12, 0)
+
+    /// How long the move runs.
+    var length: Double {
+        switch self {
+        case let .fade(duration, _), let .flicker(duration), let .wipe(duration): duration
+        case .shift: 0.26
+        case .type: 0.24
+        case let .open(duration, traces): traces ? duration * 760 / 700 : duration
+        }
+    }
 }
 
 extension View {
@@ -250,7 +276,7 @@ private struct HUDArrive: ViewModifier {
     let delay: Double
 
     func body(content: Content) -> some View {
-        HUDBuildClock { time in
+        HUDBuildClock(until: delay + move.length) { time in
             switch move {
             case let .fade(duration, curve):
                 content.opacity(curve(HUDMotion.progress(time, delay, duration)))
@@ -262,8 +288,8 @@ private struct HUDArrive: ViewModifier {
             case .type:
                 content.clipShape(HUDReveal(share: HUDMotion.typed(HUDMotion.progress(time, delay, 0.24))))
             case let .wipe(duration):
-                // The mask only while building: a mask draws offscreen.
-                if time != nil {
+                // The mask only while wiping: a mask draws offscreen.
+                if HUDMotion.progress(time, delay, duration) < 1 {
                     let edge = 2 * HUDMotion.standard(HUDMotion.progress(time, delay, duration))
                     content.mask {
                         LinearGradient(
@@ -316,8 +342,8 @@ struct HUDOpening: Shape {
     }
 }
 
-/// jh-trace: two glowing lines grow along the middle, part to the top and bottom edges, then hand over to the real
-/// edges.
+/// jh-trace: two lines grow along the middle, part to the top and bottom edges, then hand over to the real edges.
+/// No glow: they move every frame.
 private struct HUDTraces: View {
     let progress: Double
 
@@ -326,7 +352,7 @@ private struct HUDTraces: View {
             let middle = proxy.size.height / 2
             let part = HUDMotion.standard(HUDMotion.segment(progress, 0.38, 0.85))
             ForEach([-1.0, 1.0], id: \.self) { side in
-                Rectangle().fill(HUD.frame).frame(height: 1).hudGlow(.frame)
+                Rectangle().fill(HUD.frame).frame(height: 1)
                     .scaleEffect(x: HUDMotion.standard(HUDMotion.segment(progress, 0, 0.38)), y: 1)
                     .position(x: proxy.size.width / 2, y: middle + side * (middle - 0.5) * part)
             }
@@ -336,13 +362,14 @@ private struct HUDTraces: View {
     }
 }
 
-/// The glowing rule an inset section draws across as it arrives (jh-rule), fading to the hairline under it.
+/// The rule an inset section draws across as it arrives (jh-rule), fading to the hairline under it. No glow: it
+/// moves every frame.
 struct HUDRuleTrace: View {
     var body: some View {
-        HUDBuildClock { time in
+        HUDBuildClock(until: 0.52) { time in
             let progress = HUDMotion.progress(time, 0, 0.52)
             if progress < 1 {
-                Rectangle().fill(HUD.frame).frame(height: 1).hudGlow(.frame)
+                Rectangle().fill(HUD.frame).frame(height: 1)
                     .scaleEffect(x: HUDMotion.standard(HUDMotion.segment(progress, 0, 0.6)), y: 1, anchor: .leading)
                     .opacity(1 - HUDMotion.standard(HUDMotion.segment(progress, 0.6, 1)))
             }
@@ -352,31 +379,21 @@ struct HUDRuleTrace: View {
 }
 
 /// ScrambleText: a value whose letters and digits cycle, then settle left to right over 650 ms, `delay` after its
-/// section arrives. VoiceOver reads the true value.
+/// section arrives, 20 frames a second. A `glow`ing (live) value lights up once it has settled. VoiceOver reads the
+/// true value.
 struct HUDScramble: View {
     let text: String
     var delay = 0.5
+    var glow = false
+    @Environment(\.hudArrival) private var arrival
 
     var body: some View {
-        HUDBuildClock(fps: 1 / 0.045) { time in
-            Text(time.map { HUDMotion.scramble(text, HUDMotion.progress($0, delay, 0.65), tick: Int($0 / 0.045)) } ?? text)
-                .accessibilityLabel(text)
-        }
-    }
-}
-
-/// TypeText: text typing itself out behind a blinking underscore, `delay` seconds after its section, at `cps`
-/// characters a second, finished before the build is over.
-struct HUDTypeText: View {
-    let text: String
-    var delay = 0.0
-    var cps = 48.0
-
-    var body: some View {
-        HUDBuildClock { time in
-            let duration = min(Double(text.count) / cps, HUDMotion.built - 0.1 - delay)
-            let line = HUDMotion.typing(text, HUDMotion.progress(time, delay, duration), cursor: HUDMotion.blink(time ?? 0, period: 0.9))
-            (Text(line.typed) + Text(line.cursor).foregroundStyle(HUD.primary) + Text(line.rest).foregroundStyle(.clear))
+        // Worked out once per value and only while building, never in a frame.
+        let frames = arrival.start == nil ? [] : HUDMotion.scrambles(text)
+        HUDBuildClock(until: delay + 0.65) { time in
+            let frame = time.map { Int((($0 - delay) * 20).rounded(.down)) } ?? frames.count
+            Text(frame < frames.count ? frames[max(frame, 0)] : text)
+                .hudGlow(active: glow && frame >= frames.count)
                 .accessibilityLabel(text)
         }
     }

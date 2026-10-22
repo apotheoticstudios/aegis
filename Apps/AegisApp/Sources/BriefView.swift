@@ -81,8 +81,8 @@ struct HUDTopBar: View {
         HStack(spacing: HUD.space3) {
             HUDEmblem(size: 34)
             // The name resolves out of ramp noise as the top bar arrives.
-            HUDBuildClock(fps: 1 / 0.06) { time in
-                let lines = time.map { HUDMotion.resolve(banner, HUDMotion.progress($0, 0, 0.8), tick: Int($0 / 0.06), seed: 5) }
+            HUDBuildClock(until: 0.8, fps: 12) { time in
+                let lines = time.map { HUDMotion.resolve(banner, HUDMotion.progress($0, 0, 0.8), tick: Int($0 * 12), seed: 5) }
                 HUDAsciiText(lines: lines ?? banner, cols: banner.map(\.count).max() ?? 0, size: 2.5, tone: HUD.primary)
             }
         }

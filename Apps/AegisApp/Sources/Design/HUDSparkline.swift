@@ -26,7 +26,9 @@ struct HUDSparkline: View {
                 Text(display ?? "").hudType(.data).monospacedDigit().foregroundStyle(HUD.ink)
             }
             .lineLimit(1)
-            let chart = HUDBuildClock { time in
+            // Bars settle as the last one's cap lights; a line once its marks are up; particles only wipe.
+            let settles = variant == .bars ? 0.62 + 0.028 * Double(max(data.count - 1, 0)) : variant == .line ? 1.06 : 0
+            let chart = HUDBuildClock(until: settles) { time in
                 Canvas { context, size in
                     HUDSparkDrawing(data: data, variant: variant, columns: columns, theme: theme, tone: tone.token, time: time).draw(
                         in: &context,

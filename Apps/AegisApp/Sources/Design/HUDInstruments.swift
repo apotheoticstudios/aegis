@@ -12,7 +12,7 @@ struct HUDReadout: View {
         VStack(alignment: .leading, spacing: HUD.space1) {
             Text(label).hudType(.label).foregroundStyle(HUD.inkMuted).lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: HUD.space1) {
-                HUDScramble(text: value).hudType(.readout).monospacedDigit().foregroundStyle(tone).hudGlow(active: tone == HUD.primary)
+                HUDScramble(text: value, glow: tone == HUD.primary).hudType(.readout).monospacedDigit().foregroundStyle(tone)
                 if let unit {
                     Text(unit).hudType(.data).foregroundStyle(HUD.inkMuted)
                 }
@@ -70,23 +70,34 @@ private struct HUDSegments: View {
     @Environment(\.hudTheme) private var theme
 
     var body: some View {
-        HUDBuildClock { time in
+        HUDBuildClock(until: 0.4 + 0.009 * Double(count)) { time in
             Canvas { context, size in
                 let color = theme.color(tone.token)
                 let lit = Int((value * Double(count)).rounded())
                 let step = (size.width - 1.5) / CGFloat(max(count - 1, 1))
+                var on = Path()
                 var off = Path()
-                for index in lit ..< count {
-                    off.addRect(CGRect(x: CGFloat(index) * step, y: 0, width: 1.5, height: size.height))
+                for index in 0 ..< count {
+                    let bar = CGRect(x: CGFloat(index) * step, y: 0, width: 1.5, height: size.height)
+                    if index < lit {
+                        on.addRect(bar)
+                    } else {
+                        off.addRect(bar)
+                    }
                 }
                 context.fill(off, with: .color(color.opacity(0.25)))
-                context.drawLayer { layer in
-                    layer.addFilter(.shadow(color: color, radius: 2))
-                    // Each lit bar brightens from the unlit level, 9 ms after the one before.
+                if HUDMotion.progress(time, 0.26 + 0.009 * Double(lit), 0.14) < 1 {
+                    // Arriving, each lit bar brightens from the unlit level 9 ms after the one before; the glow waits
+                    // until they're all lit, so nothing glows while it moves.
                     for index in 0 ..< lit {
                         let shown = HUDMotion.standard(HUDMotion.progress(time, 0.26 + 0.009 * Double(index), 0.14))
                         let bar = CGRect(x: CGFloat(index) * step, y: 0, width: 1.5, height: size.height)
-                        layer.fill(Path(bar), with: .color(color.opacity(0.25 + 0.75 * shown)))
+                        context.fill(Path(bar), with: .color(color.opacity(0.25 + 0.75 * shown)))
+                    }
+                } else {
+                    context.drawLayer { layer in
+                        layer.addFilter(.shadow(color: color, radius: 2))
+                        layer.fill(on, with: .color(color))
                     }
                 }
             }
@@ -147,7 +158,7 @@ struct HUDRing: View {
     var body: some View {
         let fraction = min(max(value, 0), 1)
         ZStack {
-            HUDBuildClock { time in
+            HUDBuildClock(until: 1.12) { time in
                 Canvas { context, _ in
                     let marks = HUDMotion.flicker(HUDMotion.progress(time, 0.3, 0.26))
                     let centre = size / 2
@@ -186,16 +197,20 @@ struct HUDRing: View {
                         with: .color(theme.color(.primarySoft).opacity(marks)),
                         lineWidth: 2
                     )
+                    let swept = HUDMotion.progress(time, 0.42, 0.7)
                     var value = Path()
                     value.addArc(
                         center: CGPoint(x: centre, y: centre),
                         radius: arc,
                         startAngle: .degrees(-90),
-                        endAngle: .degrees(-90 + 360 * fraction * HUDMotion.standard(HUDMotion.progress(time, 0.42, 0.7))),
+                        endAngle: .degrees(-90 + 360 * fraction * HUDMotion.standard(swept)),
                         clockwise: false
                     )
+                    // The arc glows once it has eased to its value, not while it moves.
                     context.drawLayer { layer in
-                        layer.addFilter(.shadow(color: theme.color(tone.token), radius: 2))
+                        if swept >= 1 {
+                            layer.addFilter(.shadow(color: theme.color(tone.token), radius: 2))
+                        }
                         layer.stroke(value, with: .color(theme.color(tone.token)), style: StrokeStyle(lineWidth: 2, lineCap: .butt))
                     }
                     let inner = centre - 40

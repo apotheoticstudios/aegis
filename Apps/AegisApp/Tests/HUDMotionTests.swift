@@ -54,6 +54,22 @@ final class HUDMotionTests: XCTestCase {
         XCTAssertFalse(HUDMotion.blink(0.7))
         XCTAssertTrue(HUDMotion.blink(1.1))
         XCTAssertFalse(HUDMotion.blink(0.5, period: 0.9))
+        XCTAssertFalse(HUDMotion.blink(0.499_999_9), "a redraw due on the half lands on its far side")
+    }
+
+    /// Each part of the build redraws at most 20 times a second, only until it settles, and never once built.
+    func testFramesStopWhenAPartSettles() {
+        let start = Date(timeIntervalSinceReferenceDate: 1000)
+        let now = start.addingTimeInterval(0.5)
+        let frames = HUDMotion.frames(start: start, at: 0.62, until: 0.52, fps: 20, now: now)
+        let end = start.addingTimeInterval(1.14)
+        XCTAssertEqual(frames.first, now)
+        XCTAssertGreaterThanOrEqual(frames[frames.count - 2], end, "settled even if the last moment is left out")
+        XCTAssertLessThan(frames[frames.count - 1], end.addingTimeInterval(2.0 / 20))
+        XCTAssertEqual(frames.count, 15)
+        XCTAssertEqual(frames[1].timeIntervalSince(frames[0]), 1.0 / 20, accuracy: 1e-6)
+        XCTAssertEqual(HUDMotion.frames(start: start, at: 0, until: 0.4, fps: 20, now: now), [], "already settled")
+        XCTAssertEqual(HUDMotion.frames(start: nil, at: 0, until: 3, fps: 20, now: now), [], "built")
     }
 
     /// The live dot breathes 1 → 0.55 → 1 over 3.2 s.
@@ -82,6 +98,10 @@ final class HUDMotionTests: XCTestCase {
             }
         }
         XCTAssertNotEqual(HUDMotion.scramble("CPU 100", 0, tick: 1), HUDMotion.scramble("CPU 100", 0, tick: 2))
+        let frames = HUDMotion.scrambles(value)
+        XCTAssertEqual(frames.count, 13, "20 frames a second over 650 ms")
+        XCTAssertTrue(frames.allSatisfy { $0.count == value.count })
+        XCTAssertEqual(frames.last?.prefix(7), "6d 04:2")
     }
 
     /// Art resolves top to bottom: blank before, rows above the front read true, noise only from the density ramp.
@@ -94,19 +114,6 @@ final class HUDMotionTests: XCTestCase {
         XCTAssertEqual(half.last, "")
         let ramp = Set(HUDAscii.ramp)
         XCTAssertTrue(half.allSatisfy { Set($0).isSubset(of: ramp) })
-    }
-
-    /// TypeText holds the untyped rest in place, and the underscore cursor only ever stands in for a character.
-    func testTypingHoldsTheLineInPlace() {
-        let line = HUDMotion.typing("Three new messages", 0.3, cursor: true)
-        XCTAssertEqual(line.typed, "Three")
-        XCTAssertEqual(line.cursor, "")
-        XCTAssertEqual(line.rest, " new messages")
-        let mid = HUDMotion.typing("Three new messages", 0.2, cursor: true)
-        XCTAssertEqual(mid.typed + mid.cursor + mid.rest, "Thr_e new messages")
-        XCTAssertEqual(HUDMotion.typing("Three", 0.2, cursor: false).cursor, "")
-        XCTAssertEqual(HUDMotion.typing("Three", 0, cursor: true).cursor, "", "no cursor before typing starts")
-        XCTAssertEqual(HUDMotion.typing("Three", 1, cursor: true).typed, "Three")
     }
 
     /// The shell opens from a point to a line across the middle, then into the box.
@@ -128,5 +135,16 @@ final class HUDMotionTests: XCTestCase {
         build.play()
         XCTAssertEqual(build.start, start)
         XCTAssertTrue(build.played)
+    }
+
+    /// The build ends once it has run its course, but only while its task (the open panel's) lives.
+    @MainActor
+    func testBuildSettlesOnlyWhileWaitedOn() async {
+        let build = HUDBuild()
+        build.play()
+        let waiting = Task { await build.settle() }
+        waiting.cancel()
+        await waiting.value
+        XCTAssertNotNil(build.start, "a hidden panel's build doesn't end on a timer")
     }
 }

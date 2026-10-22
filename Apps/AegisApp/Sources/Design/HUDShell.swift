@@ -51,10 +51,11 @@ struct HUDShell<Top: View, Content: View, Bottom: View>: View {
         .background { HUDGlass(tone: HUD.frame, cut: HUD.chamferLg, arm: 28, sheen: 0.25) }
         .hudArrive(.open(0.7, traces: true))
         .environment(\.hudArrival.start, start)
+        // The build plays and runs its course only while the panel shows.
         .task(id: HUDPresence.shared.open) {
-            if HUDPresence.shared.open, !still {
-                build.play()
-            }
+            guard HUDPresence.shared.open, !still else { return }
+            build.play()
+            await build.settle()
         }
     }
 }
@@ -198,7 +199,7 @@ private struct HUDLinks: View {
 
     var body: some View {
         // The links draw out from the hub once the sections are up, then their end nodes light and the pulses start.
-        HUDBuildClock { time in
+        HUDBuildClock(until: 2.4) { time in
             let drawn = HUDMotion.standard(HUDMotion.progress(time, 1.15, 0.8))
             let lit = HUDMotion.flicker(HUDMotion.progress(time, 1.85, 0.24))
             ZStack {

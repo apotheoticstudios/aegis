@@ -70,14 +70,15 @@ struct HomeScreen: View {
     private var centre: some View {
         VStack(spacing: HUD.space4) {
             HUDCore(model: model, value: "\(model.needsYou)")
-            // Aegis's words type themselves out once the sections are up.
-            HUDTypeText(text: model.saying, delay: 1.3, cps: 70)
-                .environment(\.hudArrival.at, 0)
+            Text(model.saying)
                 .foregroundStyle(HUD.inkMuted)
                 .multilineTextAlignment(.center)
                 .lineLimit(4)
                 .frame(maxWidth: 340)
                 .textSelection(.enabled)
+                // Aegis's words come in once the sections are up; a fade, as typing would lay the text out every frame.
+                .hudArrive(.fade(0.26, HUDMotion.enter), after: 1.3)
+                .environment(\.hudArrival.at, 0)
             HStack(spacing: HUD.space3) {
                 if model.stored != nil {
                     Button(model.voice.speaking ? "Stop" : "Read brief") { model.readBrief() }

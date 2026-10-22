@@ -143,8 +143,9 @@ struct HUDChatLine<Meta: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                     if writing {
-                        HUDLiveClock(fps: 20) { time in
-                            Rectangle().fill(HUD.primary).frame(width: 6, height: 12).hudGlow()
+                        // No glow: it blinks for as long as Aegis writes.
+                        HUDLiveClock(every: 0.5) { time in
+                            Rectangle().fill(HUD.primary).frame(width: 6, height: 12)
                                 .opacity(time.map { HUDMotion.blink($0) ? 1 : 0 } ?? 1)
                         }
                         .accessibilityHidden(true)
