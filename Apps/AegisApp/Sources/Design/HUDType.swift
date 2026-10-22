@@ -89,9 +89,10 @@ private struct HUDGlow: ViewModifier {
     let token: HUDToken
     let active: Bool
     @Environment(\.hudTheme) private var theme
+    @Environment(\.hudSteady) private var steady
 
     func body(content: Content) -> some View {
-        content.shadow(color: theme.color(token).opacity(active ? theme.glow : 0), radius: 3)
+        content.shadow(color: theme.color(token).opacity(active && steady ? theme.glow : 0), radius: 3)
     }
 }
 

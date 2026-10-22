@@ -17,11 +17,11 @@ struct HUDShell<Top: View, Content: View, Bottom: View>: View {
     @ViewBuilder var content: Content
     @ViewBuilder var bottom: Bottom
     @Environment(\.accessibilityReduceMotion) private var still
+    /// This screen's build-on; a tab switch shows a new screen, with its own, so it plays again.
+    @State private var build = HUDBuild()
 
     var body: some View {
-        let build = HUDBuild.shared
-        // Until the build plays, an open panel holds at its first frame, so it never flashes up built.
-        let start = still ? nil : build.start ?? (HUDPresence.shared.open && !build.played ? Date() : nil)
+        let start = still ? nil : build.start(open: HUDPresence.shared.open, now: Date())
         VStack(spacing: 0) {
             HStack(spacing: HUD.space4) { top }
                 .padding(.vertical, HUD.space3)
@@ -53,12 +53,49 @@ struct HUDShell<Top: View, Content: View, Bottom: View>: View {
         .background { HUDGlass(tone: HUD.frame, cut: HUD.chamferLg, arm: 28, sheen: 0.25) }
         .hudArrive(.open(0.7, traces: true))
         .environment(\.hudArrival.start, start)
-        // The build plays and runs its course only while the panel shows.
+        // The build plays each time this screen shows and runs its course only while the panel shows.
         .task(id: HUDPresence.shared.open) {
-            guard HUDPresence.shared.open, !still else { return }
-            build.play()
-            await build.settle()
+            guard HUDPresence.shared.open, !still else {
+                build.reset()
+                return
+            }
+            build.play(at: Date())
+            try? await Task.sleep(for: .seconds(HUDMotion.built))
+            if !Task.isCancelled {
+                build.settle()
+            }
         }
+    }
+}
+
+/// A screen's build-on. It plays each time the screen shows in the open panel: when the panel opens on it, and when a
+/// tab switches to it, as each screen's shell keeps its own. Then it holds still until the panel hides.
+struct HUDBuild {
+    private var began: Date?
+    private var over = false
+
+    /// When the arrival clocks count from: `now` while the screen waits in the open panel for its build to begin, so
+    /// it never flashes up built; nil once the build is over and while the panel is hidden.
+    func start(open: Bool, now: Date) -> Date? {
+        guard open, !over else { return nil }
+        return began ?? now
+    }
+
+    /// The screen shows: the build plays from `date`.
+    mutating func play(at date: Date) {
+        began = date
+        over = false
+    }
+
+    /// The build has run its course.
+    mutating func settle() {
+        over = true
+    }
+
+    /// The panel hid: the build plays again when it next shows.
+    mutating func reset() {
+        began = nil
+        over = false
     }
 }
 

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The design system's motion (Motion.md): the first time a screen shows in the open panel after launch, it builds
-/// itself outside in, in about 2 s, then holds still except for live things. Geometry glides on the ease curves;
+/// The design system's motion (Motion.md): each time a screen shows in the open panel, it builds itself outside in,
+/// in about 2 s, then holds still except for live things. Geometry glides on the ease curves;
 /// text and flicker step. Every move is a pure function of time, so the build can be drawn at any moment.
 enum HUDMotion {
     /// A CSS cubic-bezier easing from (0, 0) to (1, 1).
@@ -153,33 +153,6 @@ enum HUDMotion {
     private static let rampBytes = Array(" .:-=+*#%@".utf8)
 }
 
-/// The build-on: plays the first time a screen shows in the open panel after launch; every later open is instant.
-@MainActor @Observable
-final class HUDBuild {
-    static let shared = HUDBuild()
-    /// When the build began; nil until it plays and once it is over.
-    private(set) var start: Date?
-    private(set) var played = false
-
-    func play() {
-        guard !played else { return }
-        played = true
-        start = Date()
-    }
-
-    /// Ends the build once it has run its course. It waits only as long as the calling task, which lives while the
-    /// panel shows, so no timer runs while it's hidden.
-    func settle() async {
-        guard let start else { return }
-        do {
-            try await Task.sleep(for: .seconds(max(0, start.timeIntervalSinceNow + HUDMotion.built)))
-        } catch {
-            return
-        }
-        self.start = nil
-    }
-}
-
 /// Where the build-on stands for a view: when it started (nil once built, under Reduce Motion and outside the
 /// shell) and when the view's section arrives, in seconds from the start (the design's `--jh-at`).
 struct HUDArrival {
@@ -194,6 +167,9 @@ struct HUDArrival {
 
 extension EnvironmentValues {
     @Entry var hudArrival = HUDArrival()
+    /// False while a view around this one is still arriving. Glows wait until it has, since the window server would
+    /// re-blur a moving glow every frame.
+    @Entry var hudSteady = true
 }
 
 /// Redraws `content` through its own part of the build-on with the seconds since its section arrived (nil once
@@ -274,44 +250,48 @@ extension View {
 private struct HUDArrive: ViewModifier {
     let move: HUDMove
     let delay: Double
+    @Environment(\.hudSteady) private var steady
 
     func body(content: Content) -> some View {
         HUDBuildClock(until: delay + move.length) { time in
-            switch move {
-            case let .fade(duration, curve):
-                content.opacity(curve(HUDMotion.progress(time, delay, duration)))
-            case let .flicker(duration):
-                content.opacity(HUDMotion.flicker(HUDMotion.progress(time, delay, duration)))
-            case let .shift(across, down):
-                let shown = HUDMotion.enter(HUDMotion.progress(time, delay, 0.26))
-                content.opacity(shown).offset(x: across * (1 - shown), y: down * (1 - shown))
-            case .type:
-                content.clipShape(HUDReveal(share: HUDMotion.typed(HUDMotion.progress(time, delay, 0.24))))
-            case let .wipe(duration):
-                // The mask only while wiping: a mask draws offscreen.
-                if HUDMotion.progress(time, delay, duration) < 1 {
-                    let edge = 2 * HUDMotion.standard(HUDMotion.progress(time, delay, duration))
-                    content.mask {
-                        LinearGradient(
-                            colors: [.black, .clear], startPoint: UnitPoint(x: edge - 0.8, y: 0.5), endPoint: UnitPoint(
-                                x: edge - 0.2,
-                                y: 0.5
+            Group {
+                switch move {
+                case let .fade(duration, curve):
+                    content.opacity(curve(HUDMotion.progress(time, delay, duration)))
+                case let .flicker(duration):
+                    content.opacity(HUDMotion.flicker(HUDMotion.progress(time, delay, duration)))
+                case let .shift(across, down):
+                    let shown = HUDMotion.enter(HUDMotion.progress(time, delay, 0.26))
+                    content.opacity(shown).offset(x: across * (1 - shown), y: down * (1 - shown))
+                case .type:
+                    content.clipShape(HUDReveal(share: HUDMotion.typed(HUDMotion.progress(time, delay, 0.24))))
+                case let .wipe(duration):
+                    // The mask only while wiping: a mask draws offscreen.
+                    if HUDMotion.progress(time, delay, duration) < 1 {
+                        let edge = 2 * HUDMotion.standard(HUDMotion.progress(time, delay, duration))
+                        content.mask {
+                            LinearGradient(
+                                colors: [.black, .clear], startPoint: UnitPoint(x: edge - 0.8, y: 0.5), endPoint: UnitPoint(
+                                    x: edge - 0.2,
+                                    y: 0.5
+                                )
                             )
-                        )
-                    }
-                } else {
-                    content
-                }
-            case let .open(duration, traces):
-                let progress = HUDMotion.progress(time, delay, duration)
-                content
-                    .overlay {
-                        if traces, progress < 1 {
-                            HUDTraces(progress: HUDMotion.progress(time, delay, duration * 760 / 700))
                         }
+                    } else {
+                        content
                     }
-                    .clipShape(HUDOpening(progress: progress))
+                case let .open(duration, traces):
+                    let progress = HUDMotion.progress(time, delay, duration)
+                    content
+                        .overlay {
+                            if traces, progress < 1 {
+                                HUDTraces(progress: HUDMotion.progress(time, delay, duration * 760 / 700))
+                            }
+                        }
+                        .clipShape(HUDOpening(progress: progress))
+                }
             }
+            .environment(\.hudSteady, steady && HUDMotion.progress(time, delay, move.length) >= 1)
         }
     }
 }

@@ -124,27 +124,20 @@ final class HUDMotionTests: XCTestCase {
         XCTAssertTrue(HUDOpening(progress: 1).path(in: box).boundingRect.contains(box))
     }
 
-    /// The build-on plays once per launch.
-    @MainActor
-    func testBuildPlaysOnce() {
-        let build = HUDBuild()
-        XCTAssertNil(build.start)
-        build.play()
-        let start = build.start
-        XCTAssertNotNil(start)
-        build.play()
-        XCTAssertEqual(build.start, start)
-        XCTAssertTrue(build.played)
-    }
-
-    /// The build ends once it has run its course, but only while its task (the open panel's) lives.
-    @MainActor
-    func testBuildSettlesOnlyWhileWaitedOn() async {
-        let build = HUDBuild()
-        build.play()
-        let waiting = Task { await build.settle() }
-        waiting.cancel()
-        await waiting.value
-        XCTAssertNotNil(build.start, "a hidden panel's build doesn't end on a timer")
+    /// A screen's build-on holds at its first frame until it plays, plays from when the screen shows, holds still once
+    /// over, and plays again the next time the panel shows. A new screen (a tab switch) starts with a new one.
+    func testBuildPlaysEachTimeTheScreenShows() {
+        let shown = Date(timeIntervalSince1970: 1_800_000_000)
+        var build = HUDBuild()
+        XCTAssertNil(build.start(open: false, now: shown), "hidden")
+        XCTAssertEqual(build.start(open: true, now: shown), shown, "about to play: the first frame, never built")
+        build.play(at: shown)
+        XCTAssertEqual(build.start(open: true, now: shown.addingTimeInterval(1)), shown)
+        XCTAssertNil(build.start(open: false, now: shown.addingTimeInterval(1)), "nothing moves while hidden")
+        build.settle()
+        XCTAssertNil(build.start(open: true, now: shown.addingTimeInterval(4)), "built")
+        build.reset()
+        let again = shown.addingTimeInterval(60)
+        XCTAssertEqual(build.start(open: true, now: again), again, "the next showing plays it again")
     }
 }

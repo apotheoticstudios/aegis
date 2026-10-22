@@ -275,7 +275,7 @@ The panel is built from the Project: Aegis design system (linked in `docs/design
 - **Type, set small like a terminal.** Xirod for display and the name, Chakra Petch for labels, Kode Mono for sentences, Share Tech Mono for numbers and codes, VT323 for the pixel voice.
 - **Edges.** Nothing is rounded: corners are square or cut at 45°. Hairlines are for structure and 2-point lines for meaning. Panels are glass over the void, with one soft wash behind the centre.
 - **Character art.** Banners, shapes and meters are drawn from the density ramp ` .:-=+*#%@`, and move at 12 frames a second only while the panel shows.
-- **Motion.** The first time the panel opens after launch, the screen builds itself in about 2 s: the frame traces on, sections arrive in pairs, rows type, numbers settle and art resolves out of noise. Later opens are instant. Only live things move after that (the breathing live tag, the blinking caret), never while the panel is closed, and Reduce Motion turns it all off.
+- **Motion.** Each time a screen shows (the panel opening on it, or a tab switch), it builds itself in about 2 s: the frame traces on, sections arrive in pairs, rows type, numbers settle and art resolves out of noise; glows light as each part settles. Only live things move after that (the breathing live tag, the blinking caret), never while the panel is closed, and Reduce Motion turns it all off.
 - **Next:** the settings windows, a theme picker, the menu-bar drop-down, and the app icon from the logo kit.
 
 ### Menu bar
