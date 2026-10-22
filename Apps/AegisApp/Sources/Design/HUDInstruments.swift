@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// A labelled number: label caps over a mono value with an optional unit. A primary value is live and glows.
+/// A labelled number: label caps over a mono value with an optional unit. A primary value is live and glows. The
+/// value scrambles and settles as it arrives.
 struct HUDReadout: View {
     let label: String
     let value: String
@@ -11,7 +12,7 @@ struct HUDReadout: View {
         VStack(alignment: .leading, spacing: HUD.space1) {
             Text(label).hudType(.label).foregroundStyle(HUD.inkMuted).lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: HUD.space1) {
-                Text(value).hudType(.readout).monospacedDigit().foregroundStyle(tone).hudGlow(active: tone == HUD.primary)
+                HUDScramble(text: value).hudType(.readout).monospacedDigit().foregroundStyle(tone).hudGlow(active: tone == HUD.primary)
                 if let unit {
                     Text(unit).hudType(.data).foregroundStyle(HUD.inkMuted)
                 }
@@ -23,7 +24,8 @@ struct HUDReadout: View {
 }
 
 /// The HUD's progress bar: tall thin bars inside an open bracket frame, lit bars glowing in the tone, unlit bars the
-/// same tone dimmed. Large is for the one loading bar on a screen, its label and value set above it in Xirod.
+/// same tone dimmed. Large is for the one loading bar on a screen, its label and value set above it in Xirod. The lit
+/// bars light one by one as it arrives.
 struct HUDMeter: View {
     enum Size {
         case small, medium, large
@@ -68,24 +70,25 @@ private struct HUDSegments: View {
     @Environment(\.hudTheme) private var theme
 
     var body: some View {
-        Canvas { context, size in
-            let color = theme.color(tone.token)
-            let lit = Int((value * Double(count)).rounded())
-            let step = (size.width - 1.5) / CGFloat(max(count - 1, 1))
-            var on = Path()
-            var off = Path()
-            for index in 0 ..< count {
-                let bar = CGRect(x: CGFloat(index) * step, y: 0, width: 1.5, height: size.height)
-                if index < lit {
-                    on.addRect(bar)
-                } else {
-                    off.addRect(bar)
+        HUDBuildClock { time in
+            Canvas { context, size in
+                let color = theme.color(tone.token)
+                let lit = Int((value * Double(count)).rounded())
+                let step = (size.width - 1.5) / CGFloat(max(count - 1, 1))
+                var off = Path()
+                for index in lit ..< count {
+                    off.addRect(CGRect(x: CGFloat(index) * step, y: 0, width: 1.5, height: size.height))
                 }
-            }
-            context.fill(off, with: .color(color.opacity(0.25)))
-            context.drawLayer { layer in
-                layer.addFilter(.shadow(color: color, radius: 2))
-                layer.fill(on, with: .color(color))
+                context.fill(off, with: .color(color.opacity(0.25)))
+                context.drawLayer { layer in
+                    layer.addFilter(.shadow(color: color, radius: 2))
+                    // Each lit bar brightens from the unlit level, 9 ms after the one before.
+                    for index in 0 ..< lit {
+                        let shown = HUDMotion.standard(HUDMotion.progress(time, 0.26 + 0.009 * Double(index), 0.14))
+                        let bar = CGRect(x: CGFloat(index) * step, y: 0, width: 1.5, height: size.height)
+                        layer.fill(Path(bar), with: .color(color.opacity(0.25 + 0.75 * shown)))
+                    }
+                }
             }
         }
     }
@@ -131,7 +134,8 @@ struct HUDCharMeter: View {
 }
 
 /// The only round instrument: a 60-tick dial, cross-hair marks, a butt-capped value arc from 12 o'clock and the value
-/// in Xirod at the centre.
+/// in Xirod at the centre. Arriving, its guide draws round, the ticks light in turn, the marks flicker on, the arc
+/// eases to its value and the figure scrambles and settles.
 struct HUDRing: View {
     let value: Double
     let label: String
@@ -143,58 +147,67 @@ struct HUDRing: View {
     var body: some View {
         let fraction = min(max(value, 0), 1)
         ZStack {
-            Canvas { context, _ in
-                let centre = size / 2
-                let point = { (radius: CGFloat, angle: Double) in
-                    CGPoint(x: centre + sin(angle) * radius, y: centre - cos(angle) * radius)
+            HUDBuildClock { time in
+                Canvas { context, _ in
+                    let marks = HUDMotion.flicker(HUDMotion.progress(time, 0.3, 0.26))
+                    let centre = size / 2
+                    let point = { (radius: CGFloat, angle: Double) in
+                        CGPoint(x: centre + sin(angle) * radius, y: centre - cos(angle) * radius)
+                    }
+                    var guide = Path()
+                    guide.addArc(
+                        center: CGPoint(x: centre, y: centre), radius: centre - 4, startAngle: .degrees(-90),
+                        endAngle: .degrees(-90 + 360 * HUDMotion.standard(HUDMotion.progress(time, 0, 0.52))), clockwise: false
+                    )
+                    context.stroke(guide, with: .color(theme.color(.line)))
+                    for tick in 0 ..< 60 {
+                        let angle = Double(tick) / 60 * 2 * .pi
+                        let major = tick.isMultiple(of: 5)
+                        var mark = Path()
+                        mark.move(to: point(centre - 10 - (major ? 6 : 3), angle))
+                        mark.addLine(to: point(centre - 10, angle))
+                        let shown = HUDMotion.progress(time, 0.12 + 0.007 * Double(tick), 0.12)
+                        context.stroke(mark, with: .color(theme.color(major ? .inkMuted : .line).opacity(shown)))
+                    }
+                    var cross = Path()
+                    for (from, to) in [
+                        ((centre, 0.0), (centre, 8.0)),
+                        ((centre, size - 8), (centre, size)),
+                        ((0, centre), (8, centre)),
+                        ((size - 8, centre), (size, centre)),
+                    ] {
+                        cross.move(to: CGPoint(x: from.0, y: from.1))
+                        cross.addLine(to: CGPoint(x: to.0, y: to.1))
+                    }
+                    context.stroke(cross, with: .color(theme.color(.frame).opacity(marks)), lineWidth: 2)
+                    let arc = centre - 26
+                    context.stroke(
+                        Path(ellipseIn: CGRect(x: centre - arc, y: centre - arc, width: arc * 2, height: arc * 2)),
+                        with: .color(theme.color(.primarySoft).opacity(marks)),
+                        lineWidth: 2
+                    )
+                    var value = Path()
+                    value.addArc(
+                        center: CGPoint(x: centre, y: centre),
+                        radius: arc,
+                        startAngle: .degrees(-90),
+                        endAngle: .degrees(-90 + 360 * fraction * HUDMotion.standard(HUDMotion.progress(time, 0.42, 0.7))),
+                        clockwise: false
+                    )
+                    context.drawLayer { layer in
+                        layer.addFilter(.shadow(color: theme.color(tone.token), radius: 2))
+                        layer.stroke(value, with: .color(theme.color(tone.token)), style: StrokeStyle(lineWidth: 2, lineCap: .butt))
+                    }
+                    let inner = centre - 40
+                    context.stroke(
+                        Path(ellipseIn: CGRect(x: centre - inner, y: centre - inner, width: inner * 2, height: inner * 2)),
+                        with: .color(theme.color(.line).opacity(marks)),
+                        style: StrokeStyle(lineWidth: 1, dash: [2, 4])
+                    )
                 }
-                context.stroke(Path(ellipseIn: CGRect(x: 4, y: 4, width: size - 8, height: size - 8)), with: .color(theme.color(.line)))
-                for tick in 0 ..< 60 {
-                    let angle = Double(tick) / 60 * 2 * .pi
-                    let major = tick.isMultiple(of: 5)
-                    var mark = Path()
-                    mark.move(to: point(centre - 10 - (major ? 6 : 3), angle))
-                    mark.addLine(to: point(centre - 10, angle))
-                    context.stroke(mark, with: .color(theme.color(major ? .inkMuted : .line)))
-                }
-                var cross = Path()
-                for (from, to) in [
-                    ((centre, 0.0), (centre, 8.0)),
-                    ((centre, size - 8), (centre, size)),
-                    ((0, centre), (8, centre)),
-                    ((size - 8, centre), (size, centre)),
-                ] {
-                    cross.move(to: CGPoint(x: from.0, y: from.1))
-                    cross.addLine(to: CGPoint(x: to.0, y: to.1))
-                }
-                context.stroke(cross, with: .color(theme.color(.frame)), lineWidth: 2)
-                let arc = centre - 26
-                context.stroke(
-                    Path(ellipseIn: CGRect(x: centre - arc, y: centre - arc, width: arc * 2, height: arc * 2)),
-                    with: .color(theme.color(.primarySoft)),
-                    lineWidth: 2
-                )
-                var value = Path()
-                value.addArc(
-                    center: CGPoint(x: centre, y: centre),
-                    radius: arc,
-                    startAngle: .degrees(-90),
-                    endAngle: .degrees(-90 + 360 * fraction),
-                    clockwise: false
-                )
-                context.drawLayer { layer in
-                    layer.addFilter(.shadow(color: theme.color(tone.token), radius: 2))
-                    layer.stroke(value, with: .color(theme.color(tone.token)), style: StrokeStyle(lineWidth: 2, lineCap: .butt))
-                }
-                let inner = centre - 40
-                context.stroke(
-                    Path(ellipseIn: CGRect(x: centre - inner, y: centre - inner, width: inner * 2, height: inner * 2)),
-                    with: .color(theme.color(.line)),
-                    style: StrokeStyle(lineWidth: 1, dash: [2, 4])
-                )
             }
             VStack(spacing: 2) {
-                Text(display ?? "\(Int((fraction * 100).rounded()))")
+                HUDScramble(text: display ?? "\(Int((fraction * 100).rounded()))", delay: 0.4)
                     .font(.custom("Xirod-Regular", size: 22)).tracking(0.44).monospacedDigit().foregroundStyle(HUD.ink)
                 Text(label).hudType(.label).foregroundStyle(HUD.inkMuted)
             }
@@ -247,6 +260,7 @@ struct HUDParticleField: View {
                 HUDParticles.draw(cloud, in: &context, theme: theme, tone: .primary)
             }
             .frame(height: height)
+            .hudArrive(.wipe(0.8), after: 0.26)
             if !captions.isEmpty {
                 HStack(spacing: HUD.space8) {
                     ForEach(captions, id: \.self) { caption in

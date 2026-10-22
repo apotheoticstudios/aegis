@@ -119,7 +119,8 @@ struct HUDLogRow: View {
 }
 
 /// One turn of the conversation: a right-aligned `you >` or `aegis >` prompt, then the text. The owner's lines sit
-/// muted so Aegis's answers lead; Aegis's prompt glows in the signal colour, with a block caret while it writes.
+/// muted so Aegis's answers lead; Aegis's prompt glows in the signal colour, with a blinking block caret while it
+/// writes.
 struct HUDChatLine<Meta: View>: View {
     let who: String
     let text: String
@@ -142,7 +143,11 @@ struct HUDChatLine<Meta: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                     if writing {
-                        Rectangle().fill(HUD.primary).frame(width: 6, height: 12).hudGlow().accessibilityHidden(true)
+                        HUDLiveClock(fps: 20) { time in
+                            Rectangle().fill(HUD.primary).frame(width: 6, height: 12).hudGlow()
+                                .opacity(time.map { HUDMotion.blink($0) ? 1 : 0 } ?? 1)
+                        }
+                        .accessibilityHidden(true)
                     }
                 }
                 meta

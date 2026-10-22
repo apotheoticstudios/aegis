@@ -2,7 +2,8 @@ import SwiftUI
 
 /// A small trend between dotted column rails capped with nodes: a line over a soft area with a square on every
 /// sample and an accent mark over the peak, thin bars with the peak in ink, or a small particle cloud. No axes and
-/// no legend; the latest value sits in text beside it.
+/// no legend; the latest value sits in text beside it. Arriving, bars grow from the baseline in turn, the line draws
+/// on and the particles wipe in.
 struct HUDSparkline: View {
     enum Variant {
         case line, bars, particles
@@ -25,13 +26,20 @@ struct HUDSparkline: View {
                 Text(display ?? "").hudType(.data).monospacedDigit().foregroundStyle(HUD.ink)
             }
             .lineLimit(1)
-            Canvas { context, size in
-                HUDSparkDrawing(data: data, variant: variant, columns: columns, theme: theme, tone: tone.token).draw(
-                    in: &context,
-                    size: size
-                )
+            let chart = HUDBuildClock { time in
+                Canvas { context, size in
+                    HUDSparkDrawing(data: data, variant: variant, columns: columns, theme: theme, tone: tone.token, time: time).draw(
+                        in: &context,
+                        size: size
+                    )
+                }
             }
             .frame(height: height)
+            if variant == .particles {
+                chart.hudArrive(.wipe(0.8), after: 0.26)
+            } else {
+                chart
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
@@ -45,6 +53,8 @@ private struct HUDSparkDrawing {
     let columns: Int
     let theme: HUDTheme
     let tone: HUDToken
+    /// Seconds since the section arrived, nil once built.
+    let time: Double?
 
     func draw(in context: inout GraphicsContext, size: CGSize) {
         let width = size.width
@@ -86,51 +96,48 @@ private struct HUDSparkDrawing {
     private func bars(in context: inout GraphicsContext, size: CGSize) {
         let width = size.width / CGFloat(data.count)
         let peak = data.firstIndex(of: data.max() ?? 0)
-        var bars = Path()
-        var tallest = Path()
         for (index, value) in data.enumerated() {
-            let top = scaled(value, size.height)
+            // Each bar grows from the baseline 28 ms after the one before, and its cap lights once it's up.
+            let grown = HUDMotion.standard(HUDMotion.progress(time, 0.26 + 0.028 * Double(index), 0.32))
+            let capped = HUDMotion.progress(time, 0.46 + 0.028 * Double(index), 0.16)
+            let top = size.height - (size.height - scaled(value, size.height)) * grown
             let centre = CGFloat(index) * width + width / 2
-            var bar = Path()
-            bar.addRect(CGRect(x: centre - 0.75, y: top, width: 1.5, height: size.height - top))
-            bar.addRect(CGRect(x: centre - 1.5, y: top - 1, width: 3, height: 1.5))
-            if index == peak {
-                tallest.addPath(bar)
-            } else {
-                bars.addPath(bar)
-            }
+            let color = theme.color(index == peak ? .ink : tone)
+            context.fill(Path(CGRect(x: centre - 0.75, y: top, width: 1.5, height: size.height - top)), with: .color(color))
+            context.fill(Path(CGRect(x: centre - 1.5, y: top - 1, width: 3, height: 1.5)), with: .color(color.opacity(capped)))
         }
-        context.fill(bars, with: .color(theme.color(tone)))
-        context.fill(tallest, with: .color(theme.color(.ink)))
     }
 
     private func line(in context: inout GraphicsContext, size: CGSize) {
         let step = data.count > 1 ? (size.width - 6) / CGFloat(data.count - 1) : 0
         let points = data.enumerated().map { CGPoint(x: 2 + CGFloat($0.offset) * step, y: scaled($0.element, size.height)) }
         guard let first = points.first, let last = points.last else { return }
+        // The line draws on, then its area, vertices and marks fade up.
+        let marks = HUDMotion.progress(time, 0.76, 0.3)
         var area = Path()
         area.move(to: CGPoint(x: first.x, y: size.height))
         area.addLines(points)
         area.addLine(to: CGPoint(x: last.x, y: size.height))
-        context.fill(area, with: .color(theme.color(.primarySoft)))
+        context.fill(area, with: .color(theme.color(.primarySoft).opacity(marks)))
         var trace = Path()
         trace.addLines(points)
+        trace = trace.trimmedPath(from: 0, to: HUDMotion.standard(HUDMotion.progress(time, 0.26, 0.7)))
         context.stroke(trace, with: .color(theme.color(tone)), style: StrokeStyle(lineWidth: 1.5, lineCap: .square, lineJoin: .miter))
         var vertices = Path()
         points.forEach { vertices.addRect(CGRect(x: $0.x - 1, y: $0.y - 1, width: 2, height: 2)) }
-        context.fill(vertices, with: .color(theme.color(.ink)))
+        context.fill(vertices, with: .color(theme.color(.ink).opacity(marks)))
         if let peak = data.firstIndex(of: data.max() ?? 0) {
             var mark = Path()
             mark.addLines([
                 CGPoint(x: points[peak].x - 3, y: points[peak].y - 7), CGPoint(x: points[peak].x + 3, y: points[peak].y - 7),
                 CGPoint(x: points[peak].x, y: points[peak].y - 3),
             ])
-            context.fill(mark, with: .color(theme.color(.accent)))
+            context.fill(mark, with: .color(theme.color(.accent).opacity(marks)))
         }
         var now = Path()
         now.move(to: CGPoint(x: last.x, y: 2))
         now.addLine(to: CGPoint(x: last.x, y: size.height))
         context.stroke(now, with: .color(theme.color(.inkMuted)), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-        context.fill(Path(CGRect(x: last.x - 2, y: last.y - 2, width: 4, height: 4)), with: .color(theme.color(.ink)))
+        context.fill(Path(CGRect(x: last.x - 2, y: last.y - 2, width: 4, height: 4)), with: .color(theme.color(.ink).opacity(marks)))
     }
 }

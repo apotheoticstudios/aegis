@@ -45,7 +45,7 @@ struct SystemScreen: View {
                     }
                 }
             }
-            HUDSection(title: "Memory", code: HUDFormat.bytes(Double(reading.memoryTotal))) {
+            HUDSection(title: "Memory", code: HUDFormat.bytes(Double(reading.memoryTotal)), index: 1) {
                 let total = Double(max(reading.memoryTotal, 1))
                 let modelMemory = Double(reading.modelMemory ?? 0)
                 VStack(spacing: HUD.space3) {
@@ -121,7 +121,7 @@ struct SystemScreen: View {
                     }
                 }
             }
-            HUDSection(title: "Processes", code: "TOP \(reading.processes.count)") {
+            HUDSection(title: "Processes", code: "TOP \(reading.processes.count)", index: 1) {
                 VStack(spacing: 0) {
                     processRow("Name", "CPU", "Mem", header: true)
                     ForEach(Array(reading.processes.enumerated()), id: \.offset) { _, process in
@@ -134,7 +134,7 @@ struct SystemScreen: View {
                     }
                 }
             }
-            HUDSection(title: "I/O", code: "NET · DISK") {
+            HUDSection(title: "I/O", code: "NET · DISK", index: 2) {
                 VStack(spacing: HUD.space3) {
                     HUDSparkline(
                         label: "Net down", data: Array(monitor.networkHistory.suffix(13)),
@@ -146,7 +146,7 @@ struct SystemScreen: View {
                     )
                 }
             }
-            HUDSection(title: "Uptime", code: "SYS") {
+            HUDSection(title: "Uptime", code: "SYS", index: 3) {
                 HUDReadout(label: "Since boot", value: HUDFormat.uptime(reading.uptime))
             }
         }

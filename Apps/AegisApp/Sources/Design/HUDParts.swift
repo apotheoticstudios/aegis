@@ -103,6 +103,7 @@ extension View {
         padding(HUD.space4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background { HUDGlass(tone: tone) }
+            .hudArrive(.open(0.42, traces: false))
     }
 
     /// The command line's box: a square hairline frame on solid surface, brighter on hover, primary with the focus
@@ -166,7 +167,7 @@ struct HUDHeading: View {
 }
 
 /// A status tag: a pip and one word from the status vocabulary, in the tone's colour. The word carries the meaning;
-/// the colour backs it up.
+/// the colour backs it up. A live tag (the primary tone) breathes its pip.
 struct HUDTag: View {
     let word: String
     var tone = HUD.inkMuted
@@ -174,7 +175,9 @@ struct HUDTag: View {
     var body: some View {
         let shape = HUDCut(kind: .tag, cut: HUD.chamferSm)
         HStack(spacing: 6) {
-            Rectangle().fill(tone).frame(width: 6, height: 6)
+            HUDLiveClock(running: tone == HUD.primary) { time in
+                Rectangle().fill(tone).frame(width: 6, height: 6).opacity(time.map(HUDMotion.breathe) ?? 1)
+            }
             Text(word).hudType(.label).lineLimit(1)
         }
         .foregroundStyle(tone)
@@ -182,6 +185,7 @@ struct HUDTag: View {
         .frame(height: 22)
         .background(shape.fill(HUD.surface))
         .overlay(shape.strokeBorder(tone, lineWidth: HUD.strokeHair))
+        .hudArrive(.flicker(0.28), after: 0.36)
     }
 }
 
@@ -281,11 +285,15 @@ private struct HUDPlate: View {
         .onHover { hovering = $0 }
         .animation(HUD.easeStandard(HUD.durationInstant), value: pressed)
         .animation(HUD.easeStandard(HUD.durationInstant), value: hovering)
+        // Buttons wipe in last.
+        .hudArrive(.wipe(0.36), after: 0.7)
     }
 }
 
 /// A section inside the shell (the design system's inset Panel): no glass of its own, its title and code over its
 /// contents, divided from the section above by a hairline. `linked` has the shell draw a circuit link to its title.
+/// In the build-on it arrives by its `index` down its column: its rule draws across, its head flickers on, then its
+/// contents come in.
 struct HUDSection<Content: View>: View {
     let title: String
     var code: String?
@@ -293,6 +301,7 @@ struct HUDSection<Content: View>: View {
     /// The first section in a column has no rule above it.
     var first = false
     var linked = true
+    var index = 0
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -305,7 +314,9 @@ struct HUDSection<Content: View>: View {
                 }
             }
             .modifier(HUDLinkIf(linked: linked))
-            content
+            .hudArrive(.flicker(0.3), after: 0.12)
+            VStack(alignment: .leading, spacing: HUD.space2) { content }
+                .hudArrive(.fade(0.26, HUDMotion.enter), after: 0.2)
         }
         .padding(.top, first ? 0 : HUD.space4)
         .padding(.bottom, HUD.space4)
@@ -314,7 +325,9 @@ struct HUDSection<Content: View>: View {
             if !first {
                 HUDRule()
             }
+            HUDRuleTrace()
         }
+        .environment(\.hudArrival.at, HUDMotion.section(index))
     }
 }
 

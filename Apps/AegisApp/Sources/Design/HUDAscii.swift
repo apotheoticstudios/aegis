@@ -160,7 +160,8 @@ private enum HUDEye {
 
 /// Character art drawn as it is meant to be: Share Tech Mono with line height equal to the size, so the characters
 /// stack into a picture, in `tone` with a soft phosphor bloom. Moving art redraws at 12 frames a second while the
-/// panel shows and Reduce Motion is off; otherwise it holds its still frame.
+/// panel shows and Reduce Motion is off; otherwise it holds its still frame. Arriving, it resolves top to bottom out
+/// of ramp noise over 1.1 s.
 struct HUDAsciiArt: View {
     let shape: HUDAscii.Shape
     let cols: Int
@@ -176,17 +177,23 @@ struct HUDAsciiArt: View {
     /// Still art holds its first frame, as when nothing it stands for is happening.
     var animate = true
     @Environment(\.accessibilityReduceMotion) private var still
+    @Environment(\.hudArrival) private var arrival
 
     var body: some View {
         let size = 12 / CGFloat(detail)
         let moving = animate && HUDPresence.shared.open && !still
-        TimelineView(.animation(minimumInterval: 1.0 / 12, paused: !moving)) { context in
+        let arriving = arrival.start != nil && HUDPresence.shared.open
+        TimelineView(.animation(minimumInterval: 1.0 / 12, paused: !moving && !arriving)) { context in
             let time = moving ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600) : 0
             let lines = HUDAscii.art(shape, cols: cols * detail, rows: rows * detail, seed: seed, grit: grit, time: time)
+            let shown = arrival.elapsed(context.date).map {
+                HUDMotion.resolve(lines, HUDMotion.progress($0, 0, 1.1), tick: Int($0 / 0.06), seed: seed)
+            } ?? lines
+            // Links plug into the whole drawing, not the part resolved so far.
             if hub {
-                HUDAsciiText(lines: lines, cols: cols * detail, size: size, tone: tone).hudHub(art: lines)
+                HUDAsciiText(lines: shown, cols: cols * detail, size: size, tone: tone).hudHub(art: lines)
             } else {
-                HUDAsciiText(lines: lines, cols: cols * detail, size: size, tone: tone)
+                HUDAsciiText(lines: shown, cols: cols * detail, size: size, tone: tone)
             }
         }
         .accessibilityElement()

@@ -72,7 +72,7 @@ struct CommsScreen: View {
                     }
                 }
             }
-            HUDSection(title: "Devices", code: "COL.01") {
+            HUDSection(title: "Devices", code: "COL.01", index: 1) {
                 VStack(spacing: HUD.space3) {
                     HUDMeter(label: "Mac", value: 1, display: "Live", size: .small, tone: HUD.ok)
                     HUDMeter(label: "iPhone", value: 0, display: "Not linked", size: .small, tone: HUD.inkMuted)
@@ -83,36 +83,42 @@ struct CommsScreen: View {
 
     // MARK: The feed
 
+    /// The feed; arriving, its items slide in from the left 50 ms apart, top to bottom.
     private var feed: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let sections = model.stored.map { BriefPresentation.sections($0.brief) } ?? []
+        let briefed = sections.reduce(0) { $0 + $1.entries.count }
+        let people = Array(model.people.prefix(5))
+        return VStack(alignment: .leading, spacing: 0) {
             switch model.phase {
             case .loading:
                 group("// Loading")
             case let .unavailable(reason):
                 group("// " + reason)
             case .ready:
-                if let brief = model.stored?.brief {
-                    ForEach(BriefPresentation.sections(brief), id: \.priority) { section in
-                        group("// " + BriefPresentation.heading(section.priority))
-                        ForEach(Array(section.entries.enumerated()), id: \.offset) { _, entry in
+                ForEach(Array(sections.enumerated()), id: \.element.priority) { number, section in
+                    let before = sections.prefix(number).reduce(0) { $0 + $1.entries.count }
+                    group("// " + BriefPresentation.heading(section.priority))
+                    ForEach(Array(section.entries.enumerated()), id: \.offset) { offset, entry in
+                        Group {
                             switch entry {
                             case let .item(item): itemRow(item)
                             case let .person(person, items): personRow(person, items: items)
                             }
                         }
+                        .hudArrive(.slide, after: HUDMotion.stagger(before + offset, 0.05))
                     }
                 }
             }
-            if !model.people.isEmpty {
+            if !people.isEmpty {
                 group("// People waiting")
-                ForEach(model.people.prefix(5), id: \.person.id) { waiting in
-                    waitingRow(waiting)
+                ForEach(Array(people.enumerated()), id: \.element.person.id) { offset, waiting in
+                    waitingRow(waiting).hudArrive(.slide, after: HUDMotion.stagger(briefed + offset, 0.05))
                 }
             }
             if !model.commitments.isEmpty {
                 group("// You said you'd")
-                ForEach(model.commitments.prefix(5), id: \.eventID) { promise in
-                    promiseRow(promise)
+                ForEach(Array(model.commitments.prefix(5).enumerated()), id: \.element.eventID) { offset, promise in
+                    promiseRow(promise).hudArrive(.slide, after: HUDMotion.stagger(briefed + people.count + offset, 0.05))
                 }
             }
             filtered
@@ -297,7 +303,7 @@ extension CommsScreen {
                     .foregroundStyle(HUD.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            HUDSection(title: "Filed today", code: "AUTO") {
+            HUDSection(title: "Filed today", code: "AUTO", index: 1) {
                 VStack(spacing: HUD.space3) {
                     HUDMeter(label: "In the brief", value: briefed / scale, display: "\(Int(briefed))")
                     HUDMeter(label: "Filtered", value: hidden / scale, display: "\(Int(hidden))", tone: HUD.accent)

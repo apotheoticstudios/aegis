@@ -25,7 +25,8 @@ The owner chose to rebuild the interface around the **Project: Aegis design syst
   - Share Tech Mono (**SIL OFL 1.1**, Reserved Font Name "Share"): the unmodified original from google/fonts (commit `1b86e1e716445daccc346253911955073b0d254a`), because the design's copy was a subset (219 of 268 glyphs), and a modified font can't keep a reserved name.
   - Only the faces the type styles use ship, about 110 KB. Each OFL family's licence sits beside it, in the repo and in the app. OFL-1.1 and CC0-1.0 are accepted **for font assets only**; code stays MIT or Apache-2.0.
 - **The emblem** from the design's logo kit (the owner's own mark) ships as a 136-pixel PNG for the top bar, and in characters (`emblem.txt`) for the boot screen.
-- **Still for now:** glass has no backdrop blur (behind it is only the void and a soft wash); the screens don't yet build themselves on arrival, the live tag doesn't breathe and the caret doesn't blink. That is the design's motion system, a later step. Character art already moves at 12 frames a second while the panel shows.
+- **Motion** follows the design's Motion.md (`HUDMotion.swift`): the first time a screen shows in the open panel after launch, it builds itself in about 2 s (the shell traces on and opens, the tabs and heads flicker on, sections draw their rules in pairs, meters fill, rows type, values scramble, art resolves, links draw out from the hub); every later open is instant. Geometry glides on the ease curves, text steps. The live tag breathes and the caret blinks. Nothing moves while the panel is closed, and Reduce Motion turns it all off.
+- **Still for now:** glass has no backdrop blur (behind it is only the void and a soft wash).
 
 ## Consequences
 - Every later step (motion, the settings windows, a theme picker, the menu-bar drop-down, the app icon) builds on these tokens and components.

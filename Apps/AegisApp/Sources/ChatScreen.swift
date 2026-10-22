@@ -47,8 +47,8 @@ struct ChatScreen: View {
                         Text("[" + opened.formatted(date: .omitted, time: .standard) + "] chat opened · model "
                             + (model.stored?.brief.model ?? "local") + " · \(model.memories.count) memories")
                             .hudType(.caption).foregroundStyle(HUD.inkMuted).padding(.bottom, HUD.space2)
-                        ForEach(model.thread) { exchange in
-                            exchangeView(exchange)
+                        ForEach(Array(model.thread.enumerated()), id: \.element.id) { index, exchange in
+                            exchangeView(exchange, index: index)
                         }
                         if case let .asking(asked) = model.askState {
                             HUDChatLine(who: "you", text: asked)
@@ -77,20 +77,24 @@ struct ChatScreen: View {
         }
     }
 
-    private func exchangeView(_ exchange: PanelModel.Exchange) -> some View {
+    /// One question and its answer; arriving, each line rises into place 45 ms after the one before.
+    private func exchangeView(_ exchange: PanelModel.Exchange, index: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HUDChatLine(who: "you", text: exchange.question)
-            if let answer = exchange.answer {
-                HUDChatLine(who: name, text: answer.text, aegis: true) {
-                    let meta = Self.meta(answer)
-                    if !meta.isEmpty {
-                        Text(meta).hudType(.caption).foregroundStyle(HUD.inkMuted)
+            HUDChatLine(who: "you", text: exchange.question).hudArrive(.rise, after: HUDMotion.stagger(2 * index, 0.045))
+            Group {
+                if let answer = exchange.answer {
+                    HUDChatLine(who: name, text: answer.text, aegis: true) {
+                        let meta = Self.meta(answer)
+                        if !meta.isEmpty {
+                            Text(meta).hudType(.caption).foregroundStyle(HUD.inkMuted)
+                        }
+                        answerActions(exchange, answer: answer)
                     }
-                    answerActions(exchange, answer: answer)
+                } else if let failure = exchange.failure {
+                    HUDChatLine(who: name, text: failure, aegis: true, failed: true)
                 }
-            } else if let failure = exchange.failure {
-                HUDChatLine(who: name, text: failure, aegis: true, failed: true)
             }
+            .hudArrive(.rise, after: HUDMotion.stagger(2 * index + 1, 0.045))
         }
     }
 
@@ -291,7 +295,7 @@ extension ChatScreen {
                     }
                 }
             }
-            HUDSection(title: "Voice", code: "MIC", linked: false) {
+            HUDSection(title: "Voice", code: "MIC", linked: false, index: 1) {
                 let active = model.voice.isListening || model.voice.speaking
                 HUDAsciiArt(shape: .wave, cols: 30, rows: 6, tone: active ? HUD.primary : HUD.accent, animate: active)
                     .frame(maxWidth: .infinity)

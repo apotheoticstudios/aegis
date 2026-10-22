@@ -74,13 +74,15 @@ struct LogsScreen: View {
                 .hudType(.caption).foregroundStyle(HUD.inkMuted)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(rows.prefix(200).enumerated()), id: \.offset) { _, row in
+                    ForEach(Array(rows.prefix(200).enumerated()), id: \.offset) { index, row in
                         HUDLogRow(
                             time: Self.clock.string(from: row.time),
                             source: row.source,
                             level: row.level,
                             message: row.message
                         )
+                        // Rows type out 40 ms apart.
+                        .hudArrive(.type, after: 0.2 + HUDMotion.stagger(index, 0.04))
                     }
                     if rows.isEmpty {
                         Text("Nothing logged yet.").hudType(.caption).foregroundStyle(HUD.inkMuted)

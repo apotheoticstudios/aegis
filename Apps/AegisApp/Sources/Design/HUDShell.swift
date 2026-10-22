@@ -16,17 +16,23 @@ struct HUDShell<Top: View, Content: View, Bottom: View>: View {
     @ViewBuilder var top: Top
     @ViewBuilder var content: Content
     @ViewBuilder var bottom: Bottom
+    @Environment(\.accessibilityReduceMotion) private var still
 
     var body: some View {
+        let build = HUDBuild.shared
+        // Until the build plays, an open panel holds at its first frame, so it never flashes up built.
+        let start = still ? nil : build.start ?? (HUDPresence.shared.open && !build.played ? Date() : nil)
         VStack(spacing: 0) {
             HStack(spacing: HUD.space4) { top }
                 .padding(.vertical, HUD.space3)
                 .padding(.horizontal, HUD.space6)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .bottom) { HUDRule() }
+                .hudArrive(.fade(0.24, HUDMotion.linear), after: 0.32)
             content
                 .padding(HUD.space6)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .environment(\.hudArrival.at, HUDMotion.body)
                 .backgroundPreferenceValue(HUDLinkKey.self) { targets in
                     GeometryReader { proxy in
                         HUDLinks(layout: HUDLinkLayout(targets: targets, in: proxy, wires: wires), wires: wires)
@@ -34,13 +40,22 @@ struct HUDShell<Top: View, Content: View, Bottom: View>: View {
                 }
             if Bottom.self != EmptyView.self {
                 bottom
+                    .environment(\.hudArrival.at, HUDMotion.body)
                     .padding(.horizontal, HUD.space6)
                     .padding(.top, HUD.space4)
                     .padding(.bottom, HUD.space6)
                     .overlay(alignment: .top) { HUDRule() }
+                    .hudArrive(.wipe(0.48), after: 1.1)
             }
         }
         .background { HUDGlass(tone: HUD.frame, cut: HUD.chamferLg, arm: 28, sheen: 0.25) }
+        .hudArrive(.open(0.7, traces: true))
+        .environment(\.hudArrival.start, start)
+        .task(id: HUDPresence.shared.open) {
+            if HUDPresence.shared.open, !still {
+                build.play()
+            }
+        }
     }
 }
 
@@ -182,25 +197,37 @@ private struct HUDLinks: View {
     @Environment(\.accessibilityReduceMotion) private var still
 
     var body: some View {
-        ZStack {
-            ForEach(layout.links.indices, id: \.self) { index in
-                let link = layout.links[index]
-                link.path.stroke(HUD.frame, lineWidth: wires ? 1.5 : HUD.strokeHair).opacity(wires ? 0.5 : 0.55)
-                Rectangle().fill(HUD.frame).frame(width: 4, height: 4).position(link.start)
-                Rectangle().fill(HUD.frame).frame(width: 4, height: 4).position(link.end)
-            }
-            if wires {
-                // A glowing pulse travels each cable from the hub out to its section, only while the panel shows.
-                TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !HUDPresence.shared.open || still)) { context in
-                    let phase = context.date.timeIntervalSinceReferenceDate * 60
-                    ForEach(layout.links.indices, id: \.self) { index in
-                        layout.links[index].path
-                            .stroke(
-                                HUD.primary,
-                                style: StrokeStyle(lineWidth: 2, lineCap: .square, dash: [10, 140], dashPhase: -phase - Double(index) * 55)
-                            )
-                            .hudGlow()
+        // The links draw out from the hub once the sections are up, then their end nodes light and the pulses start.
+        HUDBuildClock { time in
+            let drawn = HUDMotion.standard(HUDMotion.progress(time, 1.15, 0.8))
+            let lit = HUDMotion.flicker(HUDMotion.progress(time, 1.85, 0.24))
+            ZStack {
+                ForEach(layout.links.indices, id: \.self) { index in
+                    let link = layout.links[index]
+                    link.path.trimmedPath(from: 0, to: drawn)
+                        .stroke(HUD.frame, lineWidth: wires ? 1.5 : HUD.strokeHair).opacity(wires ? 0.5 : 0.55)
+                    Rectangle().fill(HUD.frame).frame(width: 4, height: 4).position(link.start).opacity(lit)
+                    Rectangle().fill(HUD.frame).frame(width: 4, height: 4).position(link.end).opacity(lit)
+                }
+                if wires {
+                    // A glowing pulse travels each cable from the hub out to its section, only while the panel shows.
+                    TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !HUDPresence.shared.open || still)) { context in
+                        let phase = context.date.timeIntervalSinceReferenceDate * 60
+                        ForEach(layout.links.indices, id: \.self) { index in
+                            layout.links[index].path
+                                .stroke(
+                                    HUD.primary,
+                                    style: StrokeStyle(
+                                        lineWidth: 2,
+                                        lineCap: .square,
+                                        dash: [10, 140],
+                                        dashPhase: -phase - Double(index) * 55
+                                    )
+                                )
+                                .hudGlow()
+                        }
                     }
+                    .opacity(HUDMotion.progress(time, 1.9, 0.5))
                 }
             }
         }
@@ -226,6 +253,7 @@ struct HUDMenuTabs: View {
                     }
                 }
                 .buttonStyle(HUDTabStyle(active: index == active))
+                .hudArrive(.flicker(0.28), after: 0.4 + Double(index) * 0.07)
                 .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
                 .accessibilityAddTraits(index == active ? .isSelected : [])
             }

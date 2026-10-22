@@ -52,13 +52,13 @@ struct HomeScreen: View {
                     HUDMeter(label: "Disk", value: disk, tone: disk > 0.8 ? HUD.warn : HUD.primary)
                 }
             }
-            HUDSection(title: "Network", code: "NET.03") {
+            HUDSection(title: "Network", code: "NET.03", index: 1) {
                 HUDSparkline(
                     label: "Down", data: Array(monitor.networkHistory.suffix(20)),
                     display: HUDFormat.bytes(monitor.reading.networkIn, perSecond: true), variant: .particles
                 )
             }
-            HUDSection(title: "Scan", code: "COL.02") {
+            HUDSection(title: "Scan", code: "COL.02", index: 2) {
                 HUDAsciiArt(shape: .radar, cols: 34, rows: 12, seed: 5, tone: HUD.primary, label: "Aegis's collectors scanning")
                     .frame(maxWidth: .infinity)
             }
@@ -70,7 +70,9 @@ struct HomeScreen: View {
     private var centre: some View {
         VStack(spacing: HUD.space4) {
             HUDCore(model: model, value: "\(model.needsYou)")
-            Text(model.saying)
+            // Aegis's words type themselves out once the sections are up.
+            HUDTypeText(text: model.saying, delay: 1.3, cps: 70)
+                .environment(\.hudArrival.at, 0)
                 .foregroundStyle(HUD.inkMuted)
                 .multilineTextAlignment(.center)
                 .lineLimit(4)
@@ -134,14 +136,14 @@ struct HomeScreen: View {
             HUDSection(title: "Today", code: "CAL.01", first: true) {
                 today
             }
-            HUDSection(title: "Inbox", code: "MSG.12") {
+            HUDSection(title: "Inbox", code: "MSG.12", index: 1) {
                 let inbox = activity.hours([.imessage, .sms, .email])
                 HUDSparkline(
                     label: "Per hour", data: Array(inbox.suffix(16)), display: "\(Int(inbox.reduce(0, +))) today",
                     variant: .bars, tone: HUD.accent
                 )
             }
-            HUDSection(title: "Collectors", code: "COL.01") {
+            HUDSection(title: "Collectors", code: "COL.01", index: 2) {
                 collectors
             }
         }

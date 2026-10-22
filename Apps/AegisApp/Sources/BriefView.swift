@@ -80,7 +80,11 @@ struct HUDTopBar: View {
     var body: some View {
         HStack(spacing: HUD.space3) {
             HUDEmblem(size: 34)
-            HUDAsciiText(lines: banner, cols: banner.map(\.count).max() ?? 0, size: 2.5, tone: HUD.primary)
+            // The name resolves out of ramp noise as the top bar arrives.
+            HUDBuildClock(fps: 1 / 0.06) { time in
+                let lines = time.map { HUDMotion.resolve(banner, HUDMotion.progress($0, 0, 0.8), tick: Int($0 / 0.06), seed: 5) }
+                HUDAsciiText(lines: lines ?? banner, cols: banner.map(\.count).max() ?? 0, size: 2.5, tone: HUD.primary)
+            }
         }
         .accessibilityElement()
         .accessibilityLabel(model.personality.name)
@@ -216,5 +220,8 @@ struct HUDCore: View {
             .lineLimit(1)
             .accessibilityElement(children: .combine)
         }
+        // The reactor and its caption flicker on at 480 ms, whatever column they sit in.
+        .hudArrive(.flicker(0.42), after: 0.48)
+        .environment(\.hudArrival.at, 0)
     }
 }
