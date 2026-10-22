@@ -2,8 +2,8 @@ import AegisKit
 import AppKit
 import SwiftUI
 
-/// 03 COMMS, everything Aegis collected, as a feed: the sources and devices on the left, the brief and who's waiting
-/// in the centre, Aegis's summary and what it filed on the right, and today's notifications per hour below.
+/// 03 COMMS, everything Aegis collected, as a feed: the sources on the left, the brief and who's waiting in the
+/// centre, Aegis's summary and what it filed on the right.
 struct CommsScreen: View {
     let model: PanelModel
     @Binding var screen: HUDScreen
@@ -23,14 +23,8 @@ struct CommsScreen: View {
                 }
                 .scrollIndicators(.never)
                 .frame(maxWidth: .infinity)
-                summary.frame(width: 270)
+                ScrollView { summary }.scrollIndicators(.never).frame(width: 270)
             }
-        } bottom: {
-            let notifications = activity.today([.notification])
-            HUDSparkline(
-                label: "Notifications per hour · today", data: notifications, display: "\(Int(notifications.reduce(0, +))) today",
-                variant: .bars, tone: HUD.accent, columns: max(notifications.count, 2), height: 56
-            )
         }
         .task(id: HUDPresence.shared.open) {
             // Each time the panel opens: the counts move on while it's closed, and this view stays alive.

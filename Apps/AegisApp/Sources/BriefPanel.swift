@@ -4,7 +4,7 @@ import SwiftUI
 /// A floating panel that the hotkey shows and hides. Escape closes it, except while God's Eye View has it (#303).
 @MainActor
 final class BriefPanelController: NSObject, NSWindowDelegate {
-    private let panel: NSPanel
+    private let panel: HUDWindow
     private let model: PanelModel
     private var hudFrame: NSRect?
     private var reportedVisible = false
@@ -18,22 +18,22 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
         self.model = model
         // The design system's HUD (ADR-0029): most of the screen, up to 1360 × 860.
         let screen = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
-        panel = NSPanel(
+        // Borderless: the HUD's own cut-corner frame is the window's only edge, with no title bar or system border.
+        panel = HUDWindow(
             contentRect: NSRect(x: 0, y: 0, width: min(1360, screen.width - 60), height: min(860, screen.height - 40)),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            styleMask: [.borderless, .resizable],
             backing: .buffered, defer: true
         )
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
         // On every Space, including over other full-screen apps.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.level = .floating
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
-        // The HUD's ground fills the whole window, so the window server needn't blend the desktop behind it.
-        panel.isOpaque = true
-        panel.backgroundColor = .black
+        // Clear outside the frame's cut corners; the shadow follows the frame's shape.
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
         super.init()
         panel.delegate = self
         NotificationCenter.default.addObserver(
@@ -105,5 +105,16 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
     func windowShouldClose(_: NSWindow) -> Bool {
         hide()
         return false
+    }
+}
+
+/// A borderless panel can't take the keyboard by default; the HUD needs it for the Ask bar and Escape.
+final class HUDWindow: NSPanel {
+    override var canBecomeKey: Bool {
+        true
+    }
+
+    override var canBecomeMain: Bool {
+        true
     }
 }

@@ -17,13 +17,17 @@ struct BriefView: View {
             } else if case .loading = model.phase {
                 BootScreen(model: model)
             } else {
-                HUDFit { current.padding(HUD.space6) }
+                HUDFit { current }
             }
         }
         .frame(minWidth: 1120, minHeight: 700)
         .hudType(.body)
         .foregroundStyle(HUD.ink)
+        // The HUD's frame is the window's edge: inset by its stroke so the corner brackets draw whole, and clipped
+        // to its cut corners so nothing shows outside them.
+        .padding(HUD.strokeFrame)
         .background(HUDGround())
+        .clipShape(HUDCut(kind: .panel, cut: HUD.chamferLg))
         .environment(\.colorScheme, .dark)
         // Escape is God's Eye View's own while the globe shows (#303).
         .onExitCommand {
@@ -58,7 +62,7 @@ struct BriefView: View {
 /// Lays a screen out at least `height` tall and scales it down to the window, so a screen taller than the panel
 /// shows whole, slightly smaller, instead of cut off.
 struct HUDFit<Content: View>: View {
-    var height: CGFloat = 910
+    var height: CGFloat = 860
     @ViewBuilder var content: Content
 
     var body: some View {
