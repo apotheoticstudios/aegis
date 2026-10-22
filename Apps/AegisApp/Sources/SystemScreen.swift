@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 02 SYSTEM, diagnostics wired to a beating heart: the Mac's processors and memory on the left, the local model,
 /// the busiest processes, input and output on the right, and the last minute of processor load below.
-/// Everything here is measured on this Mac, once a second, only while this screen shows.
+/// Everything here is measured on this Mac, twice a second, only while this screen shows.
 struct SystemScreen: View {
     let model: PanelModel
     @Binding var screen: HUDScreen
@@ -140,11 +140,11 @@ struct SystemScreen: View {
             HUDSection(title: "I/O", code: "NET · DISK") {
                 VStack(spacing: HUD.space3) {
                     HUDSparkline(
-                        label: "Net down", data: Array(monitor.networkHistory.suffix(13)),
+                        label: "Net down", data: Array(monitor.networkHistory.suffix(26)),
                         display: HUDFormat.bytes(reading.networkIn, perSecond: true), height: 40
                     )
                     HUDSparkline(
-                        label: "Disk I/O", data: Array(monitor.diskHistory.suffix(14)),
+                        label: "Disk I/O", data: Array(monitor.diskHistory.suffix(28)),
                         display: HUDFormat.bytes(reading.diskBytes, perSecond: true), variant: .bars, height: 40
                     )
                 }
@@ -177,7 +177,7 @@ struct SystemScreen: View {
         let cpu = monitor.cpuHistory.map { $0 * 100 }
         let peak = cpu.indices.max { cpu[$0] < cpu[$1] }
         let average = cpu.isEmpty ? 0 : cpu.reduce(0, +) / Double(cpu.count)
-        let peakTime = peak.map { Date().addingTimeInterval(-Double(cpu.count - 1 - $0)) }
+        let peakTime = peak.map { Date().addingTimeInterval(-Double(cpu.count - 1 - $0) * SystemMonitor.interval) }
         return HUDParticleField(
             label: "CPU load · last minute",
             display: "\(Int(average.rounded()))% avg",

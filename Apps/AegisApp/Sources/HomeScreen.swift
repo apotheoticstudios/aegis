@@ -56,7 +56,7 @@ struct HomeScreen: View {
             }
             HUDSection(title: "Network", code: "NET.03") {
                 HUDSparkline(
-                    label: "Down", data: Array(monitor.networkHistory.suffix(20)),
+                    label: "Down", data: Array(monitor.networkHistory.suffix(40)),
                     display: HUDFormat.bytes(monitor.reading.networkIn, perSecond: true), variant: .particles
                 )
             }
