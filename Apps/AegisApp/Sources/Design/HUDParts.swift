@@ -344,8 +344,9 @@ enum HUDFormat {
         return figure + " " + units[unit] + (perSecond ? "/s" : "")
     }
 
-    static func percent(_ fraction: Double) -> String {
-        "\(Int((min(max(fraction, 0), 1) * 100).rounded()))%"
+    /// Capped at 100% unless `capped` is false, as for a process busy on several cores at once.
+    static func percent(_ fraction: Double, capped: Bool = true) -> String {
+        "\(Int((min(max(fraction, 0), capped ? 1 : .infinity) * 100).rounded()))%"
     }
 
     /// "6d 04:21", or "04:21" under a day.

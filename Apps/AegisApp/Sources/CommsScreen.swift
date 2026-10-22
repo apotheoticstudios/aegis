@@ -26,23 +26,19 @@ struct CommsScreen: View {
                 summary.frame(width: 270)
             }
         } bottom: {
-            let notifications = Self.today(activity.hours([.notification]))
+            let notifications = activity.today([.notification])
             HUDSparkline(
                 label: "Notifications per hour · today", data: notifications, display: "\(Int(notifications.reduce(0, +))) today",
                 variant: .bars, tone: HUD.accent, columns: max(notifications.count, 2), height: 56
             )
         }
-        .task {
+        .task(id: HUDPresence.shared.open) {
+            // Each time the panel opens: the counts move on while it's closed, and this view stays alive.
+            guard HUDPresence.shared.open else { return }
             await model.refreshActivity()
             // The first message each brief item cites, once, to show where and when it came from.
-            let cited = (model.stored?.brief.items ?? []).compactMap(\.eventIDs.first)
-            await model.loadSources(ids: Array(cited.prefix(CoreRequest.maxSourceIDs)))
+            await model.loadSources(ids: (model.stored?.brief.items ?? []).compactMap(\.eventIDs.first))
         }
-    }
-
-    /// The hours since midnight, from a day of hourly counts that ends with the current hour.
-    static func today(_ day: [Double], now: Date = Date(), calendar: Calendar = .current) -> [Double] {
-        Array(day.suffix(calendar.component(.hour, from: now) + 1))
     }
 
     // MARK: Sources and devices
@@ -50,10 +46,10 @@ struct CommsScreen: View {
     private var sources: some View {
         let live = (model.stored?.coverage ?? []).filter { [.ok, .noData].contains($0.status) }.count
         let rows: [(String, Int)] = [
-            ("All", Int(Self.today(activity.total).reduce(0, +))),
-            ("Messages", Int(Self.today(activity.hours([.imessage, .sms])).reduce(0, +))),
-            ("Mail", Int(Self.today(activity.hours([.email])).reduce(0, +))),
-            ("Notifications", Int(Self.today(activity.hours([.notification])).reduce(0, +))),
+            ("All", Int(activity.today().reduce(0, +))),
+            ("Messages", Int(activity.today([.imessage, .sms]).reduce(0, +))),
+            ("Mail", Int(activity.today([.email]).reduce(0, +))),
+            ("Notifications", Int(activity.today([.notification]).reduce(0, +))),
             ("Calendar", model.todayOccurrences.count),
             ("Reminders", model.todayReminders.count),
         ]
@@ -284,7 +280,7 @@ extension CommsScreen {
     // MARK: Summary and filing
 
     private var summary: some View {
-        let collected = Self.today(activity.total).reduce(0, +)
+        let collected = activity.today().reduce(0, +)
         let briefed = Double(model.stored?.brief.items.count ?? 0)
         let hidden = Double(model.filtered.reduce(0) { $0 + $1.count })
         let scale = max(collected, briefed + hidden, 1)

@@ -101,15 +101,14 @@ final class PanelModel {
         await loadSources(ids: item.eventIDs)
     }
 
-    /// Fetches cited events (an item's or an answer's) the first time they're shown.
+    /// Fetches cited events (an item's or an answer's) the first time they're shown, as many requests as AegisCore's
+    /// limit needs. The list counts as loaded only once every request answered, so showing it again retries a failure.
     func loadSources(ids: [String]) async {
-        guard !loadedSources.contains(ids) else {
-            return
-        }
+        guard !loadedSources.contains(ids) else { return }
         let missing = ids.filter { sources[$0] == nil }
-        if !missing.isEmpty,
-           case let .events(events) = await service.handle(.sources(ids: Array(missing.prefix(CoreRequest.maxSourceIDs))))
-        {
+        for start in stride(from: 0, to: missing.count, by: CoreRequest.maxSourceIDs) {
+            let batch = missing[start ..< min(start + CoreRequest.maxSourceIDs, missing.count)]
+            guard case let .events(events) = await service.handle(.sources(ids: Array(batch))) else { return }
             for event in events {
                 sources[event.id] = event
             }
