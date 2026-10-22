@@ -47,6 +47,8 @@ extension PanelModel {
     /// Weather at home and today's flight for the brief (#265): public data, at most every 30 minutes, only while
     /// the panel is open. Home goes out rounded to about 10 km, a flight as its callsign.
     func refreshWorldBrief() async {
+        // App tests run inside Aegis: they stay offline and never send the owner's home.
+        guard !WorldSidecar.isTestHost else { return }
         WorldWindow.shared.prewarm()
         let world = WorldPresence.shared
         guard WorldPresence.briefEnabled else {

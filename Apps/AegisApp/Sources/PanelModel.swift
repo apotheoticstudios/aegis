@@ -32,10 +32,10 @@ final class PanelModel {
     /// last opened (#169). Silent: no sound, no pop-up; off with "Glow for urgent items".
     private(set) var glow = false
     /// When the owner last opened the panel (kept across launches).
-    private(set) var lastSeen: Date = UserDefaults.standard.object(forKey: "lastSeenBrief") as? Date ?? .distantPast
-    var glowEnabled: Bool = UserDefaults.standard.object(forKey: "glowForUrgent") as? Bool ?? true {
+    private(set) var lastSeen: Date = UserDefaults.aegis.object(forKey: "lastSeenBrief") as? Date ?? .distantPast
+    var glowEnabled: Bool = UserDefaults.aegis.object(forKey: "glowForUrgent") as? Bool ?? true {
         didSet {
-            UserDefaults.standard.set(glowEnabled, forKey: "glowForUrgent")
+            UserDefaults.aegis.set(glowEnabled, forKey: "glowForUrgent")
             updateGlow()
         }
     }
@@ -63,7 +63,7 @@ final class PanelModel {
 
     private func markSeen(_ now: Date) {
         lastSeen = now
-        UserDefaults.standard.set(now, forKey: "lastSeenBrief")
+        UserDefaults.aegis.set(now, forKey: "lastSeenBrief")
         glow = false
     }
 
@@ -970,7 +970,7 @@ extension PanelModel {
 
     private static func rememberWakeName(_ name: String) {
         let word = name.split(separator: " ").count == 1 && name.lowercased() != "aegis" ? name : nil
-        UserDefaults.standard.set(word, forKey: wakeNameKey)
+        UserDefaults.aegis.set(word, forKey: wakeNameKey)
     }
 
     func reloadMemories() async {

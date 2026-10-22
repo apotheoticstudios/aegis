@@ -55,7 +55,7 @@ enum WorldKeys {
     }
 
     static func has(_ key: Key) -> Bool {
-        UserDefaults.standard.bool(forKey: "worldKeySaved." + key.rawValue)
+        UserDefaults.aegis.bool(forKey: "worldKeySaved." + key.rawValue)
     }
 
     /// Saves a key, or removes it when empty. False when the Keychain refused.
@@ -74,9 +74,9 @@ enum WorldKeys {
             add[kSecAttrLabel as String] = "Aegis World view: " + key.title
             saved = SecItemAdd(add as CFDictionary, nil) == errSecSuccess
         }
-        UserDefaults.standard.set(saved && !trimmed.isEmpty, forKey: "worldKeySaved." + key.rawValue)
+        UserDefaults.aegis.set(saved && !trimmed.isEmpty, forKey: "worldKeySaved." + key.rawValue)
         if key == .cesium {
-            UserDefaults.standard.set(true, forKey: rebuildKey)
+            UserDefaults.aegis.set(true, forKey: rebuildKey)
         }
         return saved
     }

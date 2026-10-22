@@ -241,7 +241,7 @@ enum CloudKeys {
                 DiagnosticLog.shared.record(.cloudFailed, number: Int(status))
                 return false
             }
-            UserDefaults.standard.set(false, forKey: savedKey + provider.rawValue)
+            UserDefaults.aegis.set(false, forKey: savedKey + provider.rawValue)
             return true
         }
         let values: [String: Any] = [
@@ -250,7 +250,7 @@ enum CloudKeys {
         ]
         let updated = SecItemUpdate(base as CFDictionary, values as CFDictionary)
         if updated == errSecSuccess {
-            UserDefaults.standard.set(true, forKey: savedKey + provider.rawValue)
+            UserDefaults.aegis.set(true, forKey: savedKey + provider.rawValue)
             return true
         }
         guard updated == errSecItemNotFound else {
@@ -264,7 +264,7 @@ enum CloudKeys {
         let status = SecItemAdd(add as CFDictionary, nil)
         let saved = status == errSecSuccess
         if saved {
-            UserDefaults.standard.set(true, forKey: savedKey + provider.rawValue)
+            UserDefaults.aegis.set(true, forKey: savedKey + provider.rawValue)
         } else {
             DiagnosticLog.shared.record(.cloudFailed, number: Int(status))
         }
@@ -276,15 +276,15 @@ enum CloudKeys {
     /// Whether a key was saved, without touching the Keychain: asking runs on the main thread, and the Keychain is
     /// read only when a hand-off is sent.
     static func hasKey(_ provider: CloudHandOff.Provider) -> Bool {
-        UserDefaults.standard.bool(forKey: savedKey + provider.rawValue)
+        UserDefaults.aegis.bool(forKey: savedKey + provider.rawValue)
     }
 
     static let planKey = "cloudUseChatGPTPlan"
 
     /// Use the owner's ChatGPT plan through the ChatGPT app when there's no OpenAI key (#235). On unless turned off.
     static var useChatGPTPlan: Bool {
-        get { UserDefaults.standard.object(forKey: planKey) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: planKey) }
+        get { UserDefaults.aegis.object(forKey: planKey) as? Bool ?? true }
+        set { UserDefaults.aegis.set(newValue, forKey: planKey) }
     }
 
     /// The provider answers through the owner's plan app rather than an API key.
@@ -293,8 +293,8 @@ enum CloudKeys {
     }
 
     static var automatic: Bool {
-        get { UserDefaults.standard.bool(forKey: automaticKey) }
-        set { UserDefaults.standard.set(newValue, forKey: automaticKey) }
+        get { UserDefaults.aegis.bool(forKey: automaticKey) }
+        set { UserDefaults.aegis.set(newValue, forKey: automaticKey) }
     }
 
     /// What the panel tells AegisCore it can hand off to: Claude first when both have keys.
