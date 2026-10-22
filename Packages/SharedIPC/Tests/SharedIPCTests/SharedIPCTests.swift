@@ -89,7 +89,7 @@ struct FakeCore: CoreService {
     func handle(_ request: CoreRequest) async -> CoreResponse {
         switch request {
         case .latestBrief: .brief(nil)
-        case .status: .status(Self.status)
+        case .status, .setBriefTime: .status(Self.status)
         case .refreshBrief: .accepted(jobID: "job-1")
         case .prepareModel: .accepted(jobID: "warm")
         case .sources: .events([])

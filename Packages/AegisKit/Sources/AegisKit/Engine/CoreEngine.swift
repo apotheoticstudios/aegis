@@ -334,6 +334,21 @@ public actor CoreEngine: CoreService {
         }
     }
 
+    /// Moves the daily brief, inside the lane so a running job's transitions can't undo it; the next tick uses it.
+    func setBriefTime(_ minutes: Int) async -> CoreResponse {
+        guard (0 ..< 24 * 60).contains(minutes) else { return .refused(code: "bad_time") }
+        await acquire()
+        defer { release() }
+        let previous = schedule
+        schedule.openingHour = minutes / 60
+        schedule.openingMinute = minutes % 60
+        guard save() else {
+            schedule = previous
+            return .refused(code: "schedule_unwritable")
+        }
+        return .status(status())
+    }
+
     private func save() -> Bool {
         do {
             try persistence.save(schedule)

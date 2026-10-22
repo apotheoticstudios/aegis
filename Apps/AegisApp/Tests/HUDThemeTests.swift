@@ -100,6 +100,19 @@ final class PanelPreviewTests: XCTestCase {
         try await draw(BootScreen(model: model), to: URL(fileURLWithPath: folder).appendingPathComponent("Boot.png"))
     }
 
+    /// The setup wizard's screens (#26), with a synthetic Mac and no file.
+    func testDrawsEverySetupScreen() async throws {
+        guard let folder = ProcessInfo.processInfo.environment["AEGIS_PANEL_PREVIEW"] else {
+            throw XCTSkip("Set AEGIS_PANEL_PREVIEW to a folder to draw the setup wizard.")
+        }
+        let setup = SetupModel(file: nil, mac: SetupTests.sampleMac)
+        for step in SetupModel.built {
+            let url = URL(fileURLWithPath: folder).appendingPathComponent("Setup-\(step.rawValue).png")
+            try await draw(SetupView(setup: setup, finish: {}, later: {}), to: url)
+            setup.wizard.next()
+        }
+    }
+
     private func draw(_ screen: some View, to url: URL) async throws {
         let host = NSHostingView(rootView: screen
             .padding(HUD.space6)

@@ -37,6 +37,8 @@ extension CoreEngine {
             return changeMute(personID, name: nil)
         case .refreshBrief:
             return await refreshBrief()
+        case let .setBriefTime(minutes):
+            return await setBriefTime(minutes)
         default:
             return .refused(code: "unsupported_request")
         }

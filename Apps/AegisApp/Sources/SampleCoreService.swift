@@ -10,7 +10,7 @@ struct SampleCoreService: CoreService {
         switch request {
         case .latestBrief:
             .brief(Self.brief(now: Date()))
-        case .status:
+        case .status, .setBriefTime:
             .status(CoreStatus(sources: Self.coverage(now: Date()), lastBriefAt: Date(), nextBriefAt: nil, generating: false))
         case .prepareModel:
             .accepted(jobID: "sample")

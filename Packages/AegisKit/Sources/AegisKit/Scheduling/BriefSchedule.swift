@@ -12,10 +12,10 @@ public struct BriefSchedule: Codable, Sendable, Equatable {
         case fixed
     }
 
-    /// The owner's local opening hour, in 0...23.
-    public let openingHour: Int
+    /// The owner's local opening hour, in 0...23; set by the setup wizard (#26).
+    public internal(set) var openingHour: Int
     /// The owner's local opening minute, in 0...59.
-    public let openingMinute: Int
+    public internal(set) var openingMinute: Int
     /// How explicit travel events affect the opening time.
     public let timeZonePolicy: TimeZonePolicy
     /// The effective time zone, also restored after a crash.

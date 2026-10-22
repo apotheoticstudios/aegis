@@ -126,10 +126,10 @@ public struct SetupWizard: Codable, Sendable, Hashable {
         step = steps[steps.count - 1]
     }
 
-    /// Runs setup again from settings, keeping every answer.
+    /// Runs setup again from settings, keeping every answer. It still counts as finished, so a re-run left halfway
+    /// isn't offered again at launch.
     public mutating func restart() {
         step = steps[0]
-        finished = false
     }
 
     // MARK: - Answers, recommended unless the owner changed them

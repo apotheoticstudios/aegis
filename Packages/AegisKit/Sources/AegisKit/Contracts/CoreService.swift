@@ -140,6 +140,9 @@ public enum CoreRequest: Codable, Sendable, Hashable {
     /// How many events were collected in each of the last `hours` hours (at most `maxActivityHours`), by source
     /// (#8, additive): counts only. Replies with `activity`.
     case activity(hours: Int)
+    /// When the brief is ready each day, in minutes after local midnight, chosen in the setup wizard (#26, additive);
+    /// replies with `status`. Refusals: bad_time (outside 0..<1440), schedule_unwritable.
+    case setBriefTime(minutes: Int)
 
     /// The most IDs one `sources` request may ask for.
     public static let maxSourceIDs = 20

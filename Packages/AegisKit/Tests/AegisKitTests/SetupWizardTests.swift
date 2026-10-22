@@ -49,7 +49,7 @@ final class SetupWizardTests: XCTestCase {
 
         wizard.restart()
         XCTAssertEqual(wizard.current, .welcome)
-        XCTAssertFalse(wizard.finished)
+        XCTAssertTrue(wizard.finished)
     }
 
     func testStorageRangeAndRecommendation() {

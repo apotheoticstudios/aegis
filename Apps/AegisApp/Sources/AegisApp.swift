@@ -97,10 +97,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 try? await Task.sleep(for: .seconds(300))
             }
         }
-        if !model.isSample {
-            // A real install: ask once for Contacts, Calendar and Reminders (names and today's schedule).
-            Task { await Permissions.requestIfNeeded() }
+        // A real install sets itself up on first launch (#26); the wizard asks for access, so nothing else does.
+        if !model.isSample, !WorldSidecar.isTestHost, !SetupModel.finished {
+            showSetup(again: false)
         }
+    }
+
+    /// The setup wizard: on first launch until it's finished, and from the menu to run it again.
+    func showSetup(again: Bool) {
+        SetupWindow.show(service: model.service, again: again) { [weak self] in self?.panel.show() }
     }
 
     func togglePanel() {
@@ -156,6 +161,7 @@ struct MenuContent: View {
         Button("World view settings…") { WorldKeysWindow.show() }
         Button("Personality…") { PersonalityWindow.show(delegate.model) }
         Button("Claude and ChatGPT…") { CloudSettingsWindow.show() }
+        Button("Run setup again…") { delegate.showSetup(again: true) }
         Toggle("Glow for urgent items", isOn: Binding(
             get: { delegate.model.glowEnabled },
             set: { delegate.model.glowEnabled = $0 }

@@ -29,7 +29,7 @@ do {
         collectors: [notifications, .messages(at: SourcePaths.messages), .mail(at: SourcePaths.mail)],
         model: ModelXPCClient(),
         persistence: ScheduleFile(url: folder.appendingPathComponent("schedule.json")),
-        // Settings arrive with the setup wizard (step 2.14); until then, 07:00 local time.
+        // 07:00 local time until the owner picks a time in the setup wizard (`setBriefTime`, #26), which is saved.
         initial: BriefSchedule(openingHour: 7, openingMinute: 0, timeZone: .current),
         // The model follows the Mac's memory: the 9B with 24 GB or more, otherwise the 4B (#190).
         options: .init(modelName: ModelChoice.current.name),

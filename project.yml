@@ -105,6 +105,8 @@ targets:
         INFOPLIST_KEY_NSLocationUsageDescription: "When you say “set my home here”, Aegis notes where this Mac is, once, to show home on the World view. It stays on this Mac."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "When you say “set my home here”, Aegis notes where this Mac is, once, to show home on the World view. It stays on this Mac."
         CODE_SIGN_STYLE: Automatic
+        # The setup wizard checks for Apple Intelligence on macOS 26 and later; the app still starts on 15 (#26).
+        OTHER_LDFLAGS: "$(inherited) -weak_framework FoundationModels"
         MARKETING_VERSION: "0.0.1"
         CURRENT_PROJECT_VERSION: "1"
 

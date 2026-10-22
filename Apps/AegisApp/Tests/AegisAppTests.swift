@@ -304,7 +304,7 @@ final class RecordingCore: CoreService, @unchecked Sendable {
             var brief = SampleCoreService.brief(now: storedAt)
             brief.storedAt = storedAt
             return .brief(brief)
-        case .status:
+        case .status, .setBriefTime:
             return .status(CoreStatus(sources: [], lastBriefAt: storedAt, nextBriefAt: nil, generating: false))
         case .prepareModel:
             return .accepted(jobID: "warm")
