@@ -73,7 +73,21 @@ struct SampleCoreService: CoreService {
             .partialReply("")
         case .handedOff:
             .accepted(jobID: "sample")
+        case let .activity(hours):
+            .activity(Self.activity(hours: hours, now: Date()))
         }
+    }
+
+    /// A made-up day's rhythm, counts only: quiet overnight, busy through the working day.
+    static func activity(hours: Int, now: Date, calendar: Calendar = .current) -> HourlyActivity {
+        let count = min(max(hours, 1), CoreRequest.maxActivityHours)
+        let current = calendar.dateInterval(of: .hour, for: now)?.start ?? now
+        let start = current.addingTimeInterval(-Double(count - 1) * 3600)
+        let rhythm = [0, 0, 0, 0, 0, 1, 3, 8, 12, 10, 9, 11, 7, 9, 12, 10, 8, 6, 5, 4, 3, 2, 1, 0]
+        func series(_ scale: Int) -> [Int] {
+            (0 ..< count).map { rhythm[calendar.component(.hour, from: start.addingTimeInterval(Double($0) * 3600))] * scale / 4 }
+        }
+        return HourlyActivity(start: start, counts: [.notification: series(6), .imessage: series(3), .email: series(4)])
     }
 
     static func brief(now: Date) -> StoredBrief {

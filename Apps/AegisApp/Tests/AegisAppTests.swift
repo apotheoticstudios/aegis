@@ -349,6 +349,8 @@ final class RecordingCore: CoreService, @unchecked Sendable {
             return .refused(code: "busy")
         case .handedOff:
             return .accepted(jobID: "handed-off")
+        case .activity:
+            return .activity(HourlyActivity(start: storedAt, counts: [:]))
         }
     }
 }

@@ -2,8 +2,9 @@ import SceneKit
 import SwiftUI
 
 /// The panel's arc reactor (#292): the WebGL prototype (docs/design/prototypes/reactor.html) rebuilt in SceneKit on
-/// Metal. A twinkling particle shell, a spinning band, orbiting arcs and a hot core, with bloom. Idle drifts and
-/// breathes, thinking spins up, speaking pulses, listening turns amber. It draws only while its window is visible.
+/// Metal. A twinkling particle shell, a spinning band, orbiting arcs and a hot core, with bloom, in the theme's colours.
+/// Idle drifts and breathes, thinking spins up, speaking pulses, listening takes the accent. It draws only while its
+/// window is visible.
 struct ReactorView: NSViewRepresentable {
     enum Mode: Equatable {
         case idle, thinking, listening, speaking
@@ -16,8 +17,9 @@ struct ReactorView: NSViewRepresentable {
         ReactorSceneView(size: size)
     }
 
-    func updateNSView(_ view: ReactorSceneView, context _: Context) {
+    func updateNSView(_ view: ReactorSceneView, context: Context) {
         view.reactor.mode = mode
+        view.reactor.theme = context.environment.hudTheme
         view.setAccessibilityLabel(Self.label(mode))
     }
 
@@ -35,7 +37,7 @@ struct ReactorView: NSViewRepresentable {
     }
 }
 
-/// The SceneKit view, see-through so the HUD's grid and glows show behind it; it plays only while its window is visible.
+/// The SceneKit view, see-through so the HUD's ground shows behind it; it plays only while its window is visible.
 final class ReactorSceneView: SCNView {
     let reactor = ReactorScene()
 

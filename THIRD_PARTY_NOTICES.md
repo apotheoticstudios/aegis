@@ -1,6 +1,6 @@
 # Third-party notices
 
-Aegis includes code ported from these projects. Their licences are kept under `ThirdParty/`.
+Aegis includes code ported from these projects, and the fonts below. Code licences are kept under `ThirdParty/`; the fonts' licences sit beside the fonts in `Apps/AegisApp/Resources/Fonts/`, in the repo and in the app.
 
 ## OpenJarvis
 
@@ -38,3 +38,16 @@ Aegis includes code ported from these projects. Their licences are kept under `T
 
 - Model: BAAI/bge-small-en-v1.5 on Hugging Face, revision 5c38ec7c405ec4b44b94cc5a9bb96e735b38267a
 - Licence: MIT. Downloaded at setup by `scripts/fetch-meaning-model.sh` (ADR-0027); not stored in the repo.
+
+## Fonts (ADR-0029)
+
+The Project: Aegis design system's type, bundled in Aegis.app and registered for Aegis's own process. They keep their own licences; Aegis's MIT licence does not cover them. `Apps/AegisApp/Resources/Fonts/NOTICE.txt` lists the same.
+
+| File | Font | Licence | Source |
+| --- | --- | --- | --- |
+| `Xirod-Regular.woff2` | Xirod 3.001, Ray Larabie (Typodermic) | CC0 1.0 (public domain) | typodermicfonts.com, public-domain collection |
+| `ChakraPetch-SemiBold.woff2` | Chakra Petch 1.000, Cadson Demak | SIL OFL 1.1, `ChakraPetch-OFL.txt` | Google Fonts' Latin WOFF2 file |
+| `KodeMono-Regular.woff2`, `KodeMono-SemiBold.woff2` | Kode Mono 1.206, Isa Ozler | SIL OFL 1.1, `KodeMono-OFL.txt` | Google Fonts' static WOFF2 instances |
+| `ShareTechMono-Regular.ttf` | Share Tech Mono 1.003, Carrois Type Design (Reserved Font Name "Share") | SIL OFL 1.1, `ShareTechMono-OFL.txt` | google/fonts `ofl/sharetechmono`, commit 1b86e1e716445daccc346253911955073b0d254a, unmodified |
+| `VT323-Regular.woff2` | VT323 2.000, Peter Hull | SIL OFL 1.1, `VT323-OFL.txt` | Google Fonts' WOFF2 file |
+

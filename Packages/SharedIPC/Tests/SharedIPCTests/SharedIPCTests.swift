@@ -111,6 +111,7 @@ struct FakeCore: CoreService {
         case .partialReply: .partialReply("")
         case .converse: .refused(code: "busy")
         case .handedOff: .accepted(jobID: "handed-off")
+        case .activity: .activity(HourlyActivity(start: Date(timeIntervalSince1970: 0), counts: [:]))
         }
     }
 }

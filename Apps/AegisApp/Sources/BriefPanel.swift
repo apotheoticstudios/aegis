@@ -15,7 +15,7 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
 
     init(model: PanelModel) {
         self.model = model
-        // Concept A's three columns (#292): most of the screen, up to 1360 × 860.
+        // The design system's HUD (ADR-0029): most of the screen, up to 1360 × 860.
         let screen = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
         panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: min(1360, screen.width - 60), height: min(860, screen.height - 40)),
@@ -52,6 +52,7 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
     func show() {
         guard !panel.isVisible else { return }
         NSApp.activate()
+        HUDPresence.shared.open = true
         panel.makeKeyAndOrderFront(nil)
         visibilityChanged(true)
         Task { await model.opened() }
@@ -75,6 +76,7 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
     }
 
     private func hide() {
+        HUDPresence.shared.open = false
         panel.orderOut(nil)
         visibilityChanged(false)
         model.panelClosed()

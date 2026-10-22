@@ -99,7 +99,7 @@ Aegis is built by a maintainer working with AI agents: Claude (Mac builds, plann
 
 ## ▌ Licence
 
-MIT, see [`LICENSE`](LICENSE). Third-party code keeps its own licence: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+MIT, see [`LICENSE`](LICENSE). Third-party code and fonts keep their own licences: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 <p align="center">
   <img src=".github/assets/emblem.png" alt="" width="64"><br>

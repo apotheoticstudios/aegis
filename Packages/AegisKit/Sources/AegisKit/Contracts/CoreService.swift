@@ -137,6 +137,9 @@ public enum CoreRequest: Codable, Sendable, Hashable {
     /// Forget one note; replies with the remaining `memories`. Refusals: bad_memory (an ID over 64 scalars),
     /// unknown_memory, memory_unwritable.
     case forgetMemory(id: String)
+    /// How many events were collected in each of the last `hours` hours (at most `maxActivityHours`), by source
+    /// (#8, additive): counts only. Replies with `activity`.
+    case activity(hours: Int)
 
     /// The most IDs one `sources` request may ask for.
     public static let maxSourceIDs = 20
@@ -144,6 +147,8 @@ public enum CoreRequest: Codable, Sendable, Hashable {
     public static let maxScheduleDays = 7
     /// The longest question, in Unicode scalars.
     public static let maxQuestionScalars = 500
+    /// The most hours one `activity` request may ask for.
+    public static let maxActivityHours = 24
 }
 
 /// AegisCore's answer.
@@ -190,6 +195,8 @@ public enum CoreResponse: Codable, Sendable, Hashable {
     /// A question for Claude or ChatGPT, checked by AegisCore's gate; the panel sends it with the owner's key
     /// (#223, additive). It holds only the owner's words and earlier non-personal turns of the same hand-off.
     case handOff(CloudHandOff.Request)
+    /// Events collected per hour, by source (#8, additive); counts only.
+    case activity(HourlyActivity)
 }
 
 /// The one way Aegis's processes encode messages to each other, so both ends always agree.

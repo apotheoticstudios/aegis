@@ -6,42 +6,33 @@ import SwiftUI
 /// Open only shows the original in its own app; it never sends or changes anything.
 struct SourceRow: View {
     let event: Event
-    let accent: Color
+    let accent: HUDColor
     /// "Junk" for a sender who isn't a contact (#175); nil hides the button.
     var onJunk: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                Text(SourcePresentation.heading(event))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
+        VStack(alignment: .leading, spacing: HUD.space1) {
+            HStack(spacing: HUD.space2) {
+                Text(SourcePresentation.heading(event)).hudType(.data).foregroundStyle(HUD.inkMuted)
+                Spacer(minLength: HUD.space2)
                 if let onJunk {
                     Button("Junk", action: onJunk)
-                        .buttonStyle(.plain)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .overlay(Rectangle().strokeBorder(Color.secondary.opacity(0.5), lineWidth: 1))
+                        .buttonStyle(HUDChipStyle(muted: true))
                         .help("Treat this sender's messages as junk from now on")
                 }
                 if let link = EventLink.link(for: event) {
-                    Button("Open") { SourcePresentation.open(link) }
-                        .buttonStyle(.plain)
-                        .font(.system(.caption, design: .monospaced).weight(.semibold))
-                        .foregroundStyle(accent)
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .overlay(Rectangle().strokeBorder(accent.opacity(0.7), lineWidth: 1))
+                    Button("Open") { SourcePresentation.open(link) }.buttonStyle(HUDChipStyle())
                 }
             }
             Text(SourcePresentation.excerpt(event))
-                .font(.system(.caption, design: .monospaced))
+                .hudType(.body)
+                .foregroundStyle(HUD.ink)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(8)
-        .overlay(Rectangle().strokeBorder(accent.opacity(0.25), lineWidth: 1))
+        .padding(HUD.space2)
+        .overlay(Rectangle().strokeBorder(HUD.line, lineWidth: HUD.strokeHair))
+        .overlay(alignment: .leading) { Rectangle().fill(accent).frame(width: HUD.strokeFrame) }
     }
 }
 

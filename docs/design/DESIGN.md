@@ -260,6 +260,23 @@ With the panel closed, Aegis is invisible and inaudible, and uses at most 3 GB o
 
 The panel is the only place Aegis shows itself: a sci-fi HUD that opens instantly, talks in a human voice, and takes on whatever personality the user picked.
 
+### Look and feel: the Project: Aegis design system (owner's choice, 2026-10-21, ADR-0029)
+
+The panel is built from the Project: Aegis design system (linked in `docs/design/README.md`), with the layout of its worked screens and Aegis's own data in them.
+
+- **One instrument, five screens.** One glass HUD frame holds the screen. Its top bar carries the emblem and the assistant's name drawn in characters, the menu 01 HOME · 02 SYSTEM · 03 COMMS · 04 CHAT · 05 LOGS (⌘1 to ⌘5), the clock and one status word: ONLINE, THINKING, SPEAKING, LISTENING, WRITING, DEGRADED or OFFLINE. Each screen is built around one centre instrument, with the machine on the left, the world on the right, circuit links from the centre to each section, and a strip along the bottom.
+  - **HOME:** Systems, Network and Scan. The reactor with what needs you, Aegis's line, Read brief, World, and the morning routine. Today (calendar, coming up, weather), Inbox per hour, and Collectors with their fixes. The last 24 hours of activity as a particle field.
+  - **SYSTEM:** CPU cores and memory, the model's share shown apart. A beating ASCII heart wired to the model, the busiest processes (Aegis's own first), input and output, and uptime. The last minute of processor load. All measured on the Mac, and only while the screen is open.
+  - **COMMS:** sources and devices. The feed: the brief, people waiting with reply drafts, your promises, and what was filtered or muted. Aegis's summary under the watching eye, and what it filed. Notifications per hour today.
+  - **CHAT:** the conversation as a terminal: `you >`, `aegis >`, and what Aegis read under each answer. The `aegis ~ %` command line with the mic and command chips. The reactor, what the last answer used, and the voice.
+  - **LOGS:** everything Aegis did, noted and changed, with filters. What it remembers, grouped, and its skills. Its storage on the Mac.
+  - **BOOT** shows only while the panel waits for AegisCore's first answer. The World view still takes over the whole panel.
+- **Five themes, one signal.** Arc (the default, electric blue), Automaton, Phosphor, Redline and Matrix share every token. Primary means live, and only live things glow. A state colour always comes with its word.
+- **Type, set small like a terminal.** Xirod for display and the name, Chakra Petch for labels, Kode Mono for sentences, Share Tech Mono for numbers and codes, VT323 for the pixel voice.
+- **Edges.** Nothing is rounded: corners are square or cut at 45°. Hairlines are for structure and 2-point lines for meaning. Panels are glass over the void, with one soft wash behind the centre.
+- **Character art.** Banners, shapes and meters are drawn from the density ramp ` .:-=+*#%@`, and move at 12 frames a second only while the panel shows.
+- **Next:** the design's motion (screens that build themselves, typed lines, settling numbers; Reduce Motion turns it off), the settings windows, a theme picker, the menu-bar drop-down, and the app icon from the logo kit.
+
 ### Menu bar
 
 - An arc reactor–style icon, the only thing visible while Aegis runs.
@@ -277,6 +294,7 @@ The panel is the only place Aegis shows itself: a sci-fi HUD that opens instantl
 - **Storage ring** showing usage against the assigned space.
 - Uncertain items and one-click fixes appear here quietly, never as interruptions.
 - Built as a native SwiftUI app for the best Mac look and the lowest RAM. A web UI in Tauri is the faster-to-iterate alternative for animated effects.
+- **Layout (2026-10-21):** the design system's five screens (see Look and feel above). The priority ring is HOME's reactor with what needs you, the timeline river is COMMS's feed, the people column is COMMS's people waiting, and the storage ring is LOGS's storage meter.
 
 ### Voice (only while the panel is open)
 
@@ -743,6 +761,7 @@ Aegis is a native Mac app written in Swift, split into small processes so the al
 | Language | Swift |
 | UI (panel, wizard, settings) | SwiftUI, with AppKit where needed |
 | Reactor and HUD animation | SceneKit on Metal: the WebGL prototype ported natively (#292), with bloom |
+| Look and feel | The Project: Aegis design system in SwiftUI: tokens, components and screens in `Apps/AegisApp/Sources/Design` and the screen files, five bundled fonts (ADR-0029) |
 | Local LLM | MLX Swift, 4-bit models (.safetensors) |
 | Quick tasks | Apple Foundation Models framework |
 | Triage classifier | Core ML (.mlpackage), trained with Create ML |
@@ -867,9 +886,10 @@ AI agents do most of the building, so estimates in days or weeks aren't meaningf
 
 **Goal:** the Aegis look and feel.
 
-- Final HUD layout: **concept A, Reactor** (owner's choice, 2026-10-20), viewed straight on (no tilt). Panels are Apple-style frosted glass: strong blur and saturation, a faint white top highlight, soft coloured glows behind for the glass to blur, and the same hard chamfered edges and corner brackets. The side panels (brief, waiting, schedule, event stream) get a very slight soft shadow, like CleanMyMac; the top bar, status tiles and Ask bar don't. Built in SwiftUI.
+- Look and feel: **the Project: Aegis design system** (owner's choice, 2026-10-21, ADR-0029): one HUD frame, five screens (HOME, SYSTEM, COMMS, CHAT, LOGS), tokens for five themes with Arc the default, and the design's five typefaces. It replaces concept A, below.
+- Earlier HUD layout, superseded on 2026-10-21: **concept A, Reactor** (owner's choice, 2026-10-20), viewed straight on (no tilt). Panels are Apple-style frosted glass: strong blur and saturation, a faint white top highlight, soft coloured glows behind for the glass to blur, and the same hard chamfered edges and corner brackets. The side panels (brief, waiting, schedule, event stream) get a very slight soft shadow, like CleanMyMac; the top bar, status tiles and Ask bar don't. Built in SwiftUI.
 - First build (#292): the top bar (name, clock, LOCAL, PRIVATE), the owner's day on the left (routine, waiting, today, promises), the reactor with the conversation and Ask bar in the centre (the World globe takes the centre when on), and the brief on the right. Left out until they have real data behind them: home, storage and RAM tiles, the live event stream, and people around the dial.
-- The reactor is the WebGL prototype rebuilt in SceneKit (#292): a twinkling 3D particle shell, a spinning band, orbiting arcs and a hot core, with bloom; cyan, amber while listening.
+- The reactor is the WebGL prototype rebuilt in SceneKit (#292): a twinkling 3D particle shell, a spinning band, orbiting arcs and a hot core, with bloom; in the theme's colours (ink, primary, a primary-soft haze), the accent while listening.
 - The reactor is never completely still: its rings turn slowly in opposite directions and it breathes faintly at idle, then spins faster while thinking and pulses while speaking.
 - Reactor ported from WebGL to Metal, with Idle, Thinking and Speaking states.
 - Panel views: brief, ask, event stream, people, schedule.

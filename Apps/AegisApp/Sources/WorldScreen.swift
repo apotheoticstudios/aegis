@@ -8,17 +8,16 @@ struct WorldScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 20) {
-                Button("◀ AEGIS") { WorldWindow.shared.close() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(BriefView.cyan)
+            HStack(spacing: HUD.space6) {
+                Button("◀ Aegis") { WorldWindow.shared.close() }
+                    .buttonStyle(HUDChipStyle())
                     .help("Back to Aegis")
-                Text("WORLD").foregroundStyle(BriefView.cyan)
+                HUDHeading(title: "World", tone: HUD.primary)
                 Spacer()
             }
-            .font(.system(.caption, design: .monospaced).weight(.semibold))
-            .padding(.leading, 80).padding(.trailing, 16).padding(.vertical, 10)
-            .background(.ultraThinMaterial)
+            .padding(.leading, 80).padding(.trailing, HUD.space4).padding(.vertical, HUD.space2)
+            .background(HUD.surfaceRaised)
+            .overlay(alignment: .bottom) { Rectangle().fill(HUD.glassEdge).frame(height: HUD.strokeHair) }
             WorldPanelView().frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onChange(of: caption, initial: true) { _, lines in
