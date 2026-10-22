@@ -212,6 +212,9 @@ private struct HUDLinks: View {
                             .hudGlow()
                     }
                 }
+                // One flattened layer: each glowing pulse as its own panel-sized layer had the window server
+                // re-blurring them all twenty times a second, a full core on its own.
+                .drawingGroup()
             }
         }
         .allowsHitTesting(false)
