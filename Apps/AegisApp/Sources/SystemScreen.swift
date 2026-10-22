@@ -2,7 +2,7 @@ import AegisKit
 import SwiftUI
 
 /// 02 SYSTEM, diagnostics wired to a beating heart: the Mac's processors and memory on the left, the local model,
-/// the busiest processes, input and output and uptime on the right, and the last minute of processor load below.
+/// the busiest processes, input and output on the right, and the last minute of processor load below.
 /// Everything here is measured on this Mac, once a second, only while this screen shows.
 struct SystemScreen: View {
     let model: PanelModel
@@ -148,9 +148,6 @@ struct SystemScreen: View {
                         display: HUDFormat.bytes(reading.diskBytes, perSecond: true), variant: .bars, height: 40
                     )
                 }
-            }
-            HUDSection(title: "Uptime", code: "SYS", index: 3) {
-                HUDReadout(label: "Since boot", value: HUDFormat.uptime(reading.uptime))
             }
         }
     }

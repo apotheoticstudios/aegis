@@ -68,12 +68,6 @@ struct CommsScreen: View {
                     }
                 }
             }
-            HUDSection(title: "Devices", code: "COL.01", index: 1) {
-                VStack(spacing: HUD.space3) {
-                    HUDMeter(label: "Mac", value: 1, display: "Live", size: .small, tone: HUD.ok)
-                    HUDMeter(label: "iPhone", value: 0, display: "Not linked", size: .small, tone: HUD.inkMuted)
-                }
-            }
         }
     }
 

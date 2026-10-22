@@ -76,7 +76,6 @@ struct SystemReading: Sendable {
     var gpu: Double?
     var thermal = ProcessInfo.ThermalState.nominal
     var load = 0.0
-    var uptime = ProcessInfo.processInfo.systemUptime
     /// Aegis's own processes first, then the Mac's busiest others.
     var processes: [Process] = []
     /// The local model's memory while ModelService is loaded; nil when it has exited.

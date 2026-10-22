@@ -37,8 +37,6 @@ final class HUDLayoutTests: XCTestCase {
         XCTAssertEqual(HUDFormat.percent(0.814), "81%")
         XCTAssertEqual(HUDFormat.percent(1.4), "100%")
         XCTAssertEqual(HUDFormat.percent(2.5, capped: false), "250%", "a process busy on several cores")
-        XCTAssertEqual(HUDFormat.uptime(3 * 3600 + 7 * 60), "03:07")
-        XCTAssertEqual(HUDFormat.uptime(6 * 86400 + 4 * 3600 + 21 * 60), "6d 04:21")
     }
 
     /// Every shape draws inside its footprint, from the density ramp only, the same way every time.
