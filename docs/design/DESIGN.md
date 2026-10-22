@@ -579,6 +579,7 @@ Setup is 15 screens shown one at a time, each holding one category of options. R
 - "Use recommended for the rest" shortcut on every screen.
 - Models download in the background while the user goes through the steps.
 - Hardware is auto-detected and only confirmed, never typed in.
+- A screen whose feature isn't built yet (Home, Control, Tune-up today) stays hidden until it is, and the progress bar counts only the screens shown (owner's choice, #24).
 
 ### Screens
 
