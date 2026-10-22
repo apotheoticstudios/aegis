@@ -16,9 +16,10 @@ struct SystemScreen: View {
             HUDTopBar(model: model, screen: $screen)
         } content: {
             HStack(alignment: .top, spacing: HUD.space6) {
-                machine(reading).frame(width: 250)
+                // The side columns scroll: a Mac with many cores, or a short panel, outgrows them.
+                ScrollView { machine(reading) }.scrollIndicators(.never).frame(width: 250)
                 heart(reading).frame(maxWidth: .infinity)
-                services(reading).frame(width: 250)
+                ScrollView { services(reading) }.scrollIndicators(.never).frame(width: 250)
             }
         } bottom: {
             load
@@ -89,7 +90,9 @@ struct SystemScreen: View {
                 let thermal = Thermal(reading.thermal)
                 HUDRing(value: thermal.value, label: "Thermal", display: thermal.word, tone: thermal.tone)
                 Spacer(minLength: 0)
-                HUDRing(value: reading.gpu ?? 0, label: "GPU", display: reading.gpu.map(HUDFormat.percent) ?? "----", tone: HUD.accent)
+                HUDRing(
+                    value: reading.gpu ?? 0, label: "GPU", display: reading.gpu.map { HUDFormat.percent($0) } ?? "----", tone: HUD.accent
+                )
                 Spacer(minLength: 0)
                 HUDRing(value: disk, label: "Disk", display: HUDFormat.percent(disk), tone: disk > 0.8 ? HUD.warn : HUD.primary)
             }
@@ -127,7 +130,7 @@ struct SystemScreen: View {
                     ForEach(Array(reading.processes.enumerated()), id: \.offset) { _, process in
                         processRow(
                             process.name,
-                            HUDFormat.percent(process.cpu),
+                            HUDFormat.percent(process.cpu, capped: false),
                             HUDFormat.bytes(Double(process.memory)),
                             aegis: process.aegis
                         )

@@ -37,6 +37,8 @@ struct HUDShell<Top: View, Content: View, Bottom: View>: View {
                     GeometryReader { proxy in
                         HUDLinks(layout: HUDLinkLayout(targets: targets, in: proxy, wires: wires), wires: wires)
                     }
+                    // A section scrolled out of its column takes its link with it, not over the top bar.
+                    .clipped()
                 }
             if Bottom.self != EmptyView.self {
                 bottom

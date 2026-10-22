@@ -36,6 +36,7 @@ final class HUDLayoutTests: XCTestCase {
         XCTAssertEqual(HUDFormat.bytes(250_000_000), "250 MB")
         XCTAssertEqual(HUDFormat.percent(0.814), "81%")
         XCTAssertEqual(HUDFormat.percent(1.4), "100%")
+        XCTAssertEqual(HUDFormat.percent(2.5, capped: false), "250%", "a process busy on several cores")
         XCTAssertEqual(HUDFormat.uptime(3 * 3600 + 7 * 60), "03:07")
         XCTAssertEqual(HUDFormat.uptime(6 * 86400 + 4 * 3600 + 21 * 60), "6d 04:21")
     }
@@ -113,13 +114,40 @@ final class HUDLayoutTests: XCTestCase {
         XCTAssertEqual(presence.total.reduce(0, +), 6)
     }
 
-    /// COMMS counts today from midnight: the day's last hours, one per hour so far.
+    /// COMMS and the Inbox count today from midnight, one count per hour so far; counts from a day that has ended,
+    /// as when the panel reopens after midnight, count for nothing.
+    @MainActor
     func testTodayIsTheHoursSinceMidnight() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let morning = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 21, hour: 9, minute: 30)))
-        let day = (0 ..< 24).map(Double.init)
-        XCTAssertEqual(CommsScreen.today(day, now: morning, calendar: calendar), Array(day.suffix(10)))
+        // AegisCore's day at 09:30: 24 hours from 10:00 yesterday, the last of them 09:00.
+        let start = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 10)))
+        let presence = ActivityPresence()
+        presence.latest = HourlyActivity(start: start, counts: [.email: Array(0 ..< 24)])
+        XCTAssertEqual(presence.today([.email], now: morning, calendar: calendar), (14 ..< 24).map(Double.init))
+        XCTAssertEqual(presence.today(now: morning.addingTimeInterval(86400), calendar: calendar), [])
+    }
+
+    /// More cited messages than AegisCore answers at once load in batches; a failed fetch stays unloaded, so showing
+    /// the list again retries it.
+    @MainActor
+    func testSourcesLoadInBatchesAndRetryAfterAFailure() async {
+        let ids = (0 ..< CoreRequest.maxSourceIDs + 5).map { String(format: "ev_%016x", $0) }
+        let core = SourcesCore(refuse: false)
+        let model = PanelModel(service: core)
+        await model.loadSources(ids: ids)
+        let batches = await core.batches
+        XCTAssertEqual(batches, [CoreRequest.maxSourceIDs, 5])
+        XCTAssertTrue(model.loadedSources.contains(ids))
+
+        let failing = SourcesCore(refuse: true)
+        let retrying = PanelModel(service: failing)
+        await retrying.loadSources(ids: ids)
+        XCTAssertFalse(retrying.loadedSources.contains(ids))
+        await retrying.loadSources(ids: ids)
+        let tries = await failing.batches
+        XCTAssertEqual(tries, [CoreRequest.maxSourceIDs, CoreRequest.maxSourceIDs])
     }
 
     /// The sample's day has the same shape as AegisCore's answer: 24 hours for each source, quiet overnight.
@@ -131,5 +159,21 @@ final class HUDLayoutTests: XCTestCase {
         XCTAssertEqual(day.start, calendar.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 13)))
         XCTAssertEqual(Set(day.counts.values.map(\.count)), [24])
         XCTAssertEqual(day.counts[.email]?[15], 0, "04:00 is quiet")
+    }
+}
+
+/// Answers each request for cited messages with none, or refuses it, and records how many IDs it asked for.
+private actor SourcesCore: CoreService {
+    let refuse: Bool
+    private(set) var batches: [Int] = []
+
+    init(refuse: Bool) {
+        self.refuse = refuse
+    }
+
+    func handle(_ request: CoreRequest) async -> CoreResponse {
+        guard case let .sources(ids) = request else { return await SampleCoreService().handle(request) }
+        batches.append(ids.count)
+        return refuse ? .refused(code: "store_unavailable") : .events([])
     }
 }

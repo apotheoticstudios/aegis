@@ -20,6 +20,13 @@ final class ActivityPresence {
     var total: [Double] {
         hours(Event.Source.allCases)
     }
+
+    /// The hours since midnight in `hours(sources)`, oldest first; none when the counts are from a day that has ended.
+    func today(_ sources: [Event.Source] = Event.Source.allCases, now: Date = Date(), calendar: Calendar = .current) -> [Double] {
+        guard let latest else { return [] }
+        let midnight = calendar.startOfDay(for: now).timeIntervalSince(latest.start) / 3600
+        return Array(hours(sources).dropFirst(max(0, Int(midnight.rounded(.up)))))
+    }
 }
 
 extension PanelModel {
