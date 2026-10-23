@@ -127,7 +127,17 @@ struct HUDChatLine<Meta: View>: View {
     var aegis = false
     var writing = false
     var failed = false
+    /// Types the text out, from character `typedFrom` on (what a streamed reply already showed).
+    var typing = false
+    var typedFrom = 0
     @ViewBuilder var meta: Meta
+    @State private var typed = 0
+    @State private var typedAll = false
+    @Environment(\.accessibilityReduceMotion) private var still
+
+    private var stillTyping: Bool {
+        typing && !typedAll && !still
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: HUD.space3) {
@@ -138,11 +148,11 @@ struct HUDChatLine<Meta: View>: View {
                 .lineLimit(1)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .lastTextBaseline, spacing: 2) {
-                    Text(text)
+                    Text(stillTyping ? String(text.prefix(typed)) : text)
                         .foregroundStyle(failed ? HUD.warn : aegis ? HUD.ink : HUD.inkMuted)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
-                    if writing {
+                    if writing || stillTyping {
                         // No glow: it blinks for as long as Aegis writes.
                         HUDLiveClock(every: 0.5) { time in
                             Rectangle().fill(HUD.primary).frame(width: 6, height: 12)
@@ -156,12 +166,34 @@ struct HUDChatLine<Meta: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 6)
+        .task(id: typing) {
+            guard typing, !still else { return }
+            let count = text.count
+            typed = min(typedFrom, count)
+            // About 80 characters a second; long replies speed up so none takes much over three seconds.
+            let step = max(1, count / 240)
+            while typed < count, !Task.isCancelled, HUDPresence.shared.open {
+                try? await Task.sleep(for: .milliseconds(12))
+                typed = min(count, typed + step)
+            }
+            typedAll = true
+        }
     }
 }
 
 extension HUDChatLine where Meta == EmptyView {
-    init(who: String, text: String, aegis: Bool = false, writing: Bool = false, failed: Bool = false) {
-        self.init(who: who, text: text, aegis: aegis, writing: writing, failed: failed) { EmptyView() }
+    init(
+        who: String,
+        text: String,
+        aegis: Bool = false,
+        writing: Bool = false,
+        failed: Bool = false,
+        typing: Bool = false,
+        typedFrom: Int = 0
+    ) {
+        self
+            .init(who: who, text: text, aegis: aegis, writing: writing, failed: failed, typing: typing, typedFrom: typedFrom) { EmptyView()
+            }
     }
 }
 

@@ -33,6 +33,8 @@ final class WakeListener {
     @ObservationIgnored var isPanelOpen: () -> Bool = { true }
     @ObservationIgnored var playbackText: () -> String = { "" }
     @ObservationIgnored var interruptSpeech: () -> Void = {}
+    /// The words heard so far of a spoken question, for CHAT's live line; empty when none is being spoken.
+    @ObservationIgnored var hearing: (String) -> Void = { _ in }
     /// False on unsupported devices: never interpret raw speaker echo as an owner interruption.
     @ObservationIgnored var echoCancellationReady = false
     @ObservationIgnored private var segmentForInterruption = false
@@ -196,6 +198,7 @@ final class WakeListener {
     /// One utterance, recognised on this Mac.
     func segment(_ text: String?, id: UUID? = nil) {
         guard id == nil || id == segmentID else { return }
+        hearing("")
         interruption.reset()
         segmentID = UUID()
         captureStart?.cancel()
@@ -417,6 +420,7 @@ extension WakeListener {
     }
 
     private func cancelSegment() {
+        hearing("")
         interruption.reset()
         segmentID = UUID()
         captureStart?.cancel()
@@ -501,6 +505,8 @@ extension WakeListener {
             }
         } else if final {
             segment(text, id: id)
+        } else if !segmentForInterruption, let text {
+            hearing(text)
         }
     }
 }

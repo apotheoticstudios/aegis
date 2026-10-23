@@ -236,15 +236,18 @@ final class PanelModel {
         case let .proposal(found):
             askState = .idle
             proposal = found
+            remember(Exchange(question: trimmed, answer: Self.said(found.question), failure: nil))
             if spoken {
                 voice.speak(found.question)
             }
         case .refused(code: "no_match"):
             askState = .idle
             proposalNotice = "I couldn't find who you meant. Try the name as it shows in the brief."
+            remember(Exchange(question: trimmed, answer: nil, failure: proposalNotice))
         case .refused(code: "ambiguous"):
             askState = .idle
             proposalNotice = "That matches more than one person or chat. Try the full name."
+            remember(Exchange(question: trimmed, answer: nil, failure: proposalNotice))
         default:
             await requestAnswer(trimmed, id: id)
             await finishAnswer(id, spoken: spoken)
@@ -308,7 +311,7 @@ final class PanelModel {
         remember(Exchange(question: question, answer: nil, failure: message))
     }
 
-    private func remember(_ exchange: Exchange) {
+    func remember(_ exchange: Exchange) {
         thread = Array((thread + [exchange]).suffix(20))
     }
 
@@ -412,11 +415,10 @@ final class PanelModel {
 /// One line of the TODAY section: a time (or ALL DAY, DUE, OVERDUE), a title and an optional place.
 /// Applying a plain-language rule (#179, #185), apart from the main body.
 extension PanelModel {
-    /// Clears the visible conversation at the owner's request, without dismissing unfinished work.
+    /// Ends the spoken conversation at the owner's request, without dismissing unfinished work; CHAT keeps its transcript.
     func endVoiceConversation() {
         guard pendingTask == nil, runningTask == nil else { return }
         clearAnswer()
-        thread = []
     }
 
     /// The owner clicked the proposal's button.

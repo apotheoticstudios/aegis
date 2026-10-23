@@ -32,6 +32,7 @@ extension PanelModel {
     func decideRoutine(_ proposals: [RoutineProposal], approved: Bool, always: Bool) async {
         let reply = await decide(proposals, approved: approved, always: always, origin: .ownerTyped)
         askState = .answered(question: approved ? "Yes" : "No", answer: Self.said(reply))
+        remember(Exchange(question: approved ? "Yes" : "No", answer: Self.said(reply), failure: nil))
     }
 
     /// "What's my morning routine?", or an answer to it; nil when the question is neither.

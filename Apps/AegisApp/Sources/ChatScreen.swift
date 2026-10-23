@@ -10,6 +10,10 @@ struct ChatScreen: View {
     @State private var question = ""
     @State private var openAnswers: Set<UUID> = []
     @State private var opened = Date()
+    /// Exchanges already on screen when CHAT appeared; only newer replies type themselves out.
+    @State private var earlier: Set<UUID> = []
+    /// What the reply being written had already shown, so typing carries on from there instead of starting over.
+    @State private var streamed = ""
     @FocusState private var typing: Bool
 
     /// Where a line's text starts: the prompt column and its gap.
@@ -30,6 +34,14 @@ struct ChatScreen: View {
                 question = words
             }
         }
+    }
+
+    /// What the owner is saying right now, from the mic button or after "Hey Aegis", as it's recognised.
+    private var liveWords: String? {
+        if case let .listening(words) = model.voice.state, !words.isEmpty {
+            return words
+        }
+        return model.voice.hearing.isEmpty ? nil : model.voice.hearing
     }
 
     private var name: String {
@@ -57,14 +69,31 @@ struct ChatScreen: View {
                                 writing: true
                             )
                         }
+                        if let live = liveWords {
+                            HUDChatLine(who: "you", text: live, writing: true)
+                        }
                         taskControls
                         Color.clear.frame(height: 1).id("end")
                     }
                 }
                 .scrollIndicators(.never)
                 .onChange(of: model.thread.count) { proxy.scrollTo("end", anchor: .bottom) }
-                .onChange(of: model.askState) { proxy.scrollTo("end", anchor: .bottom) }
-                .onAppear { proxy.scrollTo("end", anchor: .bottom) }
+                .onChange(of: model.askState) { _, state in
+                    if case .asking = state {
+                        streamed = ""
+                    }
+                    proxy.scrollTo("end", anchor: .bottom)
+                }
+                .onChange(of: liveWords) { proxy.scrollTo("end", anchor: .bottom) }
+                .onChange(of: model.partialAnswer) { _, partial in
+                    if !partial.isEmpty {
+                        streamed = partial
+                    }
+                }
+                .onAppear {
+                    earlier = Set(model.thread.map(\.id))
+                    proxy.scrollTo("end", anchor: .bottom)
+                }
             }
             .frame(maxHeight: .infinity)
             input
@@ -82,8 +111,12 @@ struct ChatScreen: View {
         VStack(alignment: .leading, spacing: 0) {
             HUDChatLine(who: "you", text: exchange.question).hudArrive(.rise, after: HUDMotion.stagger(2 * index, 0.045))
             Group {
+                let typing = !earlier.contains(exchange.id) && index == model.thread.count - 1
                 if let answer = exchange.answer {
-                    HUDChatLine(who: name, text: answer.text, aegis: true) {
+                    HUDChatLine(
+                        who: name, text: answer.text, aegis: true, typing: typing,
+                        typedFrom: answer.text.hasPrefix(streamed) ? streamed.count : 0
+                    ) {
                         let meta = Self.meta(answer)
                         if !meta.isEmpty {
                             Text(meta).hudType(.caption).foregroundStyle(HUD.inkMuted)
@@ -91,7 +124,7 @@ struct ChatScreen: View {
                         answerActions(exchange, answer: answer)
                     }
                 } else if let failure = exchange.failure {
-                    HUDChatLine(who: name, text: failure, aegis: true, failed: true)
+                    HUDChatLine(who: name, text: failure, aegis: true, failed: true, typing: typing)
                 }
             }
             .hudArrive(.rise, after: HUDMotion.stagger(2 * index + 1, 0.045))

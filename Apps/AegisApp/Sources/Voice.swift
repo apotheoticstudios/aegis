@@ -38,6 +38,8 @@ final class Voice {
     private var voiceSession: Task<Void, Never>?
     /// Pace, air, a small room and gentle compression for the built-in voice clips (#204).
     @ObservationIgnored private let finish = VoiceFinish(rate: Voice.speakingRate)
+    /// The words heard so far of a question spoken after "Hey Aegis", shown live in CHAT.
+    var hearing = ""
     private var speech: Task<Void, Never>?
 
     var playingAudio: Bool {

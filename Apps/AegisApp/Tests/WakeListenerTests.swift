@@ -115,7 +115,7 @@ final class WakeListenerTests: XCTestCase {
         wake.ask = { _ in XCTFail("The ending command must not be sent to the model.") }
         wake.segment("END CONVERSATION!")
         XCTAssertEqual(ended, 1)
-        XCTAssertTrue(model.thread.isEmpty)
+        XCTAssertFalse(model.thread.isEmpty, "CHAT keeps the transcript after the conversation ends")
         XCTAssertEqual(model.askState, .idle)
         wake.tick(at: 3601)
         XCTAssertEqual(ended, 1)

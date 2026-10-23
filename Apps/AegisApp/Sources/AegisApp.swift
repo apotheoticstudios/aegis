@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         wake.isPlayingReply = { [weak self] in self?.model.voice.speaking == true }
         wake.playbackText = { [weak self] in self?.model.voice.spokenText ?? "" }
         wake.interruptSpeech = { [weak self] in self?.model.interruptSpeech() }
+        wake.hearing = { [weak self] words in self?.model.voice.hearing = words }
         wake.captureFailed = { [weak self] in self?.model.voice.inputFailed() }
         wake.openPanel = { [weak self] in self?.panel.show() }
         panel.visibilityChanged = { [weak self] open in self?.wake.panelChanged(open: open) }

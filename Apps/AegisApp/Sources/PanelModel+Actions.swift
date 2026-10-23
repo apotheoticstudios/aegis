@@ -107,6 +107,7 @@ extension PanelModel {
         let more = await resumeSkill()
         let reply = more.isEmpty ? done : done + " " + more
         askState = .answered(question: "Add", answer: Self.said(reply))
+        remember(Exchange(question: "Add", answer: Self.said(reply), failure: nil))
         voice.speak(reply)
     }
 

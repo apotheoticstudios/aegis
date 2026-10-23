@@ -102,7 +102,9 @@ extension PanelModel {
     func runSkill(named name: String) async -> Bool {
         guard let skill = Self.skillBook().skill(named: name) else { return false }
         let reply = await run(skill, from: 0, context: [:])
-        askState = .answered(question: "Morning routine: \(name.replacingOccurrences(of: "-", with: " "))", answer: Self.said(reply))
+        let asked = "Morning routine: \(name.replacingOccurrences(of: "-", with: " "))"
+        askState = .answered(question: asked, answer: Self.said(reply))
+        remember(Exchange(question: asked, answer: Self.said(reply), failure: nil))
         voice.speak(reply)
         return true
     }

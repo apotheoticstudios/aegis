@@ -125,7 +125,9 @@ extension PanelModel {
             voice.stopSpeaking()
         } else if let brief = stored?.brief {
             let world = WorldPresence.shared.briefLines.joined(separator: " ")
-            voice.speak(BriefPresentation.spoken(brief, now: now, calendar: .current) + (world.isEmpty ? "" : " " + world))
+            let spoken = BriefPresentation.spoken(brief, now: now, calendar: .current) + (world.isEmpty ? "" : " " + world)
+            remember(Exchange(question: "Read the brief", answer: Self.said(spoken), failure: nil))
+            voice.speak(spoken)
         }
     }
 
