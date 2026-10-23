@@ -49,6 +49,8 @@ extension PanelModel {
     func refreshWorldBrief() async {
         // App tests run inside Aegis: they stay offline and never send the owner's home.
         guard !WorldSidecar.isTestHost else { return }
+        // Refreshes also run at launch and in the background: no globe server or public data with the panel closed.
+        guard HUDPresence.shared.open else { return }
         WorldWindow.shared.prewarm()
         let world = WorldPresence.shared
         guard WorldPresence.briefEnabled else {
