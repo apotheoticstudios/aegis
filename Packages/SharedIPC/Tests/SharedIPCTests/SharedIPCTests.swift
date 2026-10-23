@@ -20,6 +20,11 @@ final class SharedIPCTests: XCTestCase {
         defer { host.invalidate() }
         let client = CoreXPCClient(target: .endpoint(host.endpoint))
         defer { client.invalidate() }
+        let lookup = await client.handle(.publicLookup(question: "astronomy"))
+        guard case let .publicLookup(plan) = lookup else { return XCTFail("Round-trips the approved phrase") }
+        XCTAssertEqual(plan.query, "astronomy")
+        let empty = await client.handle(.answerPublic(planID: plan.id, sources: []))
+        XCTAssertEqual(empty, .refused(code: "web_no_results"))
         let status = await client.handle(.status)
         XCTAssertEqual(status, .status(FakeCore.status))
         let refresh = await client.handle(.refreshBrief(reason: .user))
@@ -88,6 +93,13 @@ struct FakeCore: CoreService {
 
     func handle(_ request: CoreRequest) async -> CoreResponse {
         switch request {
+        case let .publicLookup(question):
+            .publicLookup(PublicLookupPlan(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000037")!,
+                query: question,
+                expiresAt: Date(timeIntervalSince1970: 100)
+            ))
+        case .answerPublic: .refused(code: "web_no_results")
         case .latestBrief: .brief(nil)
         case .status, .setBriefTime: .status(Self.status)
         case .refreshBrief: .accepted(jobID: "job-1")

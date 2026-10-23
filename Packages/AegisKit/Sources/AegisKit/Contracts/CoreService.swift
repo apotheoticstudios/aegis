@@ -52,6 +52,13 @@ public enum CoreRequest: Codable, Sendable, Hashable {
     /// A question typed in the panel (#163), answered only from the owner's own data on the Mac. Read-only:
     /// no request acts on anything. At most `maxQuestionScalars`.
     case ask(question: String)
+    /// Approve only the current non-personal public search phrase (#37); no history, memory or data leaves Core.
+    /// Replies `publicLookup`; refusals: web_local, web_private, cancelled. Approval expires after 60 seconds.
+    case publicLookup(question: String)
+    /// Synthesize bounded untrusted public excerpts locally for one unexpired, single-use plan (#37).
+    /// Replies `answer`; refusals: web_expired, web_no_results, web_unverified or model failure codes.
+    /// Never learns from excerpts or adds their contents to owner memory.
+    case answerPublic(planID: UUID, sources: [PublicSource])
     /// Plan God's Eye View page actions from the owner's own words about the globe (#296, additive).
     /// At most `maxQuestionScalars`; never collected content, conversation memory or a cloud hand-off.
     /// Replies `worldPlan`. Refusals: bad_question, too_long, unavailable, invalid_plan, or model status codes.
@@ -159,6 +166,8 @@ public enum CoreRequest: Codable, Sendable, Hashable {
 
 /// AegisCore's answer.
 public enum CoreResponse: Codable, Sendable, Hashable {
+    /// The only current search terms approved to leave the Mac; no private context is carried (#37).
+    case publicLookup(PublicLookupPlan)
     case brief(StoredBrief?)
     case status(CoreStatus)
     /// A refresh was queued as this job.

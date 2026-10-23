@@ -95,29 +95,29 @@ final class HandOffTests: XCTestCase {
     }
 
     @MainActor
-    func testTasksRequireAWritableActionLogBeforeStartIsOffered() async {
+    func testCloudTasksStayBlockedWithoutAWritableActionLog() async {
         for actions in [nil, ActionLog(persistence: UnwritableHandOffLog())] {
             let model = PanelModel(service: TaskHandOffCore(), actions: actions)
             await model.ask("ask ChatGPT make a synthetic table")
             XCTAssertNil(model.pendingTask)
-            guard case .failed = model.askState else { return XCTFail("expected an audit refusal") }
+            guard case let .failed(_, message) = model.askState else { return XCTFail("expected a read-only refusal") }
+            XCTAssertTrue(message.contains("read-only"))
         }
     }
 
     @MainActor
-    func testTaskProposalsAreLoggedWithoutTheirText() async throws {
+    func testCloudTasksStayBlockedWithAWritableActionLog() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("task-audit-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = try ActionLogFile(url: folder.appendingPathComponent("audit.json"))
         let model = PanelModel(service: TaskHandOffCore(), actions: ActionLog(persistence: file))
         await model.ask("ask ChatGPT make a synthetic table")
-        XCTAssertNotNil(model.pendingTask)
-        XCTAssertEqual(try file.load().map(\.outcomeCode), [.proposed, .awaitingConfirmation])
-        let text = try String(contentsOf: file.url, encoding: .utf8)
-        XCTAssertFalse(text.contains("synthetic table"))
-        await model.cancelTask()
-        XCTAssertEqual(try file.load().last?.outcomeCode, .cancelled)
+        XCTAssertNil(model.pendingTask)
+        guard case let .failed(_, message) = model.askState else { return XCTFail("expected a read-only refusal") }
+        XCTAssertTrue(message.contains("read-only"))
+        XCTAssertTrue(try file.load().isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.url.path))
     }
 }
 
