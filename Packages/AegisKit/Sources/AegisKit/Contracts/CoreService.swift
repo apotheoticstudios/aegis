@@ -57,7 +57,8 @@ public enum CoreRequest: Codable, Sendable, Hashable {
     /// Replies `worldPlan`. Refusals: bad_question, too_long, unavailable, invalid_plan, or model status codes.
     case worldPlan(question: String)
     /// Map the owner's own command to one ability (ADR-0031, additive): a shortcut from `shortcuts` (the owner's own
-    /// names, at most `CommandPlan.maxShortcuts` of `CommandPlan.maxNameScalars`), a website or an app. Never acts;
+    /// names, at most `CommandPlan.maxShortcuts` of `CommandPlan.maxNameScalars`), a website, an app, a file by name or
+    /// an app automation catalogue entry (#43). Never acts;
     /// never collected content. Replies `commandPlan`. Refusals: bad_question, too_long, unavailable, or model codes.
     case commandPlan(question: String, shortcuts: [String])
     /// Recent contact with this meeting's attendees (#184, additive, read-only); replies with `answer`.

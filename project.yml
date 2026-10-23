@@ -72,7 +72,7 @@ targets:
         com.apple.security.device.audio-input: true
         # "Set my home here" (#265): the Mac's location, once, only when the owner asks.
         com.apple.security.personal-information.location: true
-        # "… and send it" (#276): Aegis sends through Messages or Mail, after two confirmations.
+        # "… and send it" (#276): Aegis sends through Messages or Mail, after two confirmations; the app catalogue (#43).
         com.apple.security.automation.apple-events: true
     dependencies:
       - package: AegisKit
@@ -101,7 +101,7 @@ targets:
         INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: "Aegis shows today's reminders in your brief. Nothing leaves this Mac."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Aegis listens only after you click the mic in its panel. Nothing is recorded or leaves this Mac."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Aegis turns what you say into a question, on this Mac only."
-        INFOPLIST_KEY_NSAppleEventsUsageDescription: "When you ask Aegis to send a text or email itself and confirm twice, it sends it through Messages or Mail."
+        INFOPLIST_KEY_NSAppleEventsUsageDescription: "When you ask, Aegis plays or pauses Music, makes a note in Notes, opens a Safari tab, or sends a text or email you confirmed twice."
         INFOPLIST_KEY_NSLocationUsageDescription: "When you say “set my home here”, Aegis notes where this Mac is, once, to show home on the World view. It stays on this Mac."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "When you say “set my home here”, Aegis notes where this Mac is, once, to show home on the World view. It stays on this Mac."
         CODE_SIGN_STYLE: Automatic

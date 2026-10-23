@@ -75,6 +75,63 @@ final class CommandAbilityTests: XCTestCase {
         XCTAssertEqual(core.asked, ["turn the lights on"])
         XCTAssertEqual(core.shortcuts, ["Work", "Pay Rent"])
     }
+
+    // MARK: - Files and the app catalogue (#43)
+
+    func testCatalogueStepsTheModelPickedAskFirst() async throws {
+        let cases: [(CommandStep, String)] = [
+            (CommandStep(ability: .note, value: "Groceries"), "Make a note called “Groceries”? Say yes, or press Add."),
+            (CommandStep(ability: .pause, value: ""), "Pause the music? Say yes, or press Run."),
+            (CommandStep(ability: .playlist, value: "Running"), "Play the playlist “Running”? Say yes, or press Run."),
+            (
+                CommandStep(ability: .tab, value: "https://www.bom.gov.au"),
+                "Open www.bom.gov.au in a new Safari tab? Say yes, or press Open."
+            ),
+        ]
+        for (step, card) in cases {
+            ActionPresence.shared.pending = nil
+            let answer = await model(step).commandPlanAnswer("play something")
+            XCTAssertEqual(answer?.text, card)
+            let pending = try XCTUnwrap(ActionPresence.shared.pending)
+            XCTAssertTrue(pending.guessed)
+            XCTAssertEqual(pending.request.payload.domain, .app)
+        }
+        let entries = try file.load()
+        XCTAssertEqual(entries.map(\.decision.tier), Array(repeating: .confirm, count: 8))
+        let log = try String(contentsOf: file.url, encoding: .utf8)
+        XCTAssertFalse(log.contains("Groceries") || log.contains("Running") || log.contains("bom"))
+    }
+
+    func testAFolderTheModelPickedAsksFirst() async throws {
+        let open = await model(CommandStep(ability: .file, value: "Downloads folder")).commandPlanAnswer("open where my downloads go")
+        XCTAssertEqual(open?.text, "Open “Downloads”? Say yes, or press Open.")
+        XCTAssertEqual(ActionPresence.shared.pending?.command, .openFile(path: NSHomeDirectory() + "/Downloads"))
+        let reveal = await model(CommandStep(ability: .reveal, value: "my Desktop")).commandPlanAnswer("reveal my desktop")
+        XCTAssertEqual(reveal?.text, "Show “Desktop” in Finder? Say yes, or press Show.")
+        let entries = try file.load()
+        XCTAssertEqual(entries.map(\.domain), [.file, .file, .app, .app])
+        XCTAssertFalse(try String(contentsOf: file.url, encoding: .utf8).contains("Downloads"))
+    }
+
+    func testFilesAreNeverSearchedUnderTests() async throws {
+        ActionPresence.shared.pending = nil
+        let guessed = await model(CommandStep(ability: .file, value: "Budget spreadsheet")).commandPlanAnswer("open my budget")
+        XCTAssertNil(guessed)
+        let named = await model().actionAnswer("open the Synthetic spreadsheet")
+        XCTAssertEqual(named?.text, "I couldn't find “Synthetic” in your home folder.")
+        XCTAssertNil(ActionPresence.shared.pending)
+        XCTAssertEqual(try file.load().count, 0)
+    }
+
+    func testCatalogueScriptsTakeArgumentsOnlyAsArgv() {
+        XCTAssertEqual(Set(PanelModel.scripts.keys), Set(AppAutomation.allCases).subtracting([.finderReveal]))
+        for (entry, script) in PanelModel.scripts {
+            let takesArgument = [AppAutomation.musicPlaylist, .notesNewNote, .safariNewTab].contains(entry)
+            XCTAssertEqual(script.contains("on run argv"), takesArgument, entry.rawValue)
+            XCTAssertEqual(script.contains("item 1 of argv"), takesArgument, entry.rawValue)
+            XCTAssertFalse(script.contains("do shell script"), entry.rawValue)
+        }
+    }
 }
 
 /// A AegisCore stand-in whose model picks `step` for every command.

@@ -1,7 +1,7 @@
 # ADR-0031: General commands through a closed set of typed abilities
 
 - **Status:** Accepted (owner's design choice, 2026-10-23)
-- **Issue:** #39 (slice 1: websites and shortcuts)
+- **Issue:** #39 (slice 1: websites and shortcuts), #43 (slice 2: files and folders, the app automation catalogue)
 
 ## Context
 
@@ -23,21 +23,23 @@ Option 4.
 | Open an app | `.app(bundleID:, .open)` (existing) | NSWorkspace | auto |
 | Open a website | `.website(url:, .open)` | NSWorkspace opens an http(s) address in the default browser | auto |
 | Run a shortcut | `.shortcut(name:, .run)` | `/usr/bin/shortcuts run <name>` (Apple's command-line tool), exact name from `shortcuts list` | auto (owner's choice); never when the name sounds like paying, buying, ordering, transferring money, deleting or passwords |
-| Open a file or folder (later) | `.file(path:, .open)` (existing) | NSWorkspace | auto, inside the home folder |
-| App automation (later) | one typed case per catalogue entry | Fixed Apple Events per app, typed arguments passed as `argv`, never model-written scripts | per entry |
+| Open a file or folder | `.file(path:, .open)` (existing) | NSWorkspace. Found by a well-known folder name ("Downloads", "iCloud Drive") or by Spotlight (`NSMetadataQuery`) on file names only, never contents; an exact name first, then the one used most recently (owner's choice) | auto, inside the home folder (Library allowed, owner's choice; hidden folders not); `never` for files that run code or install something (scripts, apps, installers, profiles, link files) |
+| App automation | `.automation(AppAutomation, argument:)`, one `AppAutomation` case per catalogue entry, verb `run` | Fixed Apple Events per app through `/usr/bin/osascript`, the one typed argument passed as `argv`, never model-written scripts. Finder reveal uses NSWorkspace | auto (owner's choice, #43) |
 | App links (later) | one typed case per catalogue entry | A checked list of URL schemes (for example `maps:`), never arbitrary schemes | per entry |
 
 **Words to ability.** Fixed phrases come first and need no model: "open apple.com", "go to bom.gov.au", "run the Work shortcut", "run Work" (when a shortcut has exactly that name). If nothing else in Aegis takes a command-like request (it starts with run, open, start, go to, turn and similar), the local model picks at most one ability from a catalogue that lists the abilities and the owner's shortcut names (`CoreRequest.commandPlan`, the same pattern as the World view's `worldPlan`, #296). The reply is checked strictly: a known ability; for a shortcut, a name from the list exactly; for a website, an http(s) address with a real host; for an app, a short name. Anything else is dropped and the question is answered as usual.
 
+**The app automation catalogue (#43, agreed with the owner 2026-10-23).** Music: play, pause, next, previous, play a playlist by name. Notes: a new note with a title. Safari: an http(s) address in a new tab. Finder: show a file or folder from the home folder. Phrases: "pause the music", "next song", "play my Running playlist", "make a note called Groceries", "open apple.com in a new Safari tab", "show the Budget spreadsheet in Finder". macOS asks once per app before Aegis may control it (Automation).
+
 **AI picks ask first.** A step the model picked is raised to the confirm tier through `ActionOwnerSettings.minimumTier` (settings can only raise). It shows a card with what Aegis worked out ("Open www.bom.gov.au?") and runs on Open or "yes". An address or shortcut name the owner gave goes through at its normal tier.
 
-**Policy changes.** The new domains are `web` and `shortcut`, with the new verb `run`. `ActionPolicy` treats an opened website like an opened app (auto). Its own address doesn't count as a URL hazard, because the address is the point, but the instruction-like check still applies. A shortcut is auto with reason `ownerShortcut`. Aegis can't see inside a shortcut, so its name is checked against the never-list words, and a match is `never` with that category's reason code. The fixed never-list, panel-open rule, hazard raises and codes-only log are unchanged. Text from emails, messages, notifications and web pages still has no path to any of this: only the owner's own panel input is parsed or sent to the model, and the catalogue holds only the owner's shortcut names.
+**Policy changes.** The new domains are `web` and `shortcut`, with the new verb `run`; catalogue entries are in the `app` domain and only `run`. `ActionPolicy` treats an opened website like an opened app (auto). Its own address doesn't count as a URL hazard, because the address is the point (the same for a new Safari tab), but the instruction-like check still applies, including to a note's title or a playlist's name. A shortcut is auto with reason `ownerShortcut`. Aegis can't see inside a shortcut, so its name is checked against the never-list words, and a match is `never` with that category's reason code. The fixed never-list, panel-open rule, hazard raises and codes-only log are unchanged. Text from emails, messages, notifications and web pages still has no path to any of this: only the owner's own panel input is parsed or sent to the model, and the catalogue holds only the owner's shortcut names.
 
 **Network.** Aegis itself makes no new network calls. A website opens in the owner's browser because they asked for it.
 
 ## Consequences
 
-- New abilities are added as typed cases with a catalogue line, not as hand-written commands. The model widens the phrasing; it never widens what can run.
+- New abilities are added as typed cases with a catalogue line, not as hand-written commands. The model widens the phrasing; it never widens what can run. The model names a file; it never gives a path.
 - A shortcut runs with whatever it contains. The owner chose speed over a card for shortcuts they name; the name check catches only obvious never-list shortcuts.
 - Command-like requests that nothing handles cost one short model job before the normal answer.
-- Later slices: files and folders, the app automation catalogue (Automation permission per app, asked by macOS), app links, and multi-step plans shown before they run (DESIGN.md › App control).
+- Later slices: app links and multi-step plans shown before they run (DESIGN.md › App control). New catalogue entries are added the same way: a case, a fixed script, a phrase and a line in the model's catalogue.

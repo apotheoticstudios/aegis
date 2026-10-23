@@ -41,6 +41,13 @@ public enum ActionPolicy {
         (#"\b(?:firewall|filevault|gatekeeper)\b"#, .securitySetting),
     ]
 
+    /// Files that run code or install something when opened (#43): scripts, apps, installers, profiles and link files.
+    private static let runsCode: Set<String> = [
+        "app", "command", "tool", "terminal", "sh", "bash", "zsh", "csh", "ksh", "fish", "py", "rb", "pl", "php", "jar",
+        "workflow", "action", "shortcut", "scpt", "scptd", "applescript", "pkg", "mpkg", "dmg", "mobileconfig", "configprofile",
+        "prefpane", "saver", "kext", "plugin", "bundle", "systemextension", "webloc", "inetloc", "fileloc", "url", "jnlp",
+    ]
+
     private static let supported: [ActionDomain: Set<ActionVerb>] = [
         .message: [.read, .open, .send], .home: [.read, .open, .edit],
         .app: [.read, .open, .create, .edit, .move, .send], .file: [.read, .open, .create, .edit, .move],
@@ -54,6 +61,9 @@ public enum ActionPolicy {
         }
         if case let .system(setting, _, _) = payload, let reason = forbiddenSettings[setting] {
             return ActionDecision(tier: .never, reasonCodes: [reason])
+        }
+        if let decision = catalogueDecision(payload) {
+            return decision
         }
         guard supported[payload.domain]?.contains(payload.verb) == true else {
             return ActionDecision(tier: .never, reasonCodes: [.unsupportedOperation])
@@ -79,6 +89,20 @@ public enum ActionPolicy {
         return ActionDecision(tier: payload.verb == .open ? .auto : .confirm, reasonCodes: [.reversible])
     }
 
+    /// App automation only runs, at once (owner's choice, #43); a file that runs code never opens.
+    private static func catalogueDecision(_ payload: ActionPayload) -> ActionDecision? {
+        if case .automation = payload, payload.verb == .run {
+            return ActionDecision(tier: .auto, reasonCodes: [.reversible])
+        }
+        if case .automation = payload {
+            return ActionDecision(tier: .never, reasonCodes: [.unsupportedOperation])
+        }
+        if case let .file(path, .open) = payload, runsCode.contains(URL(fileURLWithPath: path).pathExtension.lowercased()) {
+            return ActionDecision(tier: .never, reasonCodes: [.unsupportedOperation])
+        }
+        return nil
+    }
+
     private static func homeDecision(_ characteristic: ActionHomeCharacteristic) -> ActionDecision {
         // Both opening and closing secure accessories require two approvals; values never weaken this gate.
         if characteristic == .doorLock || characteristic == .garageDoor {
@@ -94,7 +118,11 @@ public enum ActionPolicy {
             reasons.append(.instructionLikePayload)
         }
         // A website's own address is the point of the request, not a hazard (ADR-0031).
-        if payload.domain != .web, fields.contains(where: containsURL) {
+        var address = payload.domain == .web
+        if case .automation(.safariNewTab, _, _) = payload {
+            address = true
+        }
+        if !address, fields.contains(where: containsURL) {
             reasons.append(.urlPayload)
         }
         return reasons

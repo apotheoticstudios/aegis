@@ -14,6 +14,20 @@ public enum ActionVerb: String, Codable, Sendable, CaseIterable {
     case payment, purchase, moneyTransfer, changePassword, accessCredentials
 }
 
+/// The app automation catalogue (ADR-0031, #43): each entry is one fixed Apple Event script in the app, with at
+/// most one typed argument passed as `argv`. The model may pick entries; it never writes scripts.
+public enum AppAutomation: String, Codable, Sendable, CaseIterable {
+    case musicPlay, musicPause, musicNext, musicPrevious
+    /// Argument: a playlist's name.
+    case musicPlaylist
+    /// Argument: the note's title.
+    case notesNewNote
+    /// Argument: an http(s) address.
+    case safariNewTab
+    /// Argument: a full path inside the owner's home folder.
+    case finderReveal
+}
+
 /// Messages and email share the same outward-facing safety policy.
 public enum ActionMessageChannel: String, Codable, Sendable {
     case message, email
@@ -48,12 +62,14 @@ public enum ActionPayload: Codable, Sendable, Hashable {
     case shortcut(name: String, verb: ActionVerb = .run)
     /// An http(s) address for the owner's browser (ADR-0031).
     case website(url: String, verb: ActionVerb = .open)
+    /// One entry from the app automation catalogue (#43); its domain is `app`.
+    case automation(AppAutomation, argument: String = "", verb: ActionVerb = .run)
 
     public var domain: ActionDomain {
         switch self {
         case .message: .message
         case .home: .home
-        case .app: .app
+        case .app, .automation: .app
         case .file: .file
         case .calendar: .calendar
         case .reminder: .reminder
@@ -68,7 +84,7 @@ public enum ActionPayload: Codable, Sendable, Hashable {
         case let .message(_, _, _, verb), let .home(_, _, _, verb),
              let .calendar(_, _, _, verb), let .system(_, _, verb): verb
         case let .app(_, verb), let .file(_, verb), let .reminder(_, _, verb),
-             let .shortcut(_, verb), let .website(_, verb): verb
+             let .shortcut(_, verb), let .website(_, verb), let .automation(_, _, verb): verb
         }
     }
 
@@ -81,6 +97,7 @@ public enum ActionPayload: Codable, Sendable, Hashable {
         case let .file(path, _): [path]
         case let .shortcut(name, _): [name]
         case let .website(url, _): [url]
+        case let .automation(_, argument, _): [argument]
         case let .calendar(title, _, _, _), let .reminder(title, _, _): [title]
         case let .system(_, value, _): value.textFields
         }

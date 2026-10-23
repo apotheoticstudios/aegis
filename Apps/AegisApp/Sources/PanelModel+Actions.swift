@@ -17,7 +17,7 @@ final class ActionPresence {
 
 /// An action shown on a card, waiting for Add or "yes".
 struct PendingAction {
-    /// A reminder, event, move, app, website or shortcut; nil for a message.
+    /// A reminder, event, move, app, website, shortcut, file or catalogue entry; nil for a message.
     let command: ActionCommand?
     var message: MessageDraft?
     let request: ActionRequest
@@ -48,8 +48,10 @@ struct PendingAction {
             return given == 0 ? "Send" : "Send now"
         }
         switch command {
-        case .runShortcut: return "Run"
-        case .openWebsite, .openApp: return "Open"
+        case .automate(.finderReveal, _): return "Show"
+        case .automate(.notesNewNote, _): return "Add"
+        case .openWebsite, .openApp, .openFile, .automate(.safariNewTab, _): return "Open"
+        case .runShortcut, .automate: return "Run"
         default: return "Add"
         }
     }
@@ -92,18 +94,18 @@ extension PanelModel {
         }
         switch command {
         case let .openApp(name):
-            if let app = Self.application(named: name) {
-                return await Self.said(openApp(app, name: name, origin: origin))
-            }
-            // "Run Work": one of the owner's shortcuts, by its exact name (ADR-0031).
-            guard let shortcut = await Self.shortcut(named: name) else { return nil }
-            return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
+            return await named(name, origin: origin)
         case let .runShortcut(name):
             guard let shortcut = await Self.shortcut(named: name) else {
                 return Self.said("You don't have a shortcut called “\(name)”.")
             }
             return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
-        case .openWebsite:
+        case let .findFile(name, reveal):
+            guard let found = await Self.found(name, reveal: reveal) else {
+                return Self.said("I couldn't find “\(FileName(name).name)” in your home folder.")
+            }
+            return await Self.said(ability(found, origin: origin))
+        case .openWebsite, .openFile, .automate:
             return await Self.said(ability(command, origin: origin))
         case .removeLast:
             await log(ActionRequest(payload: command.payload, origin: origin), .rejected)
@@ -145,7 +147,7 @@ extension PanelModel {
         await log(pending.request, .cancelled, guessed: pending.guessed)
     }
 
-    /// Anything else that sounds like a command (ADR-0031): the local model picks one website, shortcut or app, and
+    /// Anything else that sounds like a command (ADR-0031): the local model picks one ability from the catalogue, and
     /// a card shows what it picked. Nil when it picks nothing, so the question is answered as usual.
     func commandPlanAnswer(_ question: String) async -> Answer? {
         guard CommandPlan.looksLikeCommand(question), MemoryCommand.parse(question) == nil,
@@ -155,10 +157,15 @@ extension PanelModel {
         guard case let .commandPlan(step?) = await service.handle(.commandPlan(question: question, shortcuts: shortcuts)) else {
             return nil
         }
-        if case let .openApp(name) = step.command, Self.application(named: name) == nil {
+        var command = step.command
+        if case let .openApp(name) = command, Self.application(named: name) == nil {
             return nil
         }
-        return await Self.said(ability(step.command, origin: .ownerTyped, guessed: true))
+        if case let .findFile(name, reveal) = command {
+            guard let found = await Self.found(name, reveal: reveal) else { return nil }
+            command = found
+        }
+        return await Self.said(ability(command, origin: .ownerTyped, guessed: true))
     }
 
     // MARK: - Steps
@@ -187,7 +194,7 @@ extension PanelModel {
         }
         guard let command = pending.command else { return "There's nothing waiting to add." }
         switch command {
-        case .runShortcut, .openWebsite, .openApp:
+        case .runShortcut, .openWebsite, .openApp, .openFile, .automate:
             let (worked, said) = await Self.run(command)
             await log(pending.request, worked ? .succeeded : .failed, guessed: pending.guessed)
             return said
@@ -212,12 +219,15 @@ extension PanelModel {
         }
     }
 
-    /// A website, shortcut or app (ADR-0031): at once at its tier, or a card when the model picked it.
+    /// A website, shortcut, app, file or catalogue entry (ADR-0031): at once at its tier, or a card when the model picked it.
     private func ability(_ command: ActionCommand, origin: ActionOrigin, guessed: Bool = false) async -> String {
         let request = ActionRequest(payload: command.payload, origin: origin)
         let decision = await log(request, .proposed, guessed: guessed)
         guard decision.allowed else {
             await log(request, .rejected, guessed: guessed)
+            if case .openFile = command {
+                return "I don't open scripts, apps or installers from files. You can open it yourself in Finder."
+            }
             let never: Set<ActionReasonCode> = [.payment, .purchase, .moneyTransfer, .deletion, .credentials, .securitySetting]
             return decision.reasonCodes.contains(where: never.contains)
                 ? "That sounds like paying, buying, deleting or passwords, which are on my never-list. You can run it yourself in Shortcuts."
@@ -233,6 +243,19 @@ extension PanelModel {
         let (worked, said) = await Self.run(command)
         await log(request, worked ? .succeeded : .failed, guessed: guessed)
         return said
+    }
+
+    /// "Open X": an app; else one of the owner's shortcuts by its exact name ("run Work", ADR-0031); else a file or
+    /// folder in the home folder ("open Downloads", "open Budget.xlsx", #43). Nil when it's none of them.
+    private func named(_ name: String, origin: ActionOrigin) async -> Answer? {
+        if let app = Self.application(named: name) {
+            return await Self.said(openApp(app, name: name, origin: origin))
+        }
+        if let shortcut = await Self.shortcut(named: name) {
+            return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
+        }
+        guard let found = await Self.found(name, reveal: false) else { return nil }
+        return await Self.said(ability(found, origin: origin))
     }
 
     private func openApp(_ app: URL, name: String, origin: ActionOrigin) async -> String {
@@ -278,7 +301,7 @@ extension PanelModel {
         return apps.first { base($0) == wanted } ?? apps.first { base($0).hasPrefix(wanted) && wanted.count >= 3 }
     }
 
-    // MARK: - Websites, shortcuts and apps (ADR-0031)
+    // MARK: - Websites, shortcuts, apps, files and the catalogue (ADR-0031)
 
     /// Opens or runs it: whether it worked, and what to say.
     static func run(_ command: ActionCommand) async -> (Bool, String) {
@@ -294,6 +317,11 @@ extension PanelModel {
             configuration.activates = true
             let opened = await (try? NSWorkspace.shared.openApplication(at: app, configuration: configuration)) != nil
             return opened ? (true, "Opening \(app.deletingPathExtension().lastPathComponent).") : (false, "I couldn't open that.")
+        case let .openFile(path):
+            let url = URL(fileURLWithPath: path)
+            return NSWorkspace.shared.open(url) ? (true, "Opening “\(url.lastPathComponent)”.") : (false, "I couldn't open that.")
+        case let .automate(entry, argument):
+            return await automate(entry, argument)
         default:
             return (false, "That's not something I can do.")
         }

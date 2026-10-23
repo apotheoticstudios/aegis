@@ -15,6 +15,12 @@ public enum ActionCommand: Sendable, Equatable {
     case runShortcut(name: String)
     /// "Open apple.com" (ADR-0031): an http(s) address for the owner's browser.
     case openWebsite(url: String)
+    /// "Open my Downloads folder" (#43): a file or folder by name; the panel finds its path before proposing anything.
+    case findFile(name: String, reveal: Bool)
+    /// A file or folder by its full path inside the owner's home folder (#43).
+    case openFile(path: String)
+    /// "Pause the music", "make a note called Groceries" (#43): one entry from the app automation catalogue.
+    case automate(AppAutomation, argument: String)
 
     /// The payload the safety policy judges.
     public var payload: ActionPayload {
@@ -26,6 +32,9 @@ public enum ActionCommand: Sendable, Equatable {
         case .removeLast: .reminder(title: "", due: nil, verb: .delete)
         case let .runShortcut(name): .shortcut(name: name)
         case let .openWebsite(url): .website(url: url)
+        case let .findFile(name, _): .file(path: name, verb: .read)
+        case let .openFile(path): .file(path: path, verb: .open)
+        case let .automate(entry, argument): .automation(entry, argument: argument)
         }
     }
 
@@ -47,7 +56,10 @@ public enum ActionCommand: Sendable, Equatable {
         case let .runShortcut(name):
             "Run the shortcut “\(name)”?"
         case let .openWebsite(url):
-            "Open " + url.replacingOccurrences(of: #"^[a-z]+://"#, with: "", options: .regularExpression) + "?"
+            "Open " + Self.bare(url) + "?"
+        case let .openFile(name), let .findFile(name, false): "Open “" + URL(fileURLWithPath: name).lastPathComponent + "”?"
+        case let .findFile(name, true): AppAutomation.finderReveal.summary(name)
+        case let .automate(entry, argument): entry.summary(argument)
         }
     }
 
@@ -112,8 +124,11 @@ public enum ActionCommand: Sendable, Equatable {
         return nil
     }
 
-    /// Websites, shortcuts and apps, and moving or undoing what Aegis just added.
+    /// Websites, shortcuts, the app catalogue, files and apps, and moving or undoing what Aegis just added.
     private static func followUp(_ line: String, now: Date, calendar: Calendar) -> ActionCommand? {
+        if let command = catalogue(line) {
+            return command
+        }
         let site = #"^(?:open|go to|visit|take me to|load|pull up|bring up|browse to|navigate to)(?: up)?(?: the)?"#
             + #"(?: (?:website|site|web ?page|page))? (.+?)(?: in (?:the )?(?:browser|safari|chrome|firefox))?$"#
         if let address = capture(site, line).flatMap(website) {
@@ -151,7 +166,7 @@ public enum ActionCommand: Sendable, Equatable {
             .replacingOccurrences(of: #"\s+dot\s+"#, with: ".", options: [.regularExpression, .caseInsensitive])
         let pattern = #"^(?:(https?)://)?((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,24}))(?::\d{1,5})?([/?#][^\s]*)?$"#
         guard let match = firstMatch(pattern, spoken.lowercased()),
-              !["app", "md", "zip", "mov", "py", "sh"].contains(match.groups[2])
+              !fileEndings.contains(match.groups[2])
         else { return nil }
         let rest = String(spoken.dropFirst(match.groups[0].isEmpty ? 0 : match.groups[0].count + 3))
         let address = (match.groups[0].isEmpty ? "https" : match.groups[0]) + "://" + rest
@@ -330,7 +345,7 @@ public enum ActionCommand: Sendable, Equatable {
         return text.replacingCharacters(in: from ..< to, with: " ")
     }
 
-    private static func capture(_ pattern: String, _ text: String, group: Int = 1) -> String? {
+    static func capture(_ pattern: String, _ text: String, group: Int = 1) -> String? {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
               match.numberOfRanges > group, let range = Range(match.range(at: group), in: text)

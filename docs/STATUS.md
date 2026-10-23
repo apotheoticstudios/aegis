@@ -13,7 +13,8 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 | — | Real mornings and feedback on the new features | agent:human | — | Owner's reviews drive the next fixes |
 | #8 | The Project: Aegis design system: five screens, tokens, fonts (ADR-0029) | agent:claude | claude/8-design-foundation | In review; next: settings windows, theme picker |
 | #8 | The design's motion: each screen builds itself as it shows (ADR-0029) | agent:claude | claude/8-design-motion | In review; waits for the owner's go-ahead |
-| #39 | General commands, slice 1: open websites and run shortcuts by name; the model maps other commands to one ability (ADR-0031) | agent:claude | claude/39-general-commands | Merged; next slices: files and folders, app automation catalogue, app links |
+| #39 | General commands, slice 1: open websites and run shortcuts by name; the model maps other commands to one ability (ADR-0031) | agent:claude | claude/39-general-commands | Merged |
+| #43 | General commands, slice 2: files and folders by name, the app automation catalogue (Music, Notes, Safari, Finder) (ADR-0031) | agent:claude | claude/43-files-and-automation | Merged; not yet tried live (Automation prompts, Spotlight picks); next: app links, multi-step plans |
 | #30 | Setup wizard, stage 4 of 4: models download during setup, the tune-up (ADR-0030); 13 screens (stages 1–3: #24, #26, #28) | agent:claude | claude/30-setup-tuneup | Merged; the owner tries the wizard live next |
 | #223 | Hand complex, non-personal questions to Claude or ChatGPT (ADR-0017) | agent:claude | merged (PRs #225, #236) | ChatGPT works on the owner's plan (no key); Claude needs a key or Claude Code installed |
 

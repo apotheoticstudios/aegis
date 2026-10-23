@@ -95,22 +95,9 @@ extension PanelModel {
             end run
             """
         let arguments = draft.channel == .email ? [draft.handle, draft.subject ?? "", draft.text] : [draft.handle, draft.text]
-        let sent: Bool = await withCheckedContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            process.arguments = ["-e", script] + arguments
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            process.terminationHandler = { continuation.resume(returning: $0.terminationStatus == 0) }
-            do {
-                try process.run()
-            } catch {
-                process.terminationHandler = nil
-                continuation.resume(returning: false)
-            }
-        }
-        return sent ? nil : "It didn't send. Check that Aegis may control \(draft.channel == .email ? "Mail" : "Messages") "
-            + "(Privacy & Security › Automation), then try again."
+        let app = draft.channel == .email ? "Mail" : "Messages"
+        return await osascript(script, arguments) ? nil
+            : "It didn't send. Check that Aegis may control \(app) (Privacy & Security › Automation), then try again."
     }
 
     static func payload(_ draft: MessageDraft, verb: ActionVerb) -> ActionPayload {
