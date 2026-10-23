@@ -35,6 +35,8 @@ final class WakeListener {
     @ObservationIgnored var interruptSpeech: () -> Void = {}
     /// The words heard so far of a spoken question, for CHAT's live line; empty when none is being spoken.
     @ObservationIgnored var hearing: (String) -> Void = { _ in }
+    /// The owner stopped talking: the question is being finished and sent.
+    @ObservationIgnored var stoppedTalking: () -> Void = {}
     /// False on unsupported devices: never interpret raw speaker echo as an owner interruption.
     @ObservationIgnored var echoCancellationReady = false
     @ObservationIgnored private var segmentForInterruption = false
@@ -70,6 +72,12 @@ final class WakeListener {
     /// True from speech start until its words are in: one utterance at a time.
     @ObservationIgnored private var segmentOpen = false
     @ObservationIgnored private var segmentEnded = false
+    /// The question's words so far and when they last changed: once they stop, the owner has stopped talking.
+    @ObservationIgnored private var lastWords = ""
+    @ObservationIgnored private var wordsChangedAt: TimeInterval?
+    /// How long the words must stay unchanged. The level gate alone missed the end in rooms with steady noise and
+    /// ran every question to its 12-second cap.
+    private static let wordsSettle: TimeInterval = 1.2
     @ObservationIgnored private var ticker: Task<Void, Never>?
     @ObservationIgnored private var wasSpeaking = false
     /// Bounds an individual recognition session without expiring the conversation.
@@ -333,6 +341,10 @@ final class WakeListener {
             perform(window.heard(at: time))
         }
         wasSpeaking = speaking
+        if segmentOpen, !segmentEnded, !segmentForInterruption, let changed = wordsChangedAt, time - changed >= Self.wordsSettle {
+            log.notice("wake: words settled")
+            endSegment()
+        }
         if segmentOpen, let since = segmentStartedAt {
             if capturePreparing, time - since > 10, !retriedCapture {
                 DiagnosticLog.shared.record(.speechSetupFailed)
@@ -362,6 +374,8 @@ extension WakeListener {
         segmentOpen = true
         segmentStartedAt = now
         segmentEnded = false
+        lastWords = ""
+        wordsChangedAt = nil
         retriedCapture = false
         audio.beginCapture()
         DiagnosticLog.shared.record(.captureStarted)
@@ -397,7 +411,9 @@ extension WakeListener {
     }
 
     private func endSegment() {
+        guard !segmentEnded else { return }
         segmentEnded = true
+        stoppedTalking()
         audio.end()
         DiagnosticLog.shared.record(.captureEnded)
         if let capture {
@@ -507,6 +523,10 @@ extension WakeListener {
             segment(text, id: id)
         } else if !segmentForInterruption, let text {
             hearing(text)
+            if text != lastWords {
+                lastWords = text
+                wordsChangedAt = time ?? now
+            }
         }
     }
 }

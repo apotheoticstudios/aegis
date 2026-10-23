@@ -45,6 +45,11 @@ struct ChatScreen: View {
         return String(text.prefix(Int((Double(min(count, spoken)) / Double(spoken) * Double(text.count)).rounded())))
     }
 
+    /// The reply so far, or "thinking…" until its first words.
+    private func thinkingOr(_ reply: String) -> String {
+        reply.isEmpty ? "thinking…" : reply
+    }
+
     /// What the owner is saying right now, from the mic button or after "Hey Aegis", as it's recognised.
     private var liveWords: String? {
         if case let .listening(words) = model.voice.state, !words.isEmpty {
@@ -75,13 +80,17 @@ struct ChatScreen: View {
                             HUDChatLine(who: "you", text: asked)
                             HUDChatLine(
                                 who: name,
-                                text: model.handingOff.map { "asking \($0.name)…" } ?? said(model.partialAnswer) ?? model.partialAnswer,
+                                text: model.handingOff
+                                    .map { "asking \($0.name)…" } ?? thinkingOr(said(model.partialAnswer) ?? model.partialAnswer),
                                 aegis: true,
                                 writing: true
                             )
                         }
                         if let live = liveWords {
-                            HUDChatLine(who: "you", text: live, writing: true)
+                            HUDChatLine(who: "you", text: live, writing: !model.voice.heardAll)
+                            if model.voice.heardAll {
+                                HUDChatLine(who: name, text: "thinking…", aegis: true, writing: true)
+                            }
                         }
                         taskControls
                         Color.clear.frame(height: 1).id("end")
