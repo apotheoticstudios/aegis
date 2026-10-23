@@ -5,9 +5,6 @@ import SwiftUI
 /// The setup wizard on screen (#26): AegisKit's wizard, saved after every change so setup resumes where it stopped.
 @MainActor @Observable
 final class SetupModel {
-    /// The screens built so far; the others join as they're built (the plan's stages 3 and 4).
-    static let built: [SetupStep] = [.welcome, .mac, .storage, .schedule, .permissions, .ready]
-
     var wizard: SetupWizard {
         didSet { save() }
     }
@@ -19,7 +16,6 @@ final class SetupModel {
         var wizard = (try? file?.load()) ?? SetupWizard(mac: mac)
         // Free space changes between runs; the rest was detected (or corrected by the owner) before.
         wizard.mac.diskFreeBytes = mac.diskFreeBytes
-        wizard.steps = Self.built
         self.wizard = wizard
     }
 
@@ -51,7 +47,7 @@ enum SetupWindow {
     private static var window: NSWindow?
 
     /// Shows setup where it stopped, or from the start when `again` (from the menu); `done` runs when it finishes.
-    static func show(service: any CoreService, again: Bool, done: @escaping () -> Void) {
+    static func show(_ app: SetupApp, again: Bool, done: @escaping () -> Void) {
         let setup = SetupModel()
         if again {
             setup.wizard.restart()
@@ -68,9 +64,10 @@ enum SetupWindow {
         created.hasShadow = true
         created.contentView = NSHostingView(rootView: SetupView(
             setup: setup,
+            app: app,
             finish: {
                 let minutes = setup.wizard.briefMinutes
-                Task { _ = await service.handle(.setBriefTime(minutes: minutes)) }
+                Task { _ = await app.model.service.handle(.setBriefTime(minutes: minutes)) }
                 close()
                 done()
             },
@@ -91,8 +88,10 @@ enum SetupWindow {
 /// for the rest" and Next along the bottom (DESIGN.md "Wizard rules").
 struct SetupView: View {
     @Bindable var setup: SetupModel
+    let app: SetupApp
     let finish: () -> Void
     let later: () -> Void
+    @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
     var body: some View {
         let wizard = setup.wizard
@@ -106,7 +105,7 @@ struct SetupView: View {
             .frame(width: 220)
             Button("Later", action: later).buttonStyle(HUDChipStyle(muted: true)).help("Close setup; it resumes here next time")
         } content: {
-            SetupScreen(setup: setup).id(wizard.current)
+            SetupScreen(setup: setup, app: app).id(wizard.current)
         } bottom: {
             HStack(spacing: HUD.space4) {
                 if wizard.canGoBack {
@@ -137,5 +136,13 @@ struct SetupView: View {
         .background(HUDGround())
         .clipShape(HUDCut(kind: .panel, cut: HUD.chamferLg))
         .environment(\.colorScheme, .dark)
+        .environment(\.hudTheme, theme)
     }
+}
+
+/// What the wizard's screens change in the running app: the panel's model, the wake listener and the shortcut.
+struct SetupApp {
+    let model: PanelModel
+    let wake: WakeListener
+    let hotKey: String?
 }

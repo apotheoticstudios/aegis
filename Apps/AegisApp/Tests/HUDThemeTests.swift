@@ -1,4 +1,5 @@
 @testable import Aegis
+import AegisKit
 import AppKit
 import Foundation
 import SwiftUI
@@ -106,9 +107,10 @@ final class PanelPreviewTests: XCTestCase {
             throw XCTSkip("Set AEGIS_PANEL_PREVIEW to a folder to draw the setup wizard.")
         }
         let setup = SetupModel(file: nil, mac: SetupTests.sampleMac)
-        for step in SetupModel.built {
+        let app = SetupApp(model: PanelModel(service: SampleCoreService(), actions: nil), wake: WakeListener(), hotKey: "⌥Space")
+        for step in SetupStep.offered {
             let url = URL(fileURLWithPath: folder).appendingPathComponent("Setup-\(step.rawValue).png")
-            try await draw(SetupView(setup: setup, finish: {}, later: {}), to: url)
+            try await draw(SetupView(setup: setup, app: app, finish: {}, later: {}), to: url)
             setup.wizard.next()
         }
     }

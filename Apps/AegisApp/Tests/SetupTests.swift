@@ -25,7 +25,7 @@ final class SetupTests: XCTestCase {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("setup-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
         let setup = SetupModel(file: SetupFile(url: url), mac: Self.sampleMac)
-        XCTAssertEqual(setup.wizard.steps, SetupModel.built)
+        XCTAssertEqual(setup.wizard.steps, SetupStep.offered)
         setup.wizard.next()
         setup.wizard.next()
         setup.wizard.storageGB = 60
@@ -36,7 +36,7 @@ final class SetupTests: XCTestCase {
         XCTAssertEqual(resumed.wizard.current, .storage)
         XCTAssertEqual(resumed.wizard.storageGB, 60)
         XCTAssertEqual(resumed.wizard.mac.diskFreeBytes, 200_000_000_000, "free space is read again")
-        XCTAssertEqual(resumed.wizard.steps, SetupModel.built)
+        XCTAssertEqual(resumed.wizard.steps, SetupStep.offered)
     }
 
     func testBriefTimeReadsInTheMacsFormat() {

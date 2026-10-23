@@ -4,6 +4,7 @@ import SwiftUI
 /// The wizard's screens (DESIGN.md "Setup wizard"), each one category, the recommended answer already chosen.
 struct SetupScreen: View {
     @Bindable var setup: SetupModel
+    let app: SetupApp
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -13,7 +14,14 @@ struct SetupScreen: View {
             case .storage: StorageScreen(setup: setup)
             case .schedule: ScheduleScreen(setup: setup)
             case .permissions: PermissionsScreen()
-            default: ReadyScreen(setup: setup)
+            case .sources: SourcesScreen(model: app.model)
+            case .privacy: PrivacyScreen()
+            case .personality: PersonalityScreen(model: app.model)
+            case .voice: VoiceScreen(setup: setup, model: app.model, wake: app.wake)
+            case .interface: InterfaceScreen(hotKey: app.hotKey)
+            case .silence: SilenceScreen(model: app.model)
+            // Home, Control and Tune-up aren't offered until their features exist (#24).
+            case .home, .control, .tuneUp, .ready: ReadyScreen(setup: setup, app: app)
             }
         }
         .frame(maxWidth: 760, alignment: .leading)
@@ -172,6 +180,8 @@ private struct PermissionsScreen: View {
 
 private struct ReadyScreen: View {
     @Bindable var setup: SetupModel
+    let app: SetupApp
+    @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
     var body: some View {
         let wizard = setup.wizard
@@ -179,6 +189,11 @@ private struct ReadyScreen: View {
         HUDSection(title: "Ready", first: true, linked: false) {
             SetupLine("\(wizard.storageGB) GB assigned · brief ready by \(SetupText.time(wizard.briefMinutes))")
             SetupLine("\(granted) of \(Permission.allCases.count) permissions granted · runs \(SetupText.model(wizard.mac.memoryBytes))")
+            let personality = app.model.personality
+            SetupLine(
+                "\(personality.style.title) personality · “Hey \(personality.name)” \(app.wake.enabled ? "on" : "off") · "
+                    + "\(theme.title) theme"
+            )
             if granted < Permission.allCases.count {
                 SetupLine("Aegis works with what it's allowed; go Back to grant the rest any time.", muted: true)
             }
@@ -188,7 +203,7 @@ private struct ReadyScreen: View {
 }
 
 /// A line of the wizard's text.
-private struct SetupLine: View {
+struct SetupLine: View {
     let text: String
     var tone = HUD.ink
 
@@ -203,7 +218,7 @@ private struct SetupLine: View {
 }
 
 /// One of a few choices: the chosen one lit.
-private struct SetupChoice: View {
+struct SetupChoice: View {
     let title: String
     let chosen: Bool
     let action: () -> Void

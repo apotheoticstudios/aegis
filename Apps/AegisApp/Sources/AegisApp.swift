@@ -105,7 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     /// The setup wizard: on first launch until it's finished, and from the menu to run it again.
     func showSetup(again: Bool) {
-        SetupWindow.show(service: model.service, again: again) { [weak self] in self?.panel.show() }
+        SetupWindow.show(SetupApp(model: model, wake: wake, hotKey: hotKeyLabel), again: again) { [weak self] in
+            self?.panel.show()
+        }
     }
 
     func togglePanel() {
