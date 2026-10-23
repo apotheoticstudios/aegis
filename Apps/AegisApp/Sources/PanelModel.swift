@@ -412,7 +412,6 @@ final class PanelModel {
     }
 }
 
-/// One line of the TODAY section: a time (or ALL DAY, DUE, OVERDUE), a title and an optional place.
 /// Applying a plain-language rule (#179, #185), apart from the main body.
 extension PanelModel {
     /// The owner clicked the proposal's button.
@@ -561,7 +560,6 @@ enum BriefPresentation {
         }
     }
 
-    /// "FILTERED · 12 hidden · 2 muted"
     static func filteredHeading(hidden: Int, muted: Int) -> String {
         "FILTERED · \(hidden) hidden" + (muted > 0 ? " · \(muted) muted" : "")
     }
@@ -658,7 +656,6 @@ enum BriefPresentation {
         return calendar.date(byAdding: .day, value: 1, to: today) ?? today.addingTimeInterval(86400)
     }
 
-    /// "3 h", "2 d", "20 min": how long someone has waited.
     static func waiting(since: Date, now: Date) -> String {
         let minutes = max(0, Int(now.timeIntervalSince(since) / 60))
         if minutes < 60 {
@@ -670,7 +667,6 @@ enum BriefPresentation {
         return "\(minutes / 1440) d"
     }
 
-    /// Why a question got no answer, in plain words (codes from AegisCore never carry collected text).
     /// Why no reply draft came back, in plain words (#176).
     static func draftMessage(_ code: String) -> String {
         switch code {
