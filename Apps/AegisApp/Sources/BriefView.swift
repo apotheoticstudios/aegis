@@ -37,6 +37,8 @@ struct BriefView: View {
                 screen = .chat
             }
         }
+        // "Hey Aegis" opens on CHAT, where the conversation shows.
+        .onChange(of: model.voice.wakes) { screen = .chat }
         .onChange(of: model.voice.isListening) { _, listening in
             if listening {
                 screen = .chat

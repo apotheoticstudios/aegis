@@ -64,7 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         wake.interruptSpeech = { [weak self] in self?.model.interruptSpeech() }
         wake.hearing = { [weak self] words in self?.model.voice.hearing = words }
         wake.captureFailed = { [weak self] in self?.model.voice.inputFailed() }
-        wake.openPanel = { [weak self] in self?.panel.show() }
+        wake.openPanel = { [weak self] in
+            self?.model.voice.wakes += 1
+            self?.panel.show()
+        }
         panel.visibilityChanged = { [weak self] open in self?.wake.panelChanged(open: open) }
         WorldWindow.shared.openPanel = { [weak self] in self?.panel.show() }
         WorldWindow.shared.talk = { [weak self] in Task { await self?.model.talk() } }

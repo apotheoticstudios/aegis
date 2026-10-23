@@ -43,6 +43,8 @@ final class Voice {
     @ObservationIgnored private let finish = VoiceFinish(rate: Voice.speakingRate)
     /// The words heard so far of a question spoken after "Hey Aegis", shown live in CHAT.
     var hearing = ""
+    /// Counts "Hey Aegis" wakes, so the panel can show CHAT each time.
+    var wakes = 0
     private var speech: Task<Void, Never>?
 
     var playingAudio: Bool {
