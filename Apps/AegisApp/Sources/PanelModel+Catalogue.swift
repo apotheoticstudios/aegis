@@ -6,22 +6,26 @@ import Foundation
 extension PanelModel {
     /// The file or folder the owner named, as a step: open it, or show it in Finder.
     static func found(_ name: String, reveal: Bool) async -> ActionCommand? {
-        guard let path = await file(named: name) else { return nil }
-        return reveal ? .automate(.finderReveal, argument: path) : .openFile(path: path)
+        await foundAll(name, reveal: reveal).first
     }
 
-    /// A file or folder in the owner's home folder by the name they said: a well-known folder, or else the Spotlight
-    /// match used most recently, an exact name first. Spotlight searches names only, never contents; Library is
-    /// allowed (owner's choice), hidden folders and programs aren't.
-    static func file(named spoken: String) async -> String? {
+    /// Every match, best first, for "the other one" (#49).
+    static func foundAll(_ name: String, reveal: Bool) async -> [ActionCommand] {
+        await files(named: name).map { reveal ? .automate(.finderReveal, argument: $0) : .openFile(path: $0) }
+    }
+
+    /// Files or folders in the owner's home folder by the name they said, best first (at most 10): a well-known folder,
+    /// or else Spotlight's matches, exact names first, then the ones used most recently. Spotlight searches names only,
+    /// never contents; Library is allowed (owner's choice), hidden folders and programs aren't.
+    static func files(named spoken: String) async -> [String] {
         let wanted = FileName(spoken)
         let home = URL(fileURLWithPath: NSHomeDirectory())
         if let known = wanted.known {
-            return known.isEmpty ? home.path : home.appendingPathComponent(known).path
+            return [known.isEmpty ? home.path : home.appendingPathComponent(known).path]
         }
         // App tests run inside Aegis: they never search the owner's files.
         let pattern = wanted.name.replacingOccurrences(of: #"[*?]"#, with: "", options: .regularExpression)
-        guard !WorldSidecar.isTestHost, !pattern.isEmpty else { return nil }
+        guard !WorldSidecar.isTestHost, !pattern.isEmpty else { return [] }
         let inside = home.path + "/"
         let matches = await FileSearch().run(NSPredicate(format: "%K LIKE[cd] %@", NSMetadataItemFSNameKey, "*" + pattern + "*"))
             .filter { match in
@@ -41,7 +45,7 @@ extension PanelModel {
             return [url.lastPathComponent, url.deletingPathExtension().lastPathComponent]
                 .contains { $0.caseInsensitiveCompare(wanted.name) == .orderedSame } ? 1 : 0
         }
-        return matches.max { (exact($0.path), $0.used) < (exact($1.path), $1.used) }?.path
+        return matches.sorted { (exact($0.path), $0.used) > (exact($1.path), $1.used) }.prefix(10).map(\.path)
     }
 
     /// The catalogue's fixed scripts. An argument only ever arrives as `item 1 of argv`, never inside the script.

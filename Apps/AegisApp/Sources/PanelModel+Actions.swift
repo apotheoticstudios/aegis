@@ -15,6 +15,10 @@ final class ActionPresence {
     @ObservationIgnored var shortcuts: (names: [String], at: Date)?
     /// A plan's approved steps after the message card it stopped at (#47).
     @ObservationIgnored var planRest: [PlanStep]?
+    /// The owner's last command, for follow-ups (#49).
+    @ObservationIgnored var context: CommandContext?
+    /// The owner asked Aegis something other than a command since; "again" is then the chat's (#49).
+    @ObservationIgnored var chattedSince = false
 }
 
 /// An action shown on a card, waiting for Add or "yes".
@@ -60,6 +64,7 @@ struct PendingAction {
         case .automate(.notesNewNote, _): return "Add"
         case .openWebsite, .openApp, .openFile, .automate(.safariNewTab, _), .automate(.settingsPage, _),
              .automate(.mapsDirections, _), .automate(.mapsSearch, _): return "Open"
+        case .quitApp: return "Quit"
         case .runShortcut, .automate: return "Run"
         default: return "Add"
         }
@@ -98,6 +103,9 @@ extension PanelModel {
         if let skill = await skillAnswer(question) {
             return skill
         }
+        if let followUp = await followUpAnswer(question, origin: origin) {
+            return followUp
+        }
         if let plan = await planAnswer(question, origin: origin) {
             return plan
         }
@@ -106,18 +114,22 @@ extension PanelModel {
         }
         switch command {
         case let .openApp(name):
-            return await named(name, origin: origin)
+            return await named(name, words: question, origin: origin)
         case let .runShortcut(name):
             guard let shortcut = await Self.shortcut(named: name) else {
                 return Self.said("You don't have a shortcut called “\(name)”.")
             }
+            note(question, .runShortcut(name: shortcut), target: name)
             return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
         case let .findFile(name, reveal):
-            guard let found = await Self.found(name, reveal: reveal) else {
+            let all = await Self.foundAll(name, reveal: reveal)
+            guard let found = all.first else {
                 return Self.said("I couldn't find “\(FileName(name).name)” in your home folder.")
             }
+            note(question, found, target: name, candidates: all)
             return await Self.said(ability(found, origin: origin))
-        case .openWebsite, .openFile, .automate:
+        case .openWebsite, .openFile, .automate, .quitApp:
+            note(question, command)
             return await Self.said(ability(command, origin: origin))
         case .removeLast:
             await log(ActionRequest(payload: command.payload, origin: origin), .rejected)
@@ -134,10 +146,53 @@ extension PanelModel {
             }
             return Self.said(text + " Say yes, or press Add.")
         case .reminder, .event:
+            note(question, command)
+            return await Self.said(perform(command, origin: origin))
+        }
+    }
+
+    /// One command the owner asked for, at its tier: a card for reminders and events, the rest through `ability`.
+    private func perform(_ command: ActionCommand, origin: ActionOrigin) async -> String {
+        switch command {
+        case .reminder, .event:
             let request = ActionRequest(payload: command.payload, origin: origin)
             let text = command.summary(calendar: .current)
-            guard await propose(command, request: request, text: text) != nil else { return Self.said("That's not something I can do.") }
-            return Self.said(text + " Say yes, or press Add.")
+            return await propose(command, request: request, text: text) == nil ? "That's not something I can do." : text + " Say yes, or press Add."
+        default:
+            return await ability(command, origin: origin)
+        }
+    }
+
+    /// Remembers the owner's command for a follow-up (#49): their words, what Aegis did and the other matches it found.
+    func note(_ words: String, _ command: ActionCommand?, target: String? = nil, candidates: [ActionCommand] = []) {
+        ActionPresence.shared.context = CommandContext(words: words, command: command, target: target, candidates: candidates, at: Date())
+        ActionPresence.shared.chattedSince = false
+    }
+
+    /// "Open the other one", "the second one", "close it", "show it in Finder", "again", "do the same for X" (#49):
+    /// a follow-up to the owner's own last command, within the conversation's ten minutes. Each becomes a new request
+    /// through the policy, or the owner's own words asked again.
+    func followUpAnswer(_ question: String, origin: ActionOrigin) async -> Answer? {
+        let presence = ActionPresence.shared
+        guard let followUp = FollowUp.parse(question), let context = presence.context, context.isFresh(at: Date()),
+              followUp != .again || !presence.chattedSince
+        else { return nil }
+        switch context.resolve(followUp) {
+        case let .say(text):
+            return Self.said(text)
+        case let .ask(words):
+            return await actionAnswer(words, origin: origin) ?? Self.said("I couldn't do that one.")
+        case let .run(command):
+            // A card still waiting for the last command gives way to the one the owner picked now.
+            if let pending = presence.pending, pending.command == context.command {
+                await cancelAction()
+            }
+            switch followUp {
+            case .other, .pick, .again: presence.context?.command = command
+            default: break
+            }
+            presence.context?.at = Date()
+            return await Self.said(perform(command, origin: origin))
         }
     }
 
@@ -184,6 +239,7 @@ extension PanelModel {
             guard let found = await Self.found(name, reveal: reveal) else { return nil }
             command = found
         }
+        note(question, command)
         return await Self.said(ability(command, origin: .ownerTyped, guessed: true))
     }
 
@@ -223,7 +279,7 @@ extension PanelModel {
     /// Runs one approved command: whether it worked, and what to say.
     func execute(_ command: ActionCommand) async -> (Bool, String) {
         switch command {
-        case .runShortcut, .openWebsite, .openApp, .openFile, .automate:
+        case .runShortcut, .openWebsite, .openApp, .openFile, .automate, .quitApp:
             return await Self.run(command)
         case let .moveLast(date, allDay):
             let failure = await Self.move(to: date, allDay: allDay)
@@ -267,14 +323,19 @@ extension PanelModel {
 
     /// "Open X": an app; else one of the owner's shortcuts by its exact name ("run Work", ADR-0031); else a file or
     /// folder in the home folder ("open Downloads", "open Budget.xlsx", #43). Nil when it's none of them.
-    private func named(_ name: String, origin: ActionOrigin) async -> Answer? {
-        if let app = Self.application(named: name) {
+    private func named(_ name: String, words: String, origin: ActionOrigin) async -> Answer? {
+        let apps = Self.applications(named: name).map { ActionCommand.openApp(name: $0.deletingPathExtension().lastPathComponent) }
+        if let app = Self.application(named: name), let first = apps.first {
+            note(words, first, target: name, candidates: apps)
             return await Self.said(openApp(app, name: name, origin: origin))
         }
         if let shortcut = await Self.shortcut(named: name) {
+            note(words, .runShortcut(name: shortcut), target: name)
             return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
         }
-        guard let found = await Self.found(name, reveal: false) else { return nil }
+        let files = await Self.foundAll(name, reveal: false)
+        guard let found = files.first else { return nil }
+        note(words, found, target: name, candidates: files)
         return await Self.said(ability(found, origin: origin))
     }
 
@@ -304,6 +365,11 @@ extension PanelModel {
 
     /// An app by name in the usual folders: an exact name first, then one that starts with it.
     static func application(named name: String) -> URL? {
+        applications(named: name).first
+    }
+
+    /// Every app by that name, exact names first, then ones that start with it (#49).
+    static func applications(named name: String) -> [URL] {
         let aliases = [
             "email": "mail", "my email": "mail", "emails": "mail", "texts": "messages", "my messages": "messages",
             "browser": "safari", "the browser": "safari", "web browser": "safari", "settings": "system settings",
@@ -318,7 +384,7 @@ extension PanelModel {
                 .map { URL(fileURLWithPath: folder).appendingPathComponent($0) }
         }
         let base = { (url: URL) in url.deletingPathExtension().lastPathComponent.lowercased() }
-        return apps.first { base($0) == wanted } ?? apps.first { base($0).hasPrefix(wanted) && wanted.count >= 3 }
+        return apps.filter { base($0) == wanted } + apps.filter { base($0) != wanted && base($0).hasPrefix(wanted) && wanted.count >= 3 }
     }
 
     // MARK: - Websites, shortcuts, apps, files and the catalogue (ADR-0031)
@@ -342,6 +408,15 @@ extension PanelModel {
             return NSWorkspace.shared.open(url) ? (true, "Opening “\(url.lastPathComponent)”.") : (false, "I couldn't open that.")
         case let .automate(entry, argument):
             return await automate(entry, argument)
+        case let .quitApp(name):
+            // Never Aegis itself or Finder; each app asks about unsaved work itself.
+            let running = NSWorkspace.shared.runningApplications.filter { app in
+                app.bundleIdentifier != Bundle.main.bundleIdentifier && app.bundleIdentifier != "com.apple.finder"
+                    && [app.localizedName, app.bundleURL?.deletingPathExtension().lastPathComponent]
+                    .contains { $0?.caseInsensitiveCompare(name) == .orderedSame }
+            }
+            guard !running.isEmpty else { return (true, "\(name) isn't open.") }
+            return running.map { $0.terminate() }.contains(true) ? (true, "Quitting \(name).") : (false, "\(name) didn't quit.")
         default:
             return (false, "That's not something I can do.")
         }

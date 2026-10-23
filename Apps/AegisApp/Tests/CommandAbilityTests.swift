@@ -20,6 +20,8 @@ final class CommandAbilityTests: XCTestCase {
     override func tearDown() async throws {
         ActionPresence.shared.pending = nil
         ActionPresence.shared.shortcuts = nil
+        ActionPresence.shared.context = nil
+        ActionPresence.shared.chattedSince = false
         try? FileManager.default.removeItem(at: folder)
     }
 
@@ -203,6 +205,69 @@ extension CommandAbilityTests {
         XCTAssertEqual(core.asked, ["start my work day"])
         XCTAssertEqual(ActionPresence.shared.pending?.plan.map(\.guessed), [true, false])
         XCTAssertEqual(try file.load().first?.decision.tier, .confirm)
+    }
+}
+
+/// Follow-ups (#49): only cards and refusals run here, never an app, file or script on the owner's Mac.
+extension CommandAbilityTests {
+    func testTheOtherOneReplacesTheWaitingCard() async throws {
+        let model = model()
+        let sam = ActionCommand.reminder(title: "Call Sam", due: nil)
+        let samLee = ActionCommand.reminder(title: "Call Sam Lee", due: nil)
+        _ = await model.actionAnswer("remind me to call Sam")
+        XCTAssertEqual(ActionPresence.shared.context?.command, sam)
+        ActionPresence.shared.context = CommandContext(words: "remind me to call Sam", command: sam, candidates: [sam, samLee], at: Date())
+        let other = await model.actionAnswer("no, the other one")
+        XCTAssertEqual(other?.text, "Add the reminder “Call Sam Lee”? Say yes, or press Add.")
+        XCTAssertEqual(ActionPresence.shared.pending?.command, samLee)
+        XCTAssertEqual(ActionPresence.shared.context?.command, samLee)
+        XCTAssertEqual(
+            try file.load().map(\.outcomeCode),
+            [.proposed, .awaitingConfirmation, .cancelled, .proposed, .awaitingConfirmation]
+        )
+        let back = await model.actionAnswer("the first one")
+        XCTAssertEqual(back?.text, "Add the reminder “Call Sam”? Say yes, or press Add.")
+    }
+
+    func testFollowUpsThatCannotRunSaySo() async throws {
+        let model = model()
+        model.note("open my Budget spreadsheet", .openFile(path: "/synthetic/home/Budget.numbers"), target: "my Budget spreadsheet")
+        let close = await model.actionAnswer("close it")
+        XCTAssertEqual(close?.text, "I can't close one file yet: press ⌘W in it.")
+        let other = await model.actionAnswer("the other one")
+        XCTAssertEqual(other?.text, "That was the only one I found.")
+        model.note("open Spotify", .openApp(name: "Spotify"))
+        let reveal = await model.actionAnswer("show it in Finder")
+        XCTAssertEqual(reveal?.text, "That isn't a file or folder.")
+        XCTAssertTrue(try file.load().isEmpty)
+    }
+
+    func testTheSameForSomethingElseAsksTheOwnersWordsAgain() async {
+        let model = model()
+        model.note("remind me to call Sam", .reminder(title: "Call Sam", due: nil), target: "Sam")
+        let same = await model.actionAnswer("do the same for Alex")
+        XCTAssertEqual(same?.text, "Add the reminder “Call Alex”? Say yes, or press Add.")
+        XCTAssertEqual(ActionPresence.shared.context?.words, "remind me to call Alex")
+    }
+
+    func testFollowUpsEndWithTheConversation() async throws {
+        let model = model()
+        let sam = ActionCommand.reminder(title: "Call Sam", due: nil)
+        ActionPresence.shared.context = CommandContext(
+            words: "remind me to call Sam", command: sam, at: Date().addingTimeInterval(-CommandContext.lifetime)
+        )
+        let stale = await model.actionAnswer("again")
+        XCTAssertNil(stale)
+        model.note("remind me to call Sam", sam)
+        ActionPresence.shared.chattedSince = true
+        let afterChat = await model.actionAnswer("again")
+        XCTAssertNil(afterChat, "after a chat question, “again” is the chat's")
+        ActionPresence.shared.chattedSince = false
+        let again = await model.actionAnswer("do it again")
+        XCTAssertEqual(again?.text, "Add the reminder “Call Sam”? Say yes, or press Add.")
+        model.endVoiceConversation()
+        XCTAssertNil(ActionPresence.shared.context)
+        XCTAssertTrue(try file.load().allSatisfy { $0.domain == .reminder })
     }
 }
 

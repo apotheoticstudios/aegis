@@ -131,6 +131,14 @@ extension PanelModel {
         }
     }
 
+    /// Ends the spoken conversation at the owner's request, without dismissing unfinished work; CHAT keeps its transcript.
+    func endVoiceConversation() {
+        guard pendingTask == nil, runningTask == nil else { return }
+        // Follow-ups end with the conversation (#49).
+        ActionPresence.shared.context = nil
+        clearAnswer()
+    }
+
     /// The panel closed: nothing listens or speaks while it's closed (silent rule).
     func panelClosed() {
         // The globe and its server live only for this open panel session.

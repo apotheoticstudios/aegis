@@ -24,6 +24,7 @@ extension PanelModel {
         case let .failure(problem):
             return Self.said(problem.message)
         case let .success(match):
+            note(question, nil, target: command.candidates.first { $0.body == match.body }?.name)
             draft = MessageDraft(
                 channel: command.channel,
                 name: match.name,

@@ -17,7 +17,12 @@ extension PanelModel {
             if let plan = await worldPlanAnswer(question) {
                 return plan
             }
-            return await commandPlanAnswer(question)
+            guard let command = await commandPlanAnswer(question) else {
+                // Not a command: "again" is now the chat's own (#49).
+                ActionPresence.shared.chattedSince = true
+                return nil
+            }
+            return command
         }
         let service = service
         let text = await WorldWindow.shared.run(command) {

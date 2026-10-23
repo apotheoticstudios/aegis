@@ -415,12 +415,6 @@ final class PanelModel {
 /// One line of the TODAY section: a time (or ALL DAY, DUE, OVERDUE), a title and an optional place.
 /// Applying a plain-language rule (#179, #185), apart from the main body.
 extension PanelModel {
-    /// Ends the spoken conversation at the owner's request, without dismissing unfinished work; CHAT keeps its transcript.
-    func endVoiceConversation() {
-        guard pendingTask == nil, runningTask == nil else { return }
-        clearAnswer()
-    }
-
     /// The owner clicked the proposal's button.
     func apply(_ rule: RuleProposal) async {
         proposal = nil

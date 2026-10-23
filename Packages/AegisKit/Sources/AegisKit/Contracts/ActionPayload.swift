@@ -11,6 +11,8 @@ public enum ActionDomain: String, Codable, Sendable, CaseIterable {
 /// name of one the owner has (ADR-0031). Forbidden operations are representable so the policy can reject and audit them.
 public enum ActionVerb: String, Codable, Sendable, CaseIterable {
     case read, open, create, send, edit, move, delete, run
+    /// Quitting an app (#49).
+    case close
     case payment, purchase, moneyTransfer, changePassword, accessCredentials
 }
 

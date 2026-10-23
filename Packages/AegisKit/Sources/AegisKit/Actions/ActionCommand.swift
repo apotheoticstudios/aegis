@@ -21,6 +21,8 @@ public enum ActionCommand: Sendable, Equatable {
     case openFile(path: String)
     /// "Pause the music", "make a note called Groceries" (#43): one entry from the app automation catalogue.
     case automate(AppAutomation, argument: String)
+    /// "Close it" (#49): quit an app Aegis just opened or controlled; the app asks about unsaved work itself.
+    case quitApp(name: String)
 
     /// The payload the safety policy judges.
     public var payload: ActionPayload {
@@ -35,6 +37,7 @@ public enum ActionCommand: Sendable, Equatable {
         case let .findFile(name, _): .file(path: name, verb: .read)
         case let .openFile(path): .file(path: path, verb: .open)
         case let .automate(entry, argument): .automation(entry, argument: argument)
+        case let .quitApp(name): .app(bundleID: name, verb: .close)
         }
     }
 
@@ -60,6 +63,7 @@ public enum ActionCommand: Sendable, Equatable {
         case let .openFile(name), let .findFile(name, false): "Open “" + URL(fileURLWithPath: name).lastPathComponent + "”?"
         case let .findFile(name, true): AppAutomation.finderReveal.summary(name)
         case let .automate(entry, argument): entry.summary(argument)
+        case let .quitApp(name): "Quit \(name)?"
         }
     }
 

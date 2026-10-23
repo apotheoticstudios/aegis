@@ -50,7 +50,7 @@ public enum ActionPolicy {
 
     private static let supported: [ActionDomain: Set<ActionVerb>] = [
         .message: [.read, .open, .send], .home: [.read, .open, .edit],
-        .app: [.read, .open, .create, .edit, .move, .send], .file: [.read, .open, .create, .edit, .move],
+        .app: [.read, .open, .create, .edit, .move, .send, .close], .file: [.read, .open, .create, .edit, .move],
         .calendar: [.read, .open, .create, .edit], .reminder: [.read, .open, .create, .edit],
         .system: [.read, .edit], .shortcut: [.run], .web: [.open],
     ]
@@ -86,7 +86,8 @@ public enum ActionPolicy {
         if payload.verb == .send {
             return ActionDecision(tier: .confirmTwice, reasonCodes: [.outwardFacing])
         }
-        return ActionDecision(tier: payload.verb == .open ? .auto : .confirm, reasonCodes: [.reversible])
+        // Opening, and quitting an app (which asks about unsaved work itself, #49), happen at once.
+        return ActionDecision(tier: [.open, .close].contains(payload.verb) ? .auto : .confirm, reasonCodes: [.reversible])
     }
 
     /// App automation only runs, at once (owner's choice, #43); a file that runs code never opens.
