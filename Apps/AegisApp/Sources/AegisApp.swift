@@ -75,8 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             return false
         }
         wake.conversationEnded = { [weak self] in self?.model.endVoiceConversation() }
-        // "Yes" says the moment Aegis starts listening (owner's choice, #311); the voice is warmed at launch so it's quick.
-        wake.acknowledge = { [weak self] in self?.model.voice.speak("Yes") }
+        // "Yes" says the moment Aegis starts listening (owner's choice, #311), from a recording, so the voice itself can
+        // stay unloaded while the panel is closed.
+        wake.acknowledge = { [weak self] in self?.model.voice.acknowledge() }
         wake.ask = { [weak self] question in
             Task { await self?.model.submit(question, spoken: true) }
         }
@@ -87,7 +88,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // App tests run inside Aegis: they must not open the microphone (#305).
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
             Task { [wake] in await wake.start() }
-            model.voice.prepare(enabled: wake.enabled)
         }
         Task { await model.refresh() }
         // The glow: look for a new brief every 5 minutes (a small local request; nothing runs on the model).

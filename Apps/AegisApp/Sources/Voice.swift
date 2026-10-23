@@ -286,14 +286,43 @@ final class Voice {
         return result
     }
 
-    /// The panel opened: prepare the bundled voice in the background.
+    /// The panel opened: prepare the bundled voice in the background, and record its "Yes" for the next "Hey Aegis".
     func prepare(enabled: Bool) {
         guard enabled else { return }
         let previous = voiceSession
         voiceSession = Task { [localSpeech] in
             await previous?.value
+            guard !Task.isCancelled, await localSpeech.prepare(), !Task.isCancelled,
+                  let yes = await localSpeech.audio(for: "Yes") else { return }
+            try? FileManager.default.createDirectory(at: Voice.recordedYes.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? yes.write(to: Voice.recordedYes, options: .atomic)
+        }
+    }
+
+    /// "Yes" in the bundled voice, recorded the last time it loaded and kept in Aegis's folder on this Mac, so "Hey
+    /// Aegis" is answered at once while the voice itself stays unloaded with the panel closed.
+    nonisolated static let recordedYes = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Aegis/yes.wav")
+
+    /// Says "Yes" for "Hey Aegis": the recording when there is one, otherwise the voice (first run).
+    func acknowledge() {
+        guard let yes = try? Data(contentsOf: Self.recordedYes) else {
+            speak("Yes")
+            return
+        }
+        stopSpeaking()
+        speaking = true
+        spokenText = "Yes"
+        speech = Task { [weak self] in
+            guard let self else { return }
+            let played = await finish.play(yes)
             guard !Task.isCancelled else { return }
-            _ = await localSpeech.prepare()
+            if played {
+                speaking = false
+                spokenText = ""
+            } else {
+                speakWithSystem("Yes")
+            }
         }
     }
 
