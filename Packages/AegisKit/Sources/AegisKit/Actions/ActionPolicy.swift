@@ -32,11 +32,20 @@ public enum ActionPolicy {
         .security: .securitySetting, .privacy: .privacySetting, .password: .credentials, .credentials: .credentials,
     ]
 
+    private static let forbiddenShortcutWords: [(String, ActionReasonCode)] = [
+        (#"\bpay(?:s|ing|ment|ments)?\b"#, .payment),
+        (#"\b(?:buy|buying|purchase|order|checkout|check out)\b"#, .purchase),
+        (#"\b(?:transfer|send money|wire money)\b"#, .moneyTransfer),
+        (#"\b(?:delete|erase|remove|trash|wipe|purge|empty (?:the )?(?:trash|bin))\b"#, .deletion),
+        (#"\b(?:passwords?|passcodes?|credentials?|keychain|log ?ins?)\b"#, .credentials),
+        (#"\b(?:firewall|filevault|gatekeeper)\b"#, .securitySetting),
+    ]
+
     private static let supported: [ActionDomain: Set<ActionVerb>] = [
         .message: [.read, .open, .send], .home: [.read, .open, .edit],
         .app: [.read, .open, .create, .edit, .move, .send], .file: [.read, .open, .create, .edit, .move],
         .calendar: [.read, .open, .create, .edit], .reminder: [.read, .open, .create, .edit],
-        .system: [.read, .edit],
+        .system: [.read, .edit], .shortcut: [.run], .web: [.open],
     ]
 
     private static func baseDecision(_ payload: ActionPayload) -> ActionDecision {
@@ -51,6 +60,15 @@ public enum ActionPolicy {
         }
         if payload.verb == .read {
             return ActionDecision(tier: .auto, reasonCodes: [.readOnly])
+        }
+        if case let .shortcut(name, _) = payload {
+            // Aegis can't see inside a shortcut, so its name is held to the never-list (ADR-0031).
+            if let reason = forbiddenShortcutWords
+                .first(where: { name.range(of: $0.0, options: [.regularExpression, .caseInsensitive]) != nil })
+            {
+                return ActionDecision(tier: .never, reasonCodes: [reason.1])
+            }
+            return ActionDecision(tier: .auto, reasonCodes: [.ownerShortcut])
         }
         if case let .home(_, characteristic, _, _) = payload {
             return homeDecision(characteristic)
@@ -75,7 +93,8 @@ public enum ActionPolicy {
         if fields.contains(where: instructionLike) {
             reasons.append(.instructionLikePayload)
         }
-        if fields.contains(where: containsURL) {
+        // A website's own address is the point of the request, not a hazard (ADR-0031).
+        if payload.domain != .web, fields.contains(where: containsURL) {
             reasons.append(.urlPayload)
         }
         return reasons

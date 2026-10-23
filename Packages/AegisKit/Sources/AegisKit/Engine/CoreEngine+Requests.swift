@@ -64,7 +64,7 @@ extension CoreEngine {
             return await sourceEvents(ids)
         case let .schedule(start, end):
             return await scheduleItems(from: start, to: end)
-        case .ask, .prep, .converse, .worldPlan:
+        case .ask, .prep, .converse, .worldPlan, .commandPlan:
             return await answerResponse(request)
         case let .interpret(text):
             return await interpret(text)
@@ -85,6 +85,7 @@ extension CoreEngine {
         case let .converse(question, cloud): await ask(question, cloud: cloud)
         case let .prep(occurrenceID): await prep(occurrenceID)
         case let .worldPlan(question): await worldPlan(question)
+        case let .commandPlan(question, shortcuts): await commandPlan(question, shortcuts: shortcuts)
         default: .refused(code: "unsupported_request")
         }
     }

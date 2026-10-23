@@ -97,6 +97,7 @@ struct FakeCore: CoreService {
         case .ask: .refused(code: "busy")
         case .prep: .refused(code: "busy")
         case .worldPlan: .worldPlan(actions: [], say: nil)
+        case .commandPlan: .commandPlan(nil)
         case .people: .people([])
         case .filtered, .trustSender, .markJunk: .filtered([])
         case .rules, .mute, .unmute, .vip, .unvip, .addKeyword, .removeKeyword: .rules(.empty)

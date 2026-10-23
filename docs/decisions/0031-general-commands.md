@@ -1,0 +1,43 @@
+# ADR-0031: General commands through a closed set of typed abilities
+
+- **Status:** Accepted (owner's design choice, 2026-10-23)
+- **Issue:** #39 (slice 1: websites and shortcuts)
+
+## Context
+
+Every action Aegis can take is hand-written: one parser and one executor each for reminders, events, opening apps and messages. The owner wants Aegis to do almost anything macOS allows, for example "run the Work shortcut" or "open apple.com", without code for each request. ADR-0016's pipeline (owner words → typed request → policy → confirmation → executor → codes-only log) stays. What changes is how words reach a typed request, and which requests exist.
+
+## Options considered
+
+1. Keep hand-writing one action at a time. Safe, but it never reaches "almost anything".
+2. Let the local model write AppleScript, shell commands or URLs with any scheme. That gives reach, but it is arbitrary code from a model, and no policy can judge it.
+3. Hand requests to Siri. macOS has no public way for an app to ask Siri something. The routes are private frameworks (forbidden) or typing into "Type to Siri" through Accessibility, which is fragile and can send the owner's words to Apple's servers. Most of what Siri does in apps comes from App Intents, and those are what Shortcuts runs, so option 4 reaches the same app actions by public means.
+4. A small, closed set of general **abilities**, each a typed `ActionPayload` the policy can judge. Fixed phrases map to them directly. Otherwise the local model picks one ability from a catalogue.
+
+## Decision
+
+Option 4.
+
+| Ability | Payload | Route (public, documented) | Tier |
+| --- | --- | --- | --- |
+| Open an app | `.app(bundleID:, .open)` (existing) | NSWorkspace | auto |
+| Open a website | `.website(url:, .open)` | NSWorkspace opens an http(s) address in the default browser | auto |
+| Run a shortcut | `.shortcut(name:, .run)` | `/usr/bin/shortcuts run <name>` (Apple's command-line tool), exact name from `shortcuts list` | auto (owner's choice); never when the name sounds like paying, buying, ordering, transferring money, deleting or passwords |
+| Open a file or folder (later) | `.file(path:, .open)` (existing) | NSWorkspace | auto, inside the home folder |
+| App automation (later) | one typed case per catalogue entry | Fixed Apple Events per app, typed arguments passed as `argv`, never model-written scripts | per entry |
+| App links (later) | one typed case per catalogue entry | A checked list of URL schemes (for example `maps:`), never arbitrary schemes | per entry |
+
+**Words to ability.** Fixed phrases come first and need no model: "open apple.com", "go to bom.gov.au", "run the Work shortcut", "run Work" (when a shortcut has exactly that name). If nothing else in Aegis takes a command-like request (it starts with run, open, start, go to, turn and similar), the local model picks at most one ability from a catalogue that lists the abilities and the owner's shortcut names (`CoreRequest.commandPlan`, the same pattern as the World view's `worldPlan`, #296). The reply is checked strictly: a known ability; for a shortcut, a name from the list exactly; for a website, an http(s) address with a real host; for an app, a short name. Anything else is dropped and the question is answered as usual.
+
+**AI picks ask first.** A step the model picked is raised to the confirm tier through `ActionOwnerSettings.minimumTier` (settings can only raise). It shows a card with what Aegis worked out ("Open www.bom.gov.au?") and runs on Open or "yes". An address or shortcut name the owner gave goes through at its normal tier.
+
+**Policy changes.** The new domains are `web` and `shortcut`, with the new verb `run`. `ActionPolicy` treats an opened website like an opened app (auto). Its own address doesn't count as a URL hazard, because the address is the point, but the instruction-like check still applies. A shortcut is auto with reason `ownerShortcut`. Aegis can't see inside a shortcut, so its name is checked against the never-list words, and a match is `never` with that category's reason code. The fixed never-list, panel-open rule, hazard raises and codes-only log are unchanged. Text from emails, messages, notifications and web pages still has no path to any of this: only the owner's own panel input is parsed or sent to the model, and the catalogue holds only the owner's shortcut names.
+
+**Network.** Aegis itself makes no new network calls. A website opens in the owner's browser because they asked for it.
+
+## Consequences
+
+- New abilities are added as typed cases with a catalogue line, not as hand-written commands. The model widens the phrasing; it never widens what can run.
+- A shortcut runs with whatever it contains. The owner chose speed over a card for shortcuts they name; the name check catches only obvious never-list shortcuts.
+- Command-like requests that nothing handles cost one short model job before the normal answer.
+- Later slices: files and folders, the app automation catalogue (Automation permission per app, asked by macOS), app links, and multi-step plans shown before they run (DESIGN.md › App control).

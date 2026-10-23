@@ -13,7 +13,12 @@ extension PanelModel {
         guard let command = WorldCommand.parse(
             question, worldOpen: world.isOpen, homeCity: WorldWindow.homeCity, lastPlace: world.recentPlace
         )
-        else { return await worldPlanAnswer(question) }
+        else {
+            if let plan = await worldPlanAnswer(question) {
+                return plan
+            }
+            return await commandPlanAnswer(question)
+        }
         let service = service
         let text = await WorldWindow.shared.run(command) {
             // The next four weeks, a week at a time (the schedule request's limit).

@@ -321,6 +321,8 @@ final class RecordingCore: CoreService, @unchecked Sendable {
             return .refused(code: "busy")
         case .worldPlan:
             return .worldPlan(actions: [], say: nil)
+        case .commandPlan:
+            return .commandPlan(nil)
         case .people:
             return .people([])
         case .filtered, .trustSender, .markJunk:

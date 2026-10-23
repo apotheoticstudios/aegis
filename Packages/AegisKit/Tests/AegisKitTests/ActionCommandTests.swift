@@ -92,7 +92,7 @@ final class ActionFollowUpTests: XCTestCase {
     }
 
     func testYesAndNoAnswerTheCard() {
-        for line in ["Yes", "yes, add it", "Go ahead.", "do it", "OK"] {
+        for line in ["Yes", "yes, add it", "Go ahead.", "do it", "OK", "run it", "yes, open it"] {
             XCTAssertEqual(ActionReply.parse(line), true, line)
         }
         for line in ["no", "Cancel", "never mind", "nah"] {

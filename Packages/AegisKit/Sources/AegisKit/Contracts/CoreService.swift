@@ -56,6 +56,10 @@ public enum CoreRequest: Codable, Sendable, Hashable {
     /// At most `maxQuestionScalars`; never collected content, conversation memory or a cloud hand-off.
     /// Replies `worldPlan`. Refusals: bad_question, too_long, unavailable, invalid_plan, or model status codes.
     case worldPlan(question: String)
+    /// Map the owner's own command to one ability (ADR-0031, additive): a shortcut from `shortcuts` (the owner's own
+    /// names, at most `CommandPlan.maxShortcuts` of `CommandPlan.maxNameScalars`), a website or an app. Never acts;
+    /// never collected content. Replies `commandPlan`. Refusals: bad_question, too_long, unavailable, or model codes.
+    case commandPlan(question: String, shortcuts: [String])
     /// Recent contact with this meeting's attendees (#184, additive, read-only); replies with `answer`.
     /// Refusals: unknown_occurrence, busy, Ask's rejection codes, model status, or unavailable.
     case prep(occurrenceID: String)
@@ -170,6 +174,8 @@ public enum CoreResponse: Codable, Sendable, Hashable {
     /// Checked God's Eye View actions in order (#296, additive), at most `WorldActions.maxActions`.
     /// Empty actions means this isn't a globe request. `say` is an optional short sentence for the owner.
     case worldPlan(actions: [WorldAction], say: String?)
+    /// The checked ability for a `commandPlan` (ADR-0031, additive); nil when none fits.
+    case commandPlan(CommandStep?)
     /// A checked suggestion for the owner to copy (#176, additive); never an action.
     case draft(ReplyDraft)
     /// A visibility rule awaiting the owner's click (#179, additive); never applied by interpretation.

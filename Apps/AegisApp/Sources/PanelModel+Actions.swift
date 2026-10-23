@@ -11,11 +11,13 @@ final class ActionPresence {
     static let shared = ActionPresence()
     var pending: PendingAction?
     @ObservationIgnored var lastAdded: AddedItem?
+    /// The owner's shortcut names and when they were read (ADR-0031).
+    @ObservationIgnored var shortcuts: (names: [String], at: Date)?
 }
 
 /// An action shown on a card, waiting for Add or "yes".
 struct PendingAction {
-    /// A reminder, event, move or app; nil for a message.
+    /// A reminder, event, move, app, website or shortcut; nil for a message.
     let command: ActionCommand?
     var message: MessageDraft?
     let request: ActionRequest
@@ -24,19 +26,32 @@ struct PendingAction {
     /// Confirmations the policy's tier asks for: two to send a message (#276), one otherwise.
     var needed = 1
     var given = 0
+    /// The local model picked it, so the policy was asked for at least one confirmation (ADR-0031).
+    var guessed = false
 
-    init(command: ActionCommand?, message: MessageDraft? = nil, request: ActionRequest, text: String, at: Date, needed: Int = 1) {
+    init(
+        command: ActionCommand?, message: MessageDraft? = nil, request: ActionRequest, text: String, at: Date, needed: Int = 1,
+        guessed: Bool = false
+    ) {
         self.command = command
         self.message = message
         self.request = request
         self.text = text
         self.at = at
         self.needed = needed
+        self.guessed = guessed
     }
 
     /// The card's button.
     var button: String {
-        message != nil ? (given == 0 ? "Send" : "Send now") : "Add"
+        if message != nil {
+            return given == 0 ? "Send" : "Send now"
+        }
+        switch command {
+        case .runShortcut: return "Run"
+        case .openWebsite, .openApp: return "Open"
+        default: return "Add"
+        }
     }
 }
 
@@ -77,8 +92,19 @@ extension PanelModel {
         }
         switch command {
         case let .openApp(name):
-            guard let app = Self.application(named: name) else { return nil }
-            return await Self.said(openApp(app, name: name, origin: origin))
+            if let app = Self.application(named: name) {
+                return await Self.said(openApp(app, name: name, origin: origin))
+            }
+            // "Run Work": one of the owner's shortcuts, by its exact name (ADR-0031).
+            guard let shortcut = await Self.shortcut(named: name) else { return nil }
+            return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
+        case let .runShortcut(name):
+            guard let shortcut = await Self.shortcut(named: name) else {
+                return Self.said("You don't have a shortcut called “\(name)”.")
+            }
+            return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
+        case .openWebsite:
+            return await Self.said(ability(command, origin: origin))
         case .removeLast:
             await log(ActionRequest(payload: command.payload, origin: origin), .rejected)
             return Self.said("I can't delete things: that's on my never-list. You can remove it in Reminders or Calendar.")
@@ -101,13 +127,14 @@ extension PanelModel {
         }
     }
 
-    /// The owner pressed Add.
+    /// The owner pressed Add (or Open, Run, Send).
     func confirmAction() async {
+        let pressed = ActionPresence.shared.pending?.button ?? "Add"
         let done = await performPending()
         let more = await resumeSkill()
         let reply = more.isEmpty ? done : done + " " + more
-        askState = .answered(question: "Add", answer: Self.said(reply))
-        remember(Exchange(question: "Add", answer: Self.said(reply), failure: nil))
+        askState = .answered(question: pressed, answer: Self.said(reply))
+        remember(Exchange(question: pressed, answer: Self.said(reply), failure: nil))
         voice.speak(reply)
     }
 
@@ -115,7 +142,23 @@ extension PanelModel {
     func cancelAction() async {
         guard let pending = ActionPresence.shared.pending else { return }
         ActionPresence.shared.pending = nil
-        await log(pending.request, .cancelled)
+        await log(pending.request, .cancelled, guessed: pending.guessed)
+    }
+
+    /// Anything else that sounds like a command (ADR-0031): the local model picks one website, shortcut or app, and
+    /// a card shows what it picked. Nil when it picks nothing, so the question is answered as usual.
+    func commandPlanAnswer(_ question: String) async -> Answer? {
+        guard CommandPlan.looksLikeCommand(question), MemoryCommand.parse(question) == nil,
+              QuickAnswer.answer(question, now: Date(), calendar: .current) == nil
+        else { return nil }
+        let shortcuts = await Self.shortcutNames()
+        guard case let .commandPlan(step?) = await service.handle(.commandPlan(question: question, shortcuts: shortcuts)) else {
+            return nil
+        }
+        if case let .openApp(name) = step.command, Self.application(named: name) == nil {
+            return nil
+        }
+        return await Self.said(ability(step.command, origin: .ownerTyped, guessed: true))
     }
 
     // MARK: - Steps
@@ -143,6 +186,14 @@ extension PanelModel {
             return failure ?? "Sent to \(message.name)."
         }
         guard let command = pending.command else { return "There's nothing waiting to add." }
+        switch command {
+        case .runShortcut, .openWebsite, .openApp:
+            let (worked, said) = await Self.run(command)
+            await log(pending.request, worked ? .succeeded : .failed, guessed: pending.guessed)
+            return said
+        default:
+            break
+        }
         let failure: String? = switch command {
         case let .moveLast(date, allDay):
             await Self.move(to: date, allDay: allDay)
@@ -161,6 +212,29 @@ extension PanelModel {
         }
     }
 
+    /// A website, shortcut or app (ADR-0031): at once at its tier, or a card when the model picked it.
+    private func ability(_ command: ActionCommand, origin: ActionOrigin, guessed: Bool = false) async -> String {
+        let request = ActionRequest(payload: command.payload, origin: origin)
+        let decision = await log(request, .proposed, guessed: guessed)
+        guard decision.allowed else {
+            await log(request, .rejected, guessed: guessed)
+            let never: Set<ActionReasonCode> = [.payment, .purchase, .moneyTransfer, .deletion, .credentials, .securitySetting]
+            return decision.reasonCodes.contains(where: never.contains)
+                ? "That sounds like paying, buying, deleting or passwords, which are on my never-list. You can run it yourself in Shortcuts."
+                : "That's not something I can do."
+        }
+        let text = command.summary(calendar: .current)
+        guard decision.tier == .auto else {
+            let pending = PendingAction(command: command, request: request, text: text, at: Date(), guessed: guessed)
+            ActionPresence.shared.pending = pending
+            await log(request, .awaitingConfirmation, guessed: guessed)
+            return text + " Say yes, or press \(pending.button)."
+        }
+        let (worked, said) = await Self.run(command)
+        await log(request, worked ? .succeeded : .failed, guessed: guessed)
+        return said
+    }
+
     private func openApp(_ app: URL, name: String, origin: ActionOrigin) async -> String {
         let request = ActionRequest(payload: .app(bundleID: Bundle(url: app)?.bundleIdentifier ?? name, verb: .open), origin: origin)
         let decision = await log(request, .proposed)
@@ -172,12 +246,11 @@ extension PanelModel {
         return opened ? "Opening \(app.deletingPathExtension().lastPathComponent)." : "I couldn't open that."
     }
 
+    /// Logs one step; what the model picked asks at least once (ADR-0031).
     @discardableResult
-    func log(_ request: ActionRequest, _ outcome: ActionOutcomeCode) async -> ActionDecision {
-        let decision = ActionPolicy.decision(
-            for: request,
-            settings: .init(panelIsOpen: true, minimumTier: request.payload.verb == .open ? .auto : .confirm)
-        )
+    func log(_ request: ActionRequest, _ outcome: ActionOutcomeCode, guessed: Bool = false) async -> ActionDecision {
+        let automatic = !guessed && [ActionVerb.open, .run].contains(request.payload.verb)
+        let decision = ActionPolicy.decision(for: request, settings: .init(panelIsOpen: true, minimumTier: automatic ? .auto : .confirm))
         try? await actions?.append(ActionLogEntry(time: Date(), request: request, decision: decision, outcomeCode: outcome))
         return decision
     }
@@ -203,6 +276,86 @@ extension PanelModel {
         }
         let base = { (url: URL) in url.deletingPathExtension().lastPathComponent.lowercased() }
         return apps.first { base($0) == wanted } ?? apps.first { base($0).hasPrefix(wanted) && wanted.count >= 3 }
+    }
+
+    // MARK: - Websites, shortcuts and apps (ADR-0031)
+
+    /// Opens or runs it: whether it worked, and what to say.
+    static func run(_ command: ActionCommand) async -> (Bool, String) {
+        switch command {
+        case let .runShortcut(name):
+            return await runShortcut(name)
+        case let .openWebsite(url):
+            let opened = URL(string: url).map { NSWorkspace.shared.open($0) } ?? false
+            return opened ? (true, "Opening " + (URL(string: url)?.host() ?? url) + ".") : (false, "I couldn't open that site.")
+        case let .openApp(name):
+            guard let app = application(named: name) else { return (false, "I couldn't find \(name).") }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            let opened = await (try? NSWorkspace.shared.openApplication(at: app, configuration: configuration)) != nil
+            return opened ? (true, "Opening \(app.deletingPathExtension().lastPathComponent).") : (false, "I couldn't open that.")
+        default:
+            return (false, "That's not something I can do.")
+        }
+    }
+
+    /// Runs one of the owner's shortcuts with Apple's `shortcuts` tool. A long one keeps going after 20 seconds.
+    private static func runShortcut(_ name: String) async -> (Bool, String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
+        process.arguments = ["run", name]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let status: Int32? = await withCheckedContinuation { continuation in
+            let once = ResumeOnce(continuation)
+            process.terminationHandler = { once.resume($0.terminationStatus) }
+            do {
+                try process.run()
+            } catch {
+                return once.resume(-1)
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 20) { once.resume(nil) }
+        }
+        switch status {
+        case 0: return (true, "Done. “\(name)” ran.")
+        case nil: return (true, "“\(name)” is running.")
+        default: return (false, "“\(name)” didn't finish. Open it in Shortcuts to see why.")
+        }
+    }
+
+    /// The owner's shortcut names from `shortcuts list`, read when needed and kept for a minute.
+    static func shortcutNames() async -> [String] {
+        if let kept = ActionPresence.shared.shortcuts, Date().timeIntervalSince(kept.at) < 60 || WorldSidecar.isTestHost {
+            return kept.names
+        }
+        // App tests run inside Aegis: they never read the owner's shortcuts.
+        guard !WorldSidecar.isTestHost else { return [] }
+        let output: Data = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                let process = Process()
+                let pipe = Pipe()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
+                process.arguments = ["list"]
+                process.standardOutput = pipe
+                process.standardError = FileHandle.nullDevice
+                guard (try? process.run()) != nil else { return continuation.resume(returning: Data()) }
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                continuation.resume(returning: process.terminationStatus == 0 ? data : Data())
+            }
+        }
+        let names = String(decoding: output, as: UTF8.self).split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0.unicodeScalars.count <= CommandPlan.maxNameScalars }
+            .prefix(CommandPlan.maxShortcuts)
+        ActionPresence.shared.shortcuts = (Array(names), Date())
+        return Array(names)
+    }
+
+    /// The owner's shortcut with this name, ignoring case.
+    static func shortcut(named name: String) async -> String? {
+        await shortcutNames().first { $0.caseInsensitiveCompare(name) == .orderedSame }
     }
 
     // MARK: - EventKit
@@ -268,5 +421,23 @@ extension PanelModel {
         event.startDate = date
         event.endDate = allDay ? date.addingTimeInterval(86400) : date.addingTimeInterval(length)
         return (try? store.save(event, span: .thisEvent, commit: true)) != nil ? nil : "Your calendar didn't take the change."
+    }
+}
+
+/// Resumes a continuation once: the shortcut finishing or the wait running out, whichever comes first.
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Int32?, Never>?
+
+    init(_ continuation: CheckedContinuation<Int32?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ status: Int32?) {
+        let waiting = lock.withLock {
+            defer { continuation = nil }
+            return continuation
+        }
+        waiting?.resume(returning: status)
     }
 }

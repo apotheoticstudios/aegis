@@ -11,6 +11,10 @@ public enum ActionCommand: Sendable, Equatable {
     case moveLast(to: Date, allDay: Bool)
     /// "Undo that" (#274): deleting is on the never-list, so this only explains.
     case removeLast
+    /// "Run the Work shortcut" (ADR-0031): one of the owner's shortcuts, by the name they said.
+    case runShortcut(name: String)
+    /// "Open apple.com" (ADR-0031): an http(s) address for the owner's browser.
+    case openWebsite(url: String)
 
     /// The payload the safety policy judges.
     public var payload: ActionPayload {
@@ -20,6 +24,8 @@ public enum ActionCommand: Sendable, Equatable {
         case let .openApp(name): .app(bundleID: name, verb: .open)
         case let .moveLast(date, _): .reminder(title: "", due: date, verb: .edit)
         case .removeLast: .reminder(title: "", due: nil, verb: .delete)
+        case let .runShortcut(name): .shortcut(name: name)
+        case let .openWebsite(url): .website(url: url)
         }
     }
 
@@ -38,23 +44,15 @@ public enum ActionCommand: Sendable, Equatable {
                 : Self.when(date, calendar: calendar, locale: locale)) + "?"
         case .removeLast:
             "Remove it?"
+        case let .runShortcut(name):
+            "Run the shortcut “\(name)”?"
+        case let .openWebsite(url):
+            "Open " + url.replacingOccurrences(of: #"^[a-z]+://"#, with: "", options: .regularExpression) + "?"
         }
     }
 
     public static func parse(_ text: String, now: Date, calendar: Calendar) -> ActionCommand? {
-        let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(
-                of: #"^(?:(?:hey|ok|okay)\s+)?aegis[,!.:]?\s*"#,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
-            .replacingOccurrences(
-                of: #"^(?:please |can you |could you |would you )+"#,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
-            .replacingOccurrences(of: #"[\s.!?]+$"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #",?\s*please$"#, with: "", options: [.regularExpression, .caseInsensitive])
+        let line = cleaned(text)
         guard !line.isEmpty, line.count <= 200 else { return nil }
         if let other = followUp(line, now: now, calendar: calendar) {
             return other
@@ -67,6 +65,27 @@ public enum ActionCommand: Sendable, Equatable {
             guard !title.isEmpty else { return nil }
             return .reminder(title: title, due: when?.reminder)
         }
+        return event(line, now: now, calendar: calendar)
+    }
+
+    /// The owner's line without "hey Aegis", "please" or a trailing full stop.
+    static func cleaned(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(
+                of: #"^(?:(?:hey|ok|okay)\s+)?aegis[,!.:]?\s*"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(
+                of: #"^(?:please |can you |could you |would you )+"#,
+                with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(of: #"[\s.!?]+$"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #",?\s*please$"#, with: "", options: [.regularExpression, .caseInsensitive])
+    }
+
+    private static func event(_ line: String, now: Date, calendar: Calendar) -> ActionCommand? {
         if line
             .range(of: #"\b(?:calendar|diary|schedule|appointment|meeting|event)\b"#, options: [.regularExpression, .caseInsensitive]) !=
             nil,
@@ -93,8 +112,17 @@ public enum ActionCommand: Sendable, Equatable {
         return nil
     }
 
-    /// Opening an app, and moving or undoing what Aegis just added.
+    /// Websites, shortcuts and apps, and moving or undoing what Aegis just added.
     private static func followUp(_ line: String, now: Date, calendar: Calendar) -> ActionCommand? {
+        let site = #"^(?:open|go to|visit|take me to|load|pull up|bring up|browse to|navigate to)(?: up)?(?: the)?"#
+            + #"(?: (?:website|site|web ?page|page))? (.+?)(?: in (?:the )?(?:browser|safari|chrome|firefox))?$"#
+        if let address = capture(site, line).flatMap(website) {
+            return .openWebsite(url: address)
+        }
+        let verbs = #"^(?:run|start|do|launch|open|trigger|use|activate) (?:the |my )?"#
+        if let name = capture(verbs + #"shortcut (?:called |named )?(.+)$"#, line) ?? capture(verbs + #"(.+?) shortcut$"#, line) {
+            return .runShortcut(name: name)
+        }
         if let app = capture(#"^(?:open|launch|start|run|bring up) (?:up )?(?:the )?(?:app )?(.+?)(?: app)?$"#, line), app.count <= 40,
            app
            .range(of: #"\b(?:world|globe|view|panel|brief|reminders? for)\b"#, options: [.regularExpression, .caseInsensitive]) ==
@@ -114,6 +142,20 @@ public enum ActionCommand: Sendable, Equatable {
             return .removeLast
         }
         return nil
+    }
+
+    /// "apple.com", "apple dot com/store", "www.bom.gov.au": an http(s) address, or nil when it isn't one.
+    /// File-like endings ("Notes.app", "notes.md") aren't websites.
+    public static func website(_ text: String) -> String? {
+        let spoken = text.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: #"\s+dot\s+"#, with: ".", options: [.regularExpression, .caseInsensitive])
+        let pattern = #"^(?:(https?)://)?((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,24}))(?::\d{1,5})?([/?#][^\s]*)?$"#
+        guard let match = firstMatch(pattern, spoken.lowercased()),
+              !["app", "md", "zip", "mov", "py", "sh"].contains(match.groups[2])
+        else { return nil }
+        let rest = String(spoken.dropFirst(match.groups[0].isEmpty ? 0 : match.groups[0].count + 3))
+        let address = (match.groups[0].isEmpty ? "https" : match.groups[0]) + "://" + rest
+        return URL(string: address) == nil ? nil : address
     }
 
     private static func day(_ date: Date, calendar: Calendar, locale: Locale) -> String {
@@ -328,7 +370,7 @@ public enum ActionReply {
             .replacingOccurrences(of: #"[\s.!?]+$"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: ",", with: "")
         let yes = #"^(?:yes|yeah|yep|yup|sure|ok|okay|do it|add it|go ahead|confirm|please do|sounds good|that's right|correct|"#
-            + #"yes please|yes add it|yes do it|go for it|open it|move it)$"#
+            + #"yes please|yes add it|yes do it|go for it|open it|move it|run it|yes run it|yes open it)$"#
         if line.range(of: yes, options: .regularExpression) != nil {
             return true
         }

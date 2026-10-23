@@ -65,6 +65,8 @@ struct SampleCoreService: CoreService {
             .refused(code: "sample_data")
         case .worldPlan:
             .worldPlan(actions: [], say: nil)
+        case .commandPlan:
+            .commandPlan(nil)
         case .memories, .forgetMemory:
             .memories([])
         case .personality, .setPersonality:

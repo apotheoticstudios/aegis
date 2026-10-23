@@ -235,7 +235,7 @@ private extension CoreEngine {
     }
 }
 
-private actor WorldPlanModel: ModelClient {
+actor WorldPlanModel: ModelClient {
     let text: String
     let status: ModelJobResult.Status
     let throwsError: Bool

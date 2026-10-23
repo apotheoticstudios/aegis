@@ -14,6 +14,7 @@ final class ActionContractTests: XCTestCase {
             .calendar(title: "Synthetic meeting", start: time, end: time.addingTimeInterval(60)),
             .reminder(title: "Synthetic task", due: nil), .reminder(title: "Synthetic task", due: time),
             .system(setting: .appearance, value: .text("dark")),
+            .shortcut(name: "Synthetic shortcut"), .website(url: "https://example.invalid/page"),
         ]
         XCTAssertEqual(Set(payloads.map(\.domain)), Set(ActionDomain.allCases))
         for payload in payloads {

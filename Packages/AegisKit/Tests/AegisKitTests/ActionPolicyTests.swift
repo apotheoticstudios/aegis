@@ -61,8 +61,10 @@ final class ActionPolicyTests: XCTestCase {
     func testReadingEveryDomainIsAutomatic() {
         for payload in payloads(verb: .read) {
             let result = decide(payload)
-            XCTAssertEqual(result.tier, .auto)
-            XCTAssertEqual(result.reasonCodes, [.readOnly])
+            // Shortcuts only run and websites only open (ADR-0031): reading them fails closed.
+            let readable = ![ActionDomain.shortcut, .web].contains(payload.domain)
+            XCTAssertEqual(result.tier, readable ? .auto : .never)
+            XCTAssertEqual(result.reasonCodes, readable ? [.readOnly] : [.unsupportedOperation])
         }
     }
 
@@ -187,6 +189,7 @@ final class ActionPolicyTests: XCTestCase {
             .app(bundleID: "com.example.reader", verb: verb), .file(path: "/synthetic/note.txt", verb: verb),
             .calendar(title: "Synthetic meeting", start: time, end: time.addingTimeInterval(60), verb: verb),
             .reminder(title: "Synthetic task", due: nil, verb: verb), .system(setting: .volume, value: .number(0), verb: verb),
+            .shortcut(name: "Synthetic shortcut", verb: verb), .website(url: "https://example.invalid", verb: verb),
         ]
     }
 }

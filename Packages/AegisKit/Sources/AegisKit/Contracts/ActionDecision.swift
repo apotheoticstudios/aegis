@@ -17,6 +17,8 @@ public enum ActionTier: String, Codable, Sendable, CaseIterable {
 /// Stable audit codes only; never include command text, handles, paths or model explanations.
 public enum ActionReasonCode: String, Codable, Sendable, CaseIterable {
     case readOnly, reversible, outwardFacing, secureAccessory
+    /// One of the owner's own shortcuts, run by its name (ADR-0031).
+    case ownerShortcut
     case payment, purchase, moneyTransfer, deletion, credentials, securitySetting, privacySetting
     case unsupportedOperation, instructionLikePayload, urlPayload, ownerMinimumTier, panelClosed
 }

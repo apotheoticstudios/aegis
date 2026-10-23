@@ -1,14 +1,16 @@
 import Foundation
 
-/// The domain whose future executor would handle a request. No executors exist yet (#189).
+/// The domain whose executor handles a request.
 public enum ActionDomain: String, Codable, Sendable, CaseIterable {
     case message, home, app, file, calendar, reminder, system
+    /// The owner's own shortcuts, by name, and websites (ADR-0031, additive).
+    case shortcut, web
 }
 
-/// Closed operation vocabulary: arbitrary scripts, shortcuts and UI commands are not accepted.
-/// Forbidden operations are representable so the policy can reject and audit them explicitly.
+/// Closed operation vocabulary: arbitrary scripts and UI commands are not accepted; a shortcut runs only by the
+/// name of one the owner has (ADR-0031). Forbidden operations are representable so the policy can reject and audit them.
 public enum ActionVerb: String, Codable, Sendable, CaseIterable {
-    case read, open, create, send, edit, move, delete
+    case read, open, create, send, edit, move, delete, run
     case payment, purchase, moneyTransfer, changePassword, accessCredentials
 }
 
@@ -42,6 +44,10 @@ public enum ActionPayload: Codable, Sendable, Hashable {
     case calendar(title: String, start: Date, end: Date, verb: ActionVerb = .create)
     case reminder(title: String, due: Date?, verb: ActionVerb = .create)
     case system(setting: ActionSystemSetting, value: ActionValue, verb: ActionVerb = .edit)
+    /// One of the owner's shortcuts, by its exact name (ADR-0031).
+    case shortcut(name: String, verb: ActionVerb = .run)
+    /// An http(s) address for the owner's browser (ADR-0031).
+    case website(url: String, verb: ActionVerb = .open)
 
     public var domain: ActionDomain {
         switch self {
@@ -52,6 +58,8 @@ public enum ActionPayload: Codable, Sendable, Hashable {
         case .calendar: .calendar
         case .reminder: .reminder
         case .system: .system
+        case .shortcut: .shortcut
+        case .website: .web
         }
     }
 
@@ -59,7 +67,8 @@ public enum ActionPayload: Codable, Sendable, Hashable {
         switch self {
         case let .message(_, _, _, verb), let .home(_, _, _, verb),
              let .calendar(_, _, _, verb), let .system(_, _, verb): verb
-        case let .app(_, verb), let .file(_, verb), let .reminder(_, _, verb): verb
+        case let .app(_, verb), let .file(_, verb), let .reminder(_, _, verb),
+             let .shortcut(_, verb), let .website(_, verb): verb
         }
     }
 
@@ -70,6 +79,8 @@ public enum ActionPayload: Codable, Sendable, Hashable {
         case let .home(accessory, _, value, _): [accessory] + value.textFields
         case let .app(bundleID, _): [bundleID]
         case let .file(path, _): [path]
+        case let .shortcut(name, _): [name]
+        case let .website(url, _): [url]
         case let .calendar(title, _, _, _), let .reminder(title, _, _): [title]
         case let .system(_, value, _): value.textFields
         }
