@@ -24,6 +24,9 @@ final class Voice {
     private(set) var speaking = false
     /// Used only in memory to suppress residual speaker echo during an active reply.
     private(set) var spokenText = ""
+    /// How many characters of `spokenText` have been said aloud so far, while the bundled voice speaks; nil
+    /// otherwise. CHAT types the reply along with it.
+    private(set) var saidCount: Int?
 
     private let engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -178,6 +181,7 @@ final class Voice {
         stopSpeaking()
         speaking = true
         spokenText = text
+        saidCount = 0
         let parts = Self.passages(text)
         speech = Task { [weak self] in
             guard let self else { return }
@@ -190,6 +194,7 @@ final class Voice {
             } else {
                 speaking = false
                 spokenText = ""
+                saidCount = nil
             }
         }
     }
@@ -210,6 +215,7 @@ final class Voice {
         }
         speaking = false
         spokenText = ""
+        saidCount = nil
     }
 
     /// Plays passages from the built-in voice, fetching the next while one plays. Returns how many were spoken.
@@ -227,7 +233,7 @@ final class Voice {
             let current = next
             let upcoming: Task<Data?, Never>? = index + 1 < parts.count
                 ? Task { [localSpeech] in await localSpeech.audio(for: parts[index + 1]) } : nil
-            let played = await finish.play(current)
+            let played = await play(parts[index], current)
             guard !Task.isCancelled else {
                 upcoming?.cancel()
                 return parts.count
@@ -250,6 +256,7 @@ final class Voice {
     }
 
     private func speakWithSystem(_ text: String) {
+        saidCount = nil
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = Self.bestVoice()
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Self.speakingRate
@@ -298,33 +305,6 @@ final class Voice {
                   let yes = await localSpeech.audio(for: "Yes") else { return }
             try? FileManager.default.createDirectory(at: Voice.recordedYes.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? yes.write(to: Voice.recordedYes, options: .atomic)
-        }
-    }
-
-    /// "Yes" in the bundled voice, recorded the last time it loaded and kept in Aegis's folder on this Mac, so "Hey
-    /// Aegis" is answered at once while the voice itself stays unloaded with the panel closed.
-    nonisolated static let recordedYes = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Aegis/yes.wav")
-
-    /// Says "Yes" for "Hey Aegis": the recording when there is one, otherwise the voice (first run).
-    func acknowledge() {
-        guard let yes = try? Data(contentsOf: Self.recordedYes) else {
-            speak("Yes")
-            return
-        }
-        stopSpeaking()
-        speaking = true
-        spokenText = "Yes"
-        speech = Task { [weak self] in
-            guard let self else { return }
-            let played = await finish.play(yes)
-            guard !Task.isCancelled else { return }
-            if played {
-                speaking = false
-                spokenText = ""
-            } else {
-                speakWithSystem("Yes")
-            }
         }
     }
 
@@ -429,6 +409,7 @@ extension Voice {
     func beginStreaming() {
         stopSpeaking()
         speaking = true
+        saidCount = 0
         let (parts, queue) = AsyncStream<String>.makeStream()
         streamQueue = queue
         speech = Task { [weak self] in
@@ -480,7 +461,7 @@ extension Voice {
                 leftover.append(part)
                 continue
             }
-            guard await finish.play(data) else {
+            guard await play(part, data) else {
                 if Task.isCancelled {
                     return
                 }
@@ -493,8 +474,60 @@ extension Voice {
         if leftover.isEmpty {
             speaking = false
             spokenText = ""
+            saidCount = nil
         } else {
             speakWithSystem(leftover.joined(separator: " "))
         }
+    }
+}
+
+/// Speaking in step with CHAT, and the recorded "Yes".
+extension Voice {
+    /// "Yes" in the bundled voice, recorded the last time it loaded and kept in Aegis's folder on this Mac, so "Hey
+    /// Aegis" is answered at once while the voice itself stays unloaded with the panel closed.
+    nonisolated static let recordedYes = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Aegis/yes.wav")
+
+    /// Says "Yes" for "Hey Aegis": the recording when there is one, otherwise the voice (first run).
+    func acknowledge() {
+        guard let yes = try? Data(contentsOf: Self.recordedYes) else {
+            speak("Yes")
+            return
+        }
+        stopSpeaking()
+        speaking = true
+        spokenText = "Yes"
+        speech = Task { [weak self] in
+            guard let self else { return }
+            let played = await finish.play(yes)
+            guard !Task.isCancelled else { return }
+            if played {
+                speaking = false
+                spokenText = ""
+            } else {
+                speakWithSystem("Yes")
+            }
+        }
+    }
+
+    /// Plays one passage, moving `saidCount` through its characters across the clip's spoken length.
+    func play(_ part: String, _ wav: Data) async -> Bool {
+        let start = saidCount ?? 0
+        let seconds = ((try? AVAudioPlayer(data: wav))?.duration ?? Double(part.count) / 15) / Double(Self.speakingRate)
+        let began = Date()
+        let reveal = Task { [weak self] in
+            while !Task.isCancelled {
+                let share = min(1, Date().timeIntervalSince(began) / max(seconds, 0.1))
+                self?.saidCount = start + Int(Double(part.count) * share)
+                guard share < 1 else { return }
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+        }
+        let played = await finish.play(wav)
+        reveal.cancel()
+        if saidCount != nil {
+            saidCount = start + part.count + 1
+        }
+        return played
     }
 }

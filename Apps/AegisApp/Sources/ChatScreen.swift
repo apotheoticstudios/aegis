@@ -14,6 +14,8 @@ struct ChatScreen: View {
     @State private var earlier: Set<UUID> = []
     /// What the reply being written had already shown, so typing carries on from there instead of starting over.
     @State private var streamed = ""
+    /// Replies typed along with the voice: shown whole once it stops, never typed again.
+    @State private var voiced: Set<UUID> = []
     @FocusState private var typing: Bool
 
     /// Where a line's text starts: the prompt column and its gap.
@@ -34,6 +36,13 @@ struct ChatScreen: View {
                 question = words
             }
         }
+    }
+
+    /// The part of `text` Aegis has said aloud so far while it speaks it; nil when it isn't speaking.
+    private func said(_ text: String) -> String? {
+        guard model.voice.speaking, let count = model.voice.saidCount else { return nil }
+        let spoken = max(model.voice.spokenText.count, 1)
+        return String(text.prefix(Int((Double(min(count, spoken)) / Double(spoken) * Double(text.count)).rounded())))
     }
 
     /// What the owner is saying right now, from the mic button or after "Hey Aegis", as it's recognised.
@@ -65,7 +74,9 @@ struct ChatScreen: View {
                         if case let .asking(asked) = model.askState {
                             HUDChatLine(who: "you", text: asked)
                             HUDChatLine(
-                                who: name, text: model.handingOff.map { "asking \($0.name)…" } ?? model.partialAnswer, aegis: true,
+                                who: name,
+                                text: model.handingOff.map { "asking \($0.name)…" } ?? said(model.partialAnswer) ?? model.partialAnswer,
+                                aegis: true,
                                 writing: true
                             )
                         }
@@ -85,6 +96,12 @@ struct ChatScreen: View {
                     proxy.scrollTo("end", anchor: .bottom)
                 }
                 .onChange(of: liveWords) { proxy.scrollTo("end", anchor: .bottom) }
+                .onChange(of: model.voice.saidCount) { _, count in
+                    if count != nil, let last = model.thread.last, !earlier.contains(last.id) {
+                        voiced.insert(last.id)
+                    }
+                    proxy.scrollTo("end", anchor: .bottom)
+                }
                 .onChange(of: model.partialAnswer) { _, partial in
                     if !partial.isEmpty {
                         streamed = partial
@@ -113,8 +130,11 @@ struct ChatScreen: View {
             Group {
                 let typing = !earlier.contains(exchange.id) && index == model.thread.count - 1
                 if let answer = exchange.answer {
+                    let spokenSoFar = typing ? said(answer.text) : nil
                     HUDChatLine(
-                        who: name, text: answer.text, aegis: true, typing: typing,
+                        who: name, text: spokenSoFar ?? answer.text, aegis: true,
+                        writing: spokenSoFar.map { $0.count < answer.text.count } ?? false,
+                        typing: typing && spokenSoFar == nil && !voiced.contains(exchange.id),
                         typedFrom: answer.text.hasPrefix(streamed) ? streamed.count : 0
                     ) {
                         let meta = Self.meta(answer)
