@@ -678,21 +678,6 @@ enum BriefPresentation {
         }
     }
 
-    static func askMessage(_ code: String) -> String {
-        switch code {
-        case "busy": "Aegis is writing your brief. Ask again in a minute."
-        case "bad_question": "Try a shorter question."
-        case "too_long": "That needs more than Aegis can read at once. Try narrowing it, for example to a person or a day."
-        case "unreachable", "unavailable": "Aegis's background part isn't reachable right now."
-        case "timedOut", "timed_out", "cancelled": "That took too long. Try again."
-        case "unknown_citation", "invalid_draft", "unsafe_text": "I couldn't verify that answer against the available sources."
-        case "model_missing": "My local language model isn't installed. Open setup to download it."
-        case "model_corrupt": "My local language model couldn't load. It needs to be repaired in setup."
-        case "out_of_memory": "There wasn't enough free memory to finish that answer."
-        default: "My local language model didn't produce a usable answer. Please try again."
-        }
-    }
-
     static func heading(_ priority: Brief.Priority) -> String {
         switch priority {
         case .urgent: "NEEDS YOU TODAY"
@@ -776,15 +761,21 @@ extension PanelModel {
             askState = .answered(question: trimmed, answer: world)
             return remember(Exchange(question: trimmed, answer: world, failure: nil))
         }
-        // With a Claude or OpenAI key saved, AegisCore may hand the question off (#223).
-        let available = CloudKeys.availability
-        let request: CoreRequest = available.providers.isEmpty
-            ? .ask(question: trimmed) : .converse(question: trimmed, cloud: available)
-        let response = await service.handle(request)
+        // Read-only internet policy (#37): conversational inference stays on this Mac.
+        let request = CoreRequest.ask(question: trimmed)
+        let response: CoreResponse = if let publicAnswer = await PublicLookupClient.answer(
+            trimmed,
+            service: service,
+            isCurrent: { self.isCurrentQuestion(id) }
+        ) {
+            publicAnswer
+        } else {
+            await service.handle(request)
+        }
         guard isCurrentQuestion(id) else { return }
         switch response {
-        case let .handOff(approved):
-            await handOff(approved, asked: trimmed, id: id)
+        case .handOff:
+            fail(trimmed, "Internet access is read-only. I haven't sent this question to a cloud model.")
         case let .answer(answer):
             askState = .answered(question: trimmed, answer: answer)
             remember(Exchange(question: trimmed, answer: answer, failure: nil))

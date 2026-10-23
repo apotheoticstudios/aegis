@@ -8,6 +8,7 @@ struct SampleCoreService: CoreService {
     // swiftlint:disable:next cyclomatic_complexity
     func handle(_ request: CoreRequest) async -> CoreResponse {
         switch request {
+        case .publicLookup, .answerPublic: .refused(code: "web_local")
         case .latestBrief:
             .brief(Self.brief(now: Date()))
         case .status, .setBriefTime:

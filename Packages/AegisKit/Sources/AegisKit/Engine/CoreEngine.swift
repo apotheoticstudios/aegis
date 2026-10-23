@@ -91,6 +91,7 @@ public actor CoreEngine: CoreService {
     var learnTicket: UUID?
     var learnJobID: String?
     /// New owner questions supersede unfinished answers, including their history writes.
+    var pendingPublicLookup: (plan: PublicLookupPlan, question: String, turn: UUID)?
     var currentQuestion: UUID?
     var questionJobID: String?
 
