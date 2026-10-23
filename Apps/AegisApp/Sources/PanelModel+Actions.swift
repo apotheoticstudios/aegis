@@ -13,6 +13,8 @@ final class ActionPresence {
     @ObservationIgnored var lastAdded: AddedItem?
     /// The owner's shortcut names and when they were read (ADR-0031).
     @ObservationIgnored var shortcuts: (names: [String], at: Date)?
+    /// A plan's approved steps after the message card it stopped at (#47).
+    @ObservationIgnored var planRest: [PlanStep]?
 }
 
 /// An action shown on a card, waiting for Add or "yes".
@@ -28,10 +30,12 @@ struct PendingAction {
     var given = 0
     /// The local model picked it, so the policy was asked for at least one confirmation (ADR-0031).
     var guessed = false
+    /// A plan's steps (#47); `request` is then the first step's.
+    var plan: [PlanStep] = []
 
     init(
         command: ActionCommand?, message: MessageDraft? = nil, request: ActionRequest, text: String, at: Date, needed: Int = 1,
-        guessed: Bool = false
+        guessed: Bool = false, plan: [PlanStep] = []
     ) {
         self.command = command
         self.message = message
@@ -40,12 +44,16 @@ struct PendingAction {
         self.at = at
         self.needed = needed
         self.guessed = guessed
+        self.plan = plan
     }
 
     /// The card's button.
     var button: String {
         if message != nil {
             return given == 0 ? "Send" : "Send now"
+        }
+        if !plan.isEmpty {
+            return "Go"
         }
         switch command {
         case .automate(.finderReveal, _): return "Show"
@@ -80,8 +88,8 @@ extension PanelModel {
                 await cancelAction()
                 done = "Cancelled."
             }
-            // A skill paused at this step carries on (#286).
-            let more = await resumeSkill()
+            // A plan or a skill paused at this step carries on (#47, #286).
+            let more = await [resumePlan(), resumeSkill()].filter { !$0.isEmpty }.joined(separator: " ")
             return Self.said(more.isEmpty ? done : done + " " + more)
         }
         if let routine = await routineAnswer(question, origin: origin) {
@@ -89,6 +97,9 @@ extension PanelModel {
         }
         if let skill = await skillAnswer(question) {
             return skill
+        }
+        if let plan = await planAnswer(question, origin: origin) {
+            return plan
         }
         guard let command = ActionCommand.parse(question, now: Date(), calendar: .current) else {
             return await messageAnswer(question, origin: origin)
@@ -134,7 +145,7 @@ extension PanelModel {
     func confirmAction() async {
         let pressed = ActionPresence.shared.pending?.button ?? "Add"
         let done = await performPending()
-        let more = await resumeSkill()
+        let more = await [resumePlan(), resumeSkill()].filter { !$0.isEmpty }.joined(separator: " ")
         let reply = more.isEmpty ? done : done + " " + more
         askState = .answered(question: pressed, answer: Self.said(reply))
         remember(Exchange(question: pressed, answer: Self.said(reply), failure: nil))
@@ -145,7 +156,14 @@ extension PanelModel {
     func cancelAction() async {
         guard let pending = ActionPresence.shared.pending else { return }
         ActionPresence.shared.pending = nil
-        await log(pending.request, .cancelled, guessed: pending.guessed)
+        if pending.plan.isEmpty {
+            await log(pending.request, .cancelled, guessed: pending.guessed)
+        }
+        for step in pending.plan {
+            if let request = step.request {
+                await log(request, .cancelled, guessed: step.guessed)
+            }
+        }
     }
 
     /// Anything else that sounds like a command (ADR-0031): the local model picks one ability from the catalogue, and
@@ -193,30 +211,31 @@ extension PanelModel {
             await logMessage(pending.request, failure == nil ? .succeeded : .failed)
             return failure ?? "Sent to \(message.name)."
         }
+        if !pending.plan.isEmpty {
+            return await runPlan(pending.plan)
+        }
         guard let command = pending.command else { return "There's nothing waiting to add." }
+        let (worked, said) = await execute(command)
+        await log(pending.request, worked ? .succeeded : .failed, guessed: pending.guessed)
+        return said
+    }
+
+    /// Runs one approved command: whether it worked, and what to say.
+    func execute(_ command: ActionCommand) async -> (Bool, String) {
         switch command {
         case .runShortcut, .openWebsite, .openApp, .openFile, .automate:
-            let (worked, said) = await Self.run(command)
-            await log(pending.request, worked ? .succeeded : .failed, guessed: pending.guessed)
-            return said
-        default:
-            break
-        }
-        let failure: String? = switch command {
+            return await Self.run(command)
         case let .moveLast(date, allDay):
-            await Self.move(to: date, allDay: allDay)
+            let failure = await Self.move(to: date, allDay: allDay)
+            await refresh()
+            return (failure == nil, failure ?? "Done. It's moved.")
         default:
-            await Self.add(command)
-        }
-        await log(pending.request, failure == nil ? .succeeded : .failed)
-        await refresh()
-        if let failure {
-            return failure
-        }
-        switch command {
-        case .reminder: return "Done. It's in Reminders."
-        case .moveLast: return "Done. It's moved."
-        default: return "Done. It's in your calendar."
+            let failure = await Self.add(command)
+            await refresh()
+            if case .reminder = command {
+                return (failure == nil, failure ?? "Done. It's in Reminders.")
+            }
+            return (failure == nil, failure ?? "Done. It's in your calendar.")
         }
     }
 

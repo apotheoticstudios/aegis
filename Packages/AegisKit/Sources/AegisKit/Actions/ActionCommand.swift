@@ -385,7 +385,7 @@ public enum ActionReply {
             .replacingOccurrences(of: #"[\s.!?]+$"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: ",", with: "")
         let yes = #"^(?:yes|yeah|yep|yup|sure|ok|okay|do it|add it|go ahead|confirm|please do|sounds good|that's right|correct|"#
-            + #"yes please|yes add it|yes do it|go for it|open it|move it|run it|yes run it|yes open it)$"#
+            + #"yes please|yes add it|yes do it|go for it|open it|move it|run it|yes run it|yes open it|go|go on)$"#
         if line.range(of: yes, options: .regularExpression) != nil {
             return true
         }

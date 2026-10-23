@@ -168,6 +168,44 @@ extension CommandAbilityTests {
     }
 }
 
+/// Plans (#47): only the card and its logging run here; nothing in a plan runs on the owner's Mac.
+extension CommandAbilityTests {
+    func testAPlanIsShownBeforeAnythingRuns() async throws {
+        let model = model()
+        let answer = await model.actionAnswer("pause the music and open Wi-Fi settings")
+        XCTAssertEqual(answer?.text, "Here's the plan: pause the music, then open Wi-Fi settings. Say yes, or press Go.")
+        let pending = try XCTUnwrap(ActionPresence.shared.pending)
+        XCTAssertEqual(pending.button, "Go")
+        XCTAssertEqual(pending.plan.map(\.command), [.automate(.musicPause, argument: ""), .automate(.settingsPage, argument: "wifi")])
+        XCTAssertEqual(try file.load().map(\.outcomeCode), [.proposed, .proposed, .awaitingConfirmation, .awaitingConfirmation])
+        await model.cancelAction()
+        XCTAssertNil(ActionPresence.shared.pending)
+        XCTAssertEqual(try file.load().suffix(2).map(\.outcomeCode), [.cancelled, .cancelled])
+        XCTAssertEqual(try Set(file.load().map(\.requestID)).count, 2)
+    }
+
+    func testAPlanLeavesOutWhatItCannotDo() async throws {
+        let answer = await model().actionAnswer("run the Pay Rent shortcut and mute")
+        XCTAssertEqual(
+            answer?.text,
+            "Here's the plan: mute the sound. I'll leave out “run the Pay Rent shortcut”: I can't do that. Say yes, or press Go."
+        )
+        XCTAssertEqual(ActionPresence.shared.pending?.plan.count, 1)
+        let entries = try file.load()
+        XCTAssertEqual(entries.map(\.outcomeCode), [.proposed, .rejected, .proposed, .awaitingConfirmation])
+        XCTAssertEqual(entries.first?.decision.reasonCodes, [.payment])
+    }
+
+    func testAPlanAsksTheModelOnlyForPartsItCannotWorkOut() async throws {
+        let core = PickingCore(step: CommandStep(ability: .shortcut, value: "Work"))
+        let answer = await model(nil, core).actionAnswer("start my work day and mute")
+        XCTAssertEqual(answer?.text, "Here's the plan: run the shortcut “Work”, then mute the sound. Say yes, or press Go.")
+        XCTAssertEqual(core.asked, ["start my work day"])
+        XCTAssertEqual(ActionPresence.shared.pending?.plan.map(\.guessed), [true, false])
+        XCTAssertEqual(try file.load().first?.decision.tier, .confirm)
+    }
+}
+
 /// A AegisCore stand-in whose model picks `step` for every command.
 private final class PickingCore: CoreService, @unchecked Sendable {
     private let lock = NSLock()
