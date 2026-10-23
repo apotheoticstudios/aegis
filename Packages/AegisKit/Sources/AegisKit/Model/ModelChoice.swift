@@ -26,9 +26,9 @@ public struct ModelChoice: Sendable, Hashable {
         bytes >= 24 * 1_000_000_000 ? medium : small
     }
 
-    /// The model for this Mac.
+    /// The model for this Mac: the tune-up's choice (ADR-0030), otherwise the one its memory runs.
     public static var current: ModelChoice {
-        forMemory(ProcessInfo.processInfo.physicalMemory)
+        aegisFolder.flatMap(chosen(in:)) ?? forMemory(ProcessInfo.processInfo.physicalMemory)
     }
 
     /// The folder name the repository's files live in (`Qwen3.5-9B-MLX-4bit`).

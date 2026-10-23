@@ -39,10 +39,37 @@ final class SetupTests: XCTestCase {
         XCTAssertEqual(resumed.wizard.steps, SetupStep.offered)
     }
 
+    func testChecksAFileBySHA256() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("part-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("abc".utf8).write(to: url)
+        XCTAssertEqual(try ModelDownloads.sha256(of: url), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    }
+
+    /// Opt-in, as it fetches the 134 MB meaning model from Hugging Face: `TEST_RUNNER_AEGIS_DOWNLOAD_CHECK=1`.
+    func testDownloadsAndChecksTheMeaningModel() async throws {
+        guard ProcessInfo.processInfo.environment["AEGIS_DOWNLOAD_CHECK"] != nil else {
+            throw XCTSkip("Set AEGIS_DOWNLOAD_CHECK to download the meaning model into a temporary folder.")
+        }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("models-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let downloads = ModelDownloads()
+        let fetched = await downloads.fetch([.meaning], into: folder)
+        XCTAssertTrue(fetched, "\(downloads.state)")
+        XCTAssertEqual(downloads.received, ModelFiles.meaning.bytes)
+        for file in ModelFiles.meaning.files {
+            let url = folder.appendingPathComponent("bge-small-en-v1.5").appendingPathComponent(file.path)
+            XCTAssertEqual(try ModelDownloads.sha256(of: url), file.sha256, file.path)
+        }
+        // A second run finds everything in place and fetches nothing.
+        let again = await downloads.fetch([.meaning], into: folder)
+        XCTAssertTrue(again)
+    }
+
     func testBriefTimeReadsInTheMacsFormat() {
         let shown = SetupText.time(6 * 60 + 30)
         XCTAssertTrue(shown.contains("6") && shown.contains("30"), shown)
-        XCTAssertEqual(SetupText.model(24 << 30), "Qwen3.5-9B")
-        XCTAssertEqual(SetupText.model(16 << 30), "Qwen3.5-4B")
+        XCTAssertEqual(SetupText.model(.forMemory(24 << 30)), "Qwen3.5-9B")
+        XCTAssertEqual(SetupText.model(.forMemory(16 << 30)), "Qwen3.5-4B")
     }
 }

@@ -579,7 +579,8 @@ Setup is 15 screens shown one at a time, each holding one category of options. R
 - "Use recommended for the rest" shortcut on every screen.
 - Models download in the background while the user goes through the steps.
 - Hardware is auto-detected and only confirmed, never typed in.
-- A screen whose feature isn't built yet (Home, Control, Tune-up today) stays hidden until it is, and the progress bar counts only the screens shown (owner's choice, #24).
+- A screen whose feature isn't built yet (Home and Control today) stays hidden until it is, and the progress bar counts only the screens shown (owner's choice, #24).
+- Models download from Hugging Face at pinned revisions, each file checked by SHA-256; the tune-up steps the 9B down to the 4B if it writes fewer than 8 tokens a second (ADR-0030).
 
 ### Screens
 

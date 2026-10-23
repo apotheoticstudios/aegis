@@ -54,3 +54,36 @@ final class CoreEngineBriefTimeTests: XCTestCase {
         XCTAssertEqual(try IPCCoding.decode(CoreRequest.self, from: IPCCoding.encode(request)), request)
     }
 }
+
+/// The setup wizard's tune-up (ADR-0030): one synthetic job, timed by the model.
+final class CoreEngineTuneUpTests: XCTestCase {
+    private struct TimedModel: ModelClient {
+        let status: ModelJobResult.Status
+
+        func run(_ job: ModelJob) async throws -> ModelJobResult {
+            ModelJobResult(
+                jobID: job.id, status: status, text: status == .completed ? "A beam sweeps the sea." : nil,
+                failure: status == .completed ? nil : .modelMissing,
+                metrics: ModelMetrics(loadSeconds: 3, generateSeconds: 8, generationTokens: 200)
+            )
+        }
+
+        func cancel(jobID _: String) async {}
+    }
+
+    private func engine(_ status: ModelJobResult.Status) throws -> CoreEngine {
+        try CoreEngine(
+            store: MemoryStore(), collectors: [], model: TimedModel(status: status),
+            persistence: ScheduleFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("tune-\(UUID()).json")),
+            initial: BriefSchedule(openingHour: 7, openingMinute: 0, timeZone: .gmt),
+            options: .init(modelName: "synthetic-model")
+        )
+    }
+
+    func testReportsTheModelsTimings() async throws {
+        let reply = try await engine(.completed).handle(.tuneUp)
+        XCTAssertEqual(reply, .tuneUp(ModelMetrics(loadSeconds: 3, generateSeconds: 8, generationTokens: 200)))
+        let failed = try await engine(.failed).handle(.tuneUp)
+        XCTAssertEqual(failed, .refused(code: "model_missing"))
+    }
+}

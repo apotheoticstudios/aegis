@@ -20,8 +20,9 @@ struct SetupScreen: View {
             case .voice: VoiceScreen(setup: setup, model: app.model, wake: app.wake)
             case .interface: InterfaceScreen(hotKey: app.hotKey)
             case .silence: SilenceScreen(model: app.model)
-            // Home, Control and Tune-up aren't offered until their features exist (#24).
-            case .home, .control, .tuneUp, .ready: ReadyScreen(setup: setup, app: app)
+            case .tuneUp: TuneUpScreen(app: app)
+            // Home and Control aren't offered until their features exist (#24).
+            case .home, .control, .ready: ReadyScreen(setup: setup, app: app)
             }
         }
         .frame(maxWidth: 760, alignment: .leading)
@@ -77,7 +78,7 @@ private struct MacScreen: View {
             SetupLine("Detected automatically; change it only if it's wrong.", muted: true)
         }
         HUDSection(title: "What it runs", linked: false) {
-            SetupLine("With \(mac.memoryBytes >> 30) GB of memory, Aegis's main model is \(SetupText.model(mac.memoryBytes)).")
+            SetupLine("With \(mac.memoryBytes >> 30) GB of memory, Aegis's main model is \(SetupText.model(.forMemory(mac.memoryBytes))).")
         }
     }
 }
@@ -188,12 +189,17 @@ private struct ReadyScreen: View {
         let granted = Permission.allCases.filter(\.granted).count
         HUDSection(title: "Ready", first: true, linked: false) {
             SetupLine("\(wizard.storageGB) GB assigned · brief ready by \(SetupText.time(wizard.briefMinutes))")
-            SetupLine("\(granted) of \(Permission.allCases.count) permissions granted · runs \(SetupText.model(wizard.mac.memoryBytes))")
+            SetupLine("\(granted) of \(Permission.allCases.count) permissions granted · runs \(SetupText.model(.current))")
             let personality = app.model.personality
             SetupLine(
                 "\(personality.style.title) personality · “Hey \(personality.name)” \(app.wake.enabled ? "on" : "off") · "
                     + "\(theme.title) theme"
             )
+            switch ModelDownloads.shared.state {
+            case .downloading: SetupLine("Models are still downloading; Aegis finishes them in the background.", muted: true)
+            case .failed: SetupLine("The model download stopped; Run setup again from the menu to retry.", tone: HUD.warn)
+            case .idle, .ready: EmptyView()
+            }
             if granted < Permission.allCases.count {
                 SetupLine("Aegis works with what it's allowed; go Back to grant the rest any time.", muted: true)
             }
@@ -236,8 +242,16 @@ enum SetupText {
             .formatted(date: .omitted, time: .shortened) ?? ""
     }
 
-    /// "Qwen3.5-9B": the model this much memory runs.
-    static func model(_ memoryBytes: UInt64) -> String {
-        ModelChoice.forMemory(memoryBytes).folderName.replacingOccurrences(of: "-MLX-4bit", with: "")
+    /// "Qwen3.5-9B".
+    static func model(_ choice: ModelChoice) -> String {
+        choice.folderName.replacingOccurrences(of: "-MLX-4bit", with: "")
+    }
+}
+
+extension SetupText {
+    /// Tokens a second, the tune-up's speed.
+    static func speed(_ metrics: ModelMetrics) -> String {
+        guard let tokens = metrics.generationTokens, let seconds = metrics.generateSeconds, seconds > 0 else { return "–" }
+        return String(format: "%.0f", Double(tokens) / seconds)
     }
 }

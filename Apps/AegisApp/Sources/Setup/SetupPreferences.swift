@@ -257,3 +257,104 @@ extension HUDTheme {
         rawValue.prefix(1).uppercased() + rawValue.dropFirst()
     }
 }
+
+/// The tune-up (DESIGN.md screen 14, ADR-0030): once the model is in place, one synthetic job through AegisCore and
+/// the real model, timed. If the 9B is too slow here, Aegis fetches the 4B and switches to it.
+struct TuneUpScreen: View {
+    let app: SetupApp
+    private var downloads: ModelDownloads {
+        .shared
+    }
+
+    @State private var metrics: ModelMetrics?
+    @State private var verdict: String?
+    @State private var problem: String?
+    @State private var running = false
+
+    var body: some View {
+        let model = ModelChoice.current
+        HUDSection(title: "Models", code: SetupText.model(model), first: true, linked: false) {
+            SetupDownloadMeter()
+            switch downloads.state {
+            case .idle: SetupLine("Waiting to start.", muted: true)
+            case .downloading: SetupLine("Downloading in the background; carry on with setup.", muted: true)
+            case .ready: SetupLine("In place on this Mac and checked.", muted: true)
+            case let .failed(why): SetupLine("Stopped: \(why)", tone: HUD.warn)
+            }
+        }
+        HUDSection(title: "Tune-up", linked: false) {
+            if running {
+                HStack(spacing: HUD.space3) {
+                    HUDTag(word: "Running", tone: HUD.primary)
+                    SetupLine("About 30 seconds: Aegis loads its model and writes a short test answer, with nothing of yours.")
+                }
+            }
+            if let metrics {
+                Grid(alignment: .leading, horizontalSpacing: HUD.space8, verticalSpacing: HUD.space4) {
+                    GridRow {
+                        HUDReadout(label: "Load", value: metrics.loadSeconds.map { String(format: "%.1f", $0) } ?? "Warm", unit: "s")
+                        HUDReadout(
+                            label: "First word",
+                            value: metrics.firstTokenSeconds.map { String(format: "%.1f", $0) } ?? "–",
+                            unit: "s"
+                        )
+                        HUDReadout(label: "Speed", value: SetupText.speed(metrics), unit: "tokens/s", tone: HUD.primary)
+                        HUDReadout(label: "Memory", value: metrics.peakMemoryBytes.map { HUDFormat.bytes(Double($0)) } ?? "–")
+                    }
+                }
+            }
+            if let verdict {
+                SetupLine(verdict)
+            }
+            if let problem {
+                SetupLine(problem, tone: HUD.warn)
+            }
+            Button(metrics == nil ? "Run tune-up" : "Run again") { Task { await run() } }
+                .buttonStyle(HUDChipStyle())
+                .disabled(running || downloads.state != .ready)
+        }
+        // It runs by itself once the model is in place.
+        .task(id: downloads.state) {
+            if downloads.state == .ready, metrics == nil, problem == nil {
+                await run()
+            }
+        }
+    }
+
+    private func run() async {
+        running = true
+        problem = nil
+        defer { running = false }
+        guard case let .tuneUp(measured) = await app.model.service.handle(.tuneUp) else {
+            problem = "The model didn't answer. Aegis tries again when it next needs it."
+            return
+        }
+        metrics = measured
+        let current = ModelChoice.current
+        let tuned = current.tuned(measured)
+        guard tuned != current else {
+            verdict = "\(SetupText.model(current)) runs well on this Mac."
+            return
+        }
+        verdict = "\(SetupText.model(current)) is slow on this Mac, so Aegis is fetching \(SetupText.model(tuned)) to use instead."
+        guard await downloads.fetch([tuned.files]), let folder = ModelChoice.aegisFolder, (try? tuned.choose(in: folder)) != nil else {
+            problem = "Couldn't switch models; Aegis keeps \(SetupText.model(current))."
+            return
+        }
+        verdict = "Switched to \(SetupText.model(tuned)), which suits this Mac better."
+    }
+}
+
+/// The background downloads' progress; shown on every screen while they run (DESIGN.md "Wizard rules").
+struct SetupDownloadMeter: View {
+    var body: some View {
+        let downloads = ModelDownloads.shared
+        HUDMeter(
+            label: "Download", value: downloads.fraction,
+            display: downloads.total > 0
+                ? "\(HUDFormat.bytes(Double(downloads.received))) of \(HUDFormat.bytes(Double(downloads.total)))"
+                : HUDFormat.percent(downloads.fraction),
+            size: .small
+        )
+    }
+}

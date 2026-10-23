@@ -39,6 +39,8 @@ extension CoreEngine {
             return await refreshBrief()
         case let .setBriefTime(minutes):
             return await setBriefTime(minutes)
+        case .tuneUp:
+            return await tuneUp()
         default:
             return .refused(code: "unsupported_request")
         }
@@ -260,5 +262,22 @@ extension CoreEngine {
             self.release()
         }
         return .accepted(jobID: id)
+    }
+
+    /// The tune-up (ADR-0030): a fixed synthetic job, no owner data, timed by the model service.
+    func tuneUp() async -> CoreResponse {
+        let now = clock()
+        let job = ModelJob(
+            id: "tune-up-" + UUID().uuidString.lowercased(), model: options.modelName,
+            system: "You are a helpful assistant. Answer in plain sentences.",
+            user: "In about 150 words, explain how a lighthouse warns ships at night.", maxTokens: 200,
+            deadline: now.addingTimeInterval(120), inputRevision: "tune-up"
+        )
+        guard job.validate().isEmpty else { return .refused(code: "unavailable") }
+        await acquire()
+        defer { release() }
+        guard let result = try? await model.run(job) else { return .refused(code: "unavailable") }
+        guard result.status == .completed else { return .refused(code: result.failure?.rawValue ?? result.status.rawValue) }
+        return .tuneUp(result.metrics)
     }
 }

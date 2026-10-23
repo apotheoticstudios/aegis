@@ -351,6 +351,8 @@ final class RecordingCore: CoreService, @unchecked Sendable {
             return .accepted(jobID: "handed-off")
         case .activity:
             return .activity(HourlyActivity(start: storedAt, counts: [:]))
+        case .tuneUp:
+            return .refused(code: "unavailable")
         }
     }
 }

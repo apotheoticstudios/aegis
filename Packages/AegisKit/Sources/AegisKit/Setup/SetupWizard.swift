@@ -6,9 +6,8 @@ public enum SetupStep: String, Codable, Sendable, CaseIterable {
     case welcome, mac, storage, schedule, permissions, sources, home, control, privacy, personality, voice, interface,
          silence, tuneUp, ready
 
-    /// The screens the wizard shows. Home, Control and Tune-up stay hidden until their features exist (owner's
-    /// choice, #24).
-    public static let offered = allCases.filter { ![.home, .control, .tuneUp].contains($0) }
+    /// The screens the wizard shows. Home and Control stay hidden until their features exist (owner's choice, #24).
+    public static let offered = allCases.filter { ![.home, .control].contains($0) }
 
     var rank: Int {
         Self.allCases.firstIndex(of: self) ?? 0

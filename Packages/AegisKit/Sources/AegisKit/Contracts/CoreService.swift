@@ -143,6 +143,9 @@ public enum CoreRequest: Codable, Sendable, Hashable {
     /// When the brief is ready each day, in minutes after local midnight, chosen in the setup wizard (#26, additive);
     /// replies with `status`. Refusals: bad_time (outside 0..<1440), schedule_unwritable.
     case setBriefTime(minutes: Int)
+    /// The setup wizard's tune-up (ADR-0030, additive): one synthetic job through the model, waiting its turn behind
+    /// a brief; replies with `tuneUp`. Refusals: the model's failure code (for example model_missing), unavailable.
+    case tuneUp
 
     /// The most IDs one `sources` request may ask for.
     public static let maxSourceIDs = 20
@@ -200,6 +203,8 @@ public enum CoreResponse: Codable, Sendable, Hashable {
     case handOff(CloudHandOff.Request)
     /// Events collected per hour, by source (#8, additive); counts only.
     case activity(HourlyActivity)
+    /// How the tune-up's job ran on this Mac (ADR-0030, additive).
+    case tuneUp(ModelMetrics)
 }
 
 /// The one way Aegis's processes encode messages to each other, so both ends always agree.

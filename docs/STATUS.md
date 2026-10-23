@@ -13,7 +13,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 | — | Real mornings and feedback on the new features | agent:human | — | Owner's reviews drive the next fixes |
 | #8 | The Project: Aegis design system: five screens, tokens, fonts (ADR-0029) | agent:claude | claude/8-design-foundation | In review; next: settings windows, theme picker |
 | #8 | The design's motion: each screen builds itself as it shows (ADR-0029) | agent:claude | claude/8-design-motion | In review; waits for the owner's go-ahead |
-| #28 | Setup wizard, stage 3 of 4: all 12 offered screens (Sources, Privacy, Personality, Voice, Interface with the theme, Silence added; stages 1–2: #24, #26) | agent:claude | claude/28-setup-screens | Merged; next: stage 4, model downloads during setup and the tune-up |
+| #30 | Setup wizard, stage 4 of 4: models download during setup, the tune-up (ADR-0030); 13 screens (stages 1–3: #24, #26, #28) | agent:claude | claude/30-setup-tuneup | Merged; the owner tries the wizard live next |
 | #223 | Hand complex, non-personal questions to Claude or ChatGPT (ADR-0017) | agent:claude | merged (PRs #225, #236) | ChatGPT works on the owner's plan (no key); Claude needs a key or Claude Code installed |
 
 ## Up next

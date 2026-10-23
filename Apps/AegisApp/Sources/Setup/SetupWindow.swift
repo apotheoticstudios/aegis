@@ -74,6 +74,8 @@ enum SetupWindow {
             later: close
         ))
         window = created
+        // The models download in the background while the owner goes through the steps (ADR-0030).
+        ModelDownloads.shared.start()
         NSApp.activate()
         created.center()
         created.makeKeyAndOrderFront(nil)
@@ -110,6 +112,11 @@ struct SetupView: View {
             HStack(spacing: HUD.space4) {
                 if wizard.canGoBack {
                     Button("Back") { setup.wizard.back() }.buttonStyle(HUDPlateStyle())
+                }
+                switch ModelDownloads.shared.state {
+                case .downloading: SetupDownloadMeter().frame(width: 240)
+                case .failed: Button("Retry download") { ModelDownloads.shared.start() }.buttonStyle(HUDChipStyle())
+                case .idle, .ready: EmptyView()
                 }
                 Spacer()
                 if wizard.current != .ready {

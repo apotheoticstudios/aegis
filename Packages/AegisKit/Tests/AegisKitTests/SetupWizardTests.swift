@@ -15,7 +15,7 @@ final class SetupWizardTests: XCTestCase {
         XCTAssertEqual(SetupStep.allCases.count, 15)
         XCTAssertEqual(SetupStep.offered, [
             .welcome, .mac, .storage, .schedule, .permissions, .sources, .privacy, .personality, .voice, .interface,
-            .silence, .ready,
+            .silence, .tuneUp, .ready,
         ])
     }
 

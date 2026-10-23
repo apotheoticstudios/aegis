@@ -75,6 +75,10 @@ struct SampleCoreService: CoreService {
             .accepted(jobID: "sample")
         case let .activity(hours):
             .activity(Self.activity(hours: hours, now: Date()))
+        case .tuneUp:
+            .tuneUp(ModelMetrics(
+                loadSeconds: 3.1, firstTokenSeconds: 0.4, generateSeconds: 7.2, generationTokens: 200, peakMemoryBytes: 6_400_000_000
+            ))
         }
     }
 
