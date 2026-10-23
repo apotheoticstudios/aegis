@@ -54,7 +54,7 @@ final class FollowUpQuestionTests: XCTestCase {
         XCTAssertTrue(note.contains("Example Sam asked you:"))
         XCTAssertTrue(note.contains(event.body))
         XCTAssertFalse(note.contains(event.id), "Record IDs are stripped from conversation notes.")
-        XCTAssertTrue(chat.user.contains("Owner: " + firstQuestion))
+        XCTAssertEqual(chat.history.map(\.owner), [firstQuestion], "the earlier turn goes to the model as its own turn")
         XCTAssertTrue(chat.user.hasSuffix("OWNER SAYS: " + followUp))
     }
 

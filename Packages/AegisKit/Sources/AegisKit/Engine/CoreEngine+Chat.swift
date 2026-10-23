@@ -20,7 +20,7 @@ extension CoreEngine {
                 id: "chat-" + UUID().uuidString.lowercased(), model: options.modelName, system: Chat.systemPrompt(personality),
                 user: user, maxTokens: min(Self.chatTokens, ModelJob.maxOutputTokens),
                 deadline: now.addingTimeInterval(120), inputRevision: SHA256.hex(Array(user.utf8)),
-                history: conversation.map { ModelJob.Exchange(owner: $0.owner, aegis: $0.aegis) }, style: .conversation
+                history: chatHistory, style: .conversation
             )
             guard job.validate().isEmpty else {
                 return .refused(code: "too_long")
@@ -50,6 +50,11 @@ extension CoreEngine {
     func partialReply() async -> CoreResponse {
         guard let (id, question) = replyJob, let text = await model.partial(jobID: id) else { return .partialReply("") }
         return .partialReply(Chat.speakable(text, owner: question, name: personality.name))
+    }
+
+    /// The conversation as the model's own earlier turns (#52).
+    var chatHistory: [ModelJob.Exchange] {
+        conversation.map { ModelJob.Exchange(owner: $0.owner, aegis: $0.aegis) }
     }
 
     /// Keeps the exchange for follow-ups and, on this Mac only, in memory's past exchanges (#222).

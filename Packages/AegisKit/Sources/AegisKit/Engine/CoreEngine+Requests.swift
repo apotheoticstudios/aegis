@@ -258,14 +258,17 @@ extension CoreEngine {
 
 /// Warming the model when the panel opens (#209).
 extension CoreEngine {
-    /// Runs a one-token job so ModelService loads the model; it stays loaded for a while after use.
+    /// Runs a one-token job so ModelService loads the model; it stays loaded for a while after use. The job carries
+    /// the chat instructions and the conversation so far, which ModelService then keeps read for the first
+    /// question (#52).
     func prepareModel() -> CoreResponse {
         // While a brief is being written the model is loading anyway; the extra one-token job waits its turn.
         let id = "warm-" + UUID().uuidString.lowercased()
         let now = clock()
         guard let job = try? ModelJob(
-            id: id, model: options.modelName, system: "Reply with OK.", user: "OK", maxTokens: 1,
-            deadline: now.addingTimeInterval(60), inputRevision: "warm-up"
+            id: id, model: options.modelName, system: Chat.systemPrompt(personality), user: "OK", maxTokens: 1,
+            deadline: now.addingTimeInterval(60), inputRevision: "warm-up",
+            history: now.timeIntervalSince(conversationAt) > Chat.memory ? [] : chatHistory
         ), job.validate().isEmpty else { return .refused(code: "unavailable") }
         Task {
             await self.acquire()

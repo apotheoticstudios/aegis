@@ -615,13 +615,21 @@ struct UnwritableSchedule: SchedulePersistence {
 final class RecordingModel: ModelClient, @unchecked Sendable {
     private let lock = NSLock()
     private var input: String?
+    private var system: String?
 
     var lastInput: String? {
         lock.withLock { input }
     }
 
+    var lastSystem: String? {
+        lock.withLock { system }
+    }
+
     func run(_ job: ModelJob) async throws -> ModelJobResult {
-        lock.withLock { input = job.user }
+        lock.withLock {
+            input = job.user
+            system = job.system
+        }
         return try await CitingModel().run(job)
     }
 

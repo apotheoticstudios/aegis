@@ -7,9 +7,10 @@ import MLXLLM
 import MLXLMCommon
 import Tokenizers
 
-/// Runs model jobs with MLX: Qwen3.5 (4B or 9B by the Mac's memory), 4-bit, greedy decoding with thinking off, from a local folder
-/// (no downloader, no network). It loads on the first job and stays loaded until ModelService exits after
-/// its idle time, which returns the memory (ADR-0013). Collected text in a job is data for the model; the
+/// Runs model jobs with MLX: Qwen3.5 (4B or 9B by the Mac's memory), 4-bit, thinking off, from a local folder
+/// (no downloader, no network). Greedy decoding, except conversation jobs, which sample as Qwen recommends for chat
+/// (#52). It loads on the first job and stays loaded until ModelService exits after its idle time, which returns the
+/// memory (ADR-0013), and with it the read prefixes it keeps. Collected text in a job is data for the model; the
 /// answer goes back to AegisCore, which checks it before anything is stored. Never logs either.
 public actor MLXModelClient: ModelClient {
     private let folder: URL?
@@ -18,6 +19,10 @@ public actor MLXModelClient: ModelClient {
     private var cancelled: Set<String> = []
     /// Each running job's text so far (#263).
     private var partials: [String: String] = [:]
+    /// Prompt prefixes already read (instructions and earlier turns), newest last, so the next turn reads only
+    /// what's new (#52). Each one is the model's cache after its tokens; at most `keptPrefixes`.
+    private var prefixes: [Prefix] = []
+    static let keptPrefixes = 3
 
     /// The most freed GPU memory MLX may keep for reuse between steps.
     static let cacheLimit = 256 * 1024 * 1024
@@ -55,12 +60,23 @@ public actor MLXModelClient: ModelClient {
         var text = ""
         defer { partials[job.id] = nil }
         do {
+            let turns: [MLXLMCommon.Chat.Message] = job.history.flatMap { [.user($0.owner), .assistant($0.aegis)] }
             let input = UserInput(
-                chat: [.system(job.system), .user(job.user)], additionalContext: ["enable_thinking": false]
+                chat: [.system(job.system)] + turns + [.user(job.user)], additionalContext: ["enable_thinking": false]
             )
-            let prepared = try await model.prepare(input: input)
-            let parameters = GenerateParameters(maxTokens: job.maxTokens, temperature: 0)
-            for await item in try await model.generate(input: prepared, parameters: parameters) {
+            let tokens = try await model.prepare(input: input).text.tokens.asArray(Int.self)
+            let parameters = Self.parameters(job)
+            let reused = prefixes.filter { $0.tokens.count < tokens.count && tokens.starts(with: $0.tokens) }
+                .max { $0.tokens.count < $1.tokens.count }
+            let (stream, read) = try await model.perform { context in
+                try Self.generate(tokens, reusing: reused, parameters: parameters, context: context)
+            }
+            if let read {
+                keep(read)
+            } else if let reused {
+                keep(reused)
+            }
+            for await item in stream {
                 if cancelled.remove(job.id) != nil {
                     return ModelJobResult(jobID: job.id, status: .cancelled, metrics: finish(metrics, begin))
                 }
@@ -75,7 +91,8 @@ public actor MLXModelClient: ModelClient {
                     text += chunk
                     partials[job.id] = text
                 case let .info(info):
-                    metrics.promptTokens = info.promptTokenCount
+                    // The whole prompt, read now or in an earlier turn.
+                    metrics.promptTokens = tokens.count
                     metrics.generationTokens = info.generationTokenCount
                 default:
                     break
@@ -88,6 +105,54 @@ public actor MLXModelClient: ModelClient {
             return ModelJobResult(jobID: job.id, status: .cancelled, metrics: finish(metrics, begin))
         }
         return ModelJobResult(jobID: job.id, status: .completed, text: text, metrics: finish(metrics, begin))
+    }
+
+    /// Exact for briefs, JSON and checks; for conversation, Qwen3.5's recommended non-thinking chat settings (#52).
+    static func parameters(_ job: ModelJob) -> GenerateParameters {
+        switch job.style {
+        case .exact:
+            GenerateParameters(maxTokens: job.maxTokens, temperature: 0)
+        case .conversation:
+            GenerateParameters(maxTokens: job.maxTokens, temperature: 0.7, topP: 0.8, topK: 20, presencePenalty: 1.5)
+        }
+    }
+
+    /// Starts generation, reading only the tokens after `reused`. Before the job's last owner turn the cache is
+    /// copied as a new read prefix: the next turn's prompt starts with exactly those tokens.
+    private static func generate(
+        _ tokens: [Int], reusing reused: Prefix?, parameters: GenerateParameters, context: ModelContext
+    ) throws -> (AsyncStream<Generation>, Prefix?) {
+        let cache = try reused?.cache.map { $0.copy() } ?? context.model.newCache(parameters: parameters)
+        var start = reused?.tokens.count ?? 0
+        var read: Prefix?
+        if let end = lastOwnerTurn(tokens, tokenizer: context.tokenizer), end > start {
+            for chunk in stride(from: start, to: end, by: 512) {
+                _ = context.model(MLXArray(Array(tokens[chunk ..< min(chunk + 512, end)]))[.newAxis], cache: cache)
+                eval(cache)
+            }
+            let copy = cache.map { $0.copy() }
+            eval(copy)
+            read = Prefix(tokens: Array(tokens[..<end]), cache: copy)
+            start = end
+        }
+        let rest = LMInput(tokens: MLXArray(Array(tokens[start...])))
+        return try (MLXLMCommon.generate(input: rest, cache: cache, parameters: parameters, context: context), read)
+    }
+
+    /// Where the last `<|im_start|>user` begins (Qwen's chat format): everything before it is the instructions and
+    /// earlier turns, which the next turn repeats. Nil for any other format, which then isn't cached.
+    static func lastOwnerTurn(_ tokens: [Int], tokenizer: any MLXLMCommon.Tokenizer) -> Int? {
+        guard let start = tokenizer.convertTokenToId("<|im_start|>"),
+              let user = tokenizer.encode(text: "user", addSpecialTokens: false).first, tokens.count > 1
+        else { return nil }
+        return (0 ..< tokens.count - 1).last { tokens[$0] == start && tokens[$0 + 1] == user }
+    }
+
+    /// Keeps a read prefix as the newest, dropping any it extends and the oldest past `keptPrefixes`.
+    private func keep(_ read: Prefix) {
+        prefixes.removeAll { $0 === read || (read.tokens.count >= $0.tokens.count && read.tokens.starts(with: $0.tokens)) }
+        prefixes.append(read)
+        prefixes = Array(prefixes.suffix(Self.keptPrefixes))
     }
 
     public func cancel(jobID: String) async {
@@ -103,6 +168,18 @@ public actor MLXModelClient: ModelClient {
         metrics.generateSeconds = Date().timeIntervalSince(begin)
         metrics.peakMemoryBytes = Memory.peakMemory
         return metrics
+    }
+}
+
+/// A read prompt prefix: its tokens and the model's cache after them. The cache is only copied, never written, and
+/// only inside the model's `perform`, one job at a time.
+final class Prefix: @unchecked Sendable {
+    let tokens: [Int]
+    let cache: [KVCache]
+
+    init(tokens: [Int], cache: [KVCache]) {
+        self.tokens = tokens
+        self.cache = cache
     }
 }
 

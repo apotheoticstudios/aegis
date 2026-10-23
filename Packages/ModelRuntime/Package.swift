@@ -47,6 +47,11 @@ let package = Package(
             name: "model-smoke",
             dependencies: ["ModelRuntime", .product(name: "AegisKit", package: "AegisKit")]
         ),
+        // #52: conversation turns from the cached prefix, synthetic only; not part of Aegis.app.
+        .executableTarget(
+            name: "chat-smoke",
+            dependencies: ["ModelRuntime", .product(name: "AegisKit", package: "AegisKit")]
+        ),
         // Stage 1 step 3.2: the synthetic held-out day through the real engine and model; not part of Aegis.app.
         .executableTarget(
             name: "heldout-run",

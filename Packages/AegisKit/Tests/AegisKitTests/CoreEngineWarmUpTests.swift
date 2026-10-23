@@ -21,5 +21,6 @@ final class CoreEngineWarmUpTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(10))
         }
         XCTAssertEqual(model.lastInput, "OK", "a tiny job loads the model; nothing from the owner's data")
+        XCTAssertEqual(model.lastSystem, Chat.systemPrompt(), "the chat instructions are read before the first question (#52)")
     }
 }
