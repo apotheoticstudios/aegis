@@ -83,7 +83,7 @@ final class QuestionTimingTests: XCTestCase {
         await model.waitForJobs(1)
         await model.finish(0, text: "A stale answer.", wrongID: true)
         let response = await question.value
-        XCTAssertEqual(response, .refused(code: "failed"))
+        XCTAssertEqual(response, .refused(code: "internal_error"))
         let history = await core.conversation
         XCTAssertTrue(history.isEmpty)
     }

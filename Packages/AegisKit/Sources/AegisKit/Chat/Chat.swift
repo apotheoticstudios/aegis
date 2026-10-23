@@ -87,6 +87,14 @@ public enum Chat {
         return named.range(of: claimedAction, options: [.regularExpression, .caseInsensitive]) != nil ? cannotAct : fallback
     }
 
+    /// A standalone knowledge question, subject to the local personal-data gate before routing.
+    static func isGeneralKnowledge(_ text: String) -> Bool {
+        text.range(
+            of: #"^\s*(?:please\s+)?(?:explain\b|why\b|what (?:is|are)\b|who (?:is|was)\b|how (?:does|do)\b|compare\b|tell me about\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
     /// Greetings and small talk go straight to conversation (no search of the owner's data).
     public static func isSmallTalk(_ text: String) -> Bool {
         let words = text.lowercased().unicodeScalars.filter { CharacterSet.letters.contains($0) || $0 == " " || $0 == "'" }

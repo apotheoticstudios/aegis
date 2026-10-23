@@ -694,8 +694,12 @@ enum BriefPresentation {
         case "bad_question": "Try a shorter question."
         case "too_long": "That needs more than Aegis can read at once. Try narrowing it, for example to a person or a day."
         case "unreachable", "unavailable": "Aegis's background part isn't reachable right now."
-        case "timedOut", "cancelled": "That took too long. Try again."
-        default: "Aegis couldn't answer that this time. Try asking another way."
+        case "timedOut", "timed_out", "cancelled": "That took too long. Try again."
+        case "unknown_citation", "invalid_draft", "unsafe_text": "I couldn't verify that answer against the available sources."
+        case "model_missing": "My local language model isn't installed. Open setup to download it."
+        case "model_corrupt": "My local language model couldn't load. It needs to be repaired in setup."
+        case "out_of_memory": "There wasn't enough free memory to finish that answer."
+        default: "My local language model didn't produce a usable answer. Please try again."
         }
     }
 
