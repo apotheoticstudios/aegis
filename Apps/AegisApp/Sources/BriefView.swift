@@ -7,7 +7,6 @@ import SwiftUI
 /// diagnostics, COMMS everything collected, CHAT the conversation, LOGS what Aegis did and remembers.
 struct BriefView: View {
     let model: PanelModel
-    let close: () -> Void
     @State private var screen = HUDScreen.home
     /// The owner's theme, chosen in setup (#28).
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
@@ -32,12 +31,6 @@ struct BriefView: View {
         .clipShape(HUDCut(kind: .panel, cut: HUD.chamferLg))
         .environment(\.colorScheme, .dark)
         .environment(\.hudTheme, theme)
-        // Escape is God's Eye View's own while the globe shows (#303).
-        .onExitCommand {
-            if !WorldPresence.shared.inPanel {
-                close()
-            }
-        }
         // A question in progress, or the voice listening, belongs on CHAT.
         .onChange(of: model.askState) { _, state in
             if case .asking = state {

@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// A floating panel that the hotkey shows and hides. Escape closes it, except while God's Eye View has it (#303).
+/// A floating panel that only the hotkey (⌥Space) closes; the hotkey and "Hey Aegis" open it. It stays up when
+/// another app becomes active.
 @MainActor
 final class BriefPanelController: NSObject, NSWindowDelegate {
     private let panel: HUDWindow
@@ -25,6 +26,7 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
             backing: .buffered, defer: true
         )
         panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
         // On every Space, including over other full-screen apps.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.level = .floating
@@ -39,9 +41,7 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
         NotificationCenter.default.addObserver(
             self, selector: #selector(occlusionChanged), name: NSWindow.didChangeOcclusionStateNotification, object: panel
         )
-        panel.contentView = NSHostingView(rootView: BriefView(model: model, close: { [weak self] in
-            self?.hide()
-        }))
+        panel.contentView = NSHostingView(rootView: BriefView(model: model))
         panel.center()
         WorldPresence.shared.presentationChanged = { [weak self] showing in self?.fitWorld(showing) }
     }
@@ -101,14 +101,9 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
         reportedVisible = visible
         visibilityChanged(visible)
     }
-
-    func windowShouldClose(_: NSWindow) -> Bool {
-        hide()
-        return false
-    }
 }
 
-/// A borderless panel can't take the keyboard by default; the HUD needs it for the Ask bar and Escape.
+/// A borderless panel can't take the keyboard by default; the HUD needs it for the Ask bar.
 final class HUDWindow: NSPanel {
     override var canBecomeKey: Bool {
         true
