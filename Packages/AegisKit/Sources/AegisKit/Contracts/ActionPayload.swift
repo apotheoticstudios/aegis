@@ -26,6 +26,13 @@ public enum AppAutomation: String, Codable, Sendable, CaseIterable {
     case safariNewTab
     /// Argument: a full path inside the owner's home folder.
     case finderReveal
+    /// Argument: a place or a search, in the owner's words (#45).
+    case mapsDirections, mapsSearch
+    /// Argument: a `SettingsPage` key; the page only opens (#45).
+    case settingsPage
+    /// Argument: a whole number from 0 to 100 (#45).
+    case volumeSet
+    case volumeUp, volumeDown, mute, unmute, darkMode, lightMode
 }
 
 /// Messages and email share the same outward-facing safety policy.

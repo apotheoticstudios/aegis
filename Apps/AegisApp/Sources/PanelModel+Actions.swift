@@ -50,7 +50,8 @@ struct PendingAction {
         switch command {
         case .automate(.finderReveal, _): return "Show"
         case .automate(.notesNewNote, _): return "Add"
-        case .openWebsite, .openApp, .openFile, .automate(.safariNewTab, _): return "Open"
+        case .openWebsite, .openApp, .openFile, .automate(.safariNewTab, _), .automate(.settingsPage, _),
+             .automate(.mapsDirections, _), .automate(.mapsSearch, _): return "Open"
         case .runShortcut, .automate: return "Run"
         default: return "Add"
         }

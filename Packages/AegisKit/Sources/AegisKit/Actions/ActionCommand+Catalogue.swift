@@ -17,6 +17,9 @@ extension ActionCommand {
 
     /// The app automation catalogue and files by name (#43).
     static func catalogue(_ line: String) -> ActionCommand? {
+        if let command = system(line) {
+            return command
+        }
         let verbs = #"^(?:open|load|go to|visit|pull up|bring up)(?: up)? (.+?) in (?:a )?new (?:safari )?tab(?: in safari)?$"#
         if let address = capture(verbs, line).flatMap(website) {
             return .automate(.safariNewTab, argument: address)
@@ -112,6 +115,16 @@ public extension AppAutomation {
         case .notesNewNote: "Make a note called “\(argument)”?"
         case .safariNewTab: "Open " + ActionCommand.bare(argument) + " in a new Safari tab?"
         case .finderReveal: "Show “" + URL(fileURLWithPath: argument).lastPathComponent + "” in Finder?"
+        case .mapsDirections: "Get directions to “\(argument)” in Maps?"
+        case .mapsSearch: "Search Maps for “\(argument)”?"
+        case .settingsPage: "Open \(SettingsPage.page(argument)?.name ?? argument) settings?"
+        case .volumeSet: "Set the volume to \(argument)%?"
+        case .volumeUp: "Turn the volume up?"
+        case .volumeDown: "Turn the volume down?"
+        case .mute: "Mute the sound?"
+        case .unmute: "Unmute the sound?"
+        case .darkMode: "Turn on dark mode?"
+        case .lightMode: "Switch to light mode?"
         }
     }
 }

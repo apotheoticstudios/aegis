@@ -67,6 +67,17 @@ extension PanelModel {
           end tell
         end run
         """,
+        .volumeSet: """
+        on run argv
+          set volume output volume ((item 1 of argv) as integer) without output muted
+        end run
+        """,
+        .volumeUp: "set volume output volume ((output volume of (get volume settings)) + 10) without output muted",
+        .volumeDown: "set volume output volume ((output volume of (get volume settings)) - 10)",
+        .mute: "set volume with output muted",
+        .unmute: "set volume without output muted",
+        .darkMode: #"tell application "System Events" to tell appearance preferences to set dark mode to true"#,
+        .lightMode: #"tell application "System Events" to tell appearance preferences to set dark mode to false"#,
         .safariNewTab: """
         on run argv
           tell application "Safari"
@@ -87,25 +98,62 @@ extension PanelModel {
             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: argument)])
             return (true, "Showing “\(URL(fileURLWithPath: argument).lastPathComponent)” in Finder.")
         }
-        guard let script = scripts[entry] else { return (false, "That's not something I can do.") }
-        let app = entry == .notesNewNote ? "Notes" : entry == .safariNewTab ? "Safari" : "Music"
+        if let link = link(entry, argument) {
+            return NSWorkspace.shared.open(link) ? (true, said(entry, argument)) : (false, "I couldn't open that.")
+        }
+        guard let script = scripts[entry], entry != .volumeSet || Int(argument).map({ (0 ... 100).contains($0) }) == true else {
+            return (false, "That's not something I can do.")
+        }
         guard await osascript(script, argument.isEmpty ? [] : [argument]) else {
+            let app = switch entry {
+            case .notesNewNote: "Notes"
+            case .safariNewTab: "Safari"
+            case .darkMode, .lightMode: "System Events"
+            default: "Music"
+            }
             return (
                 false,
                 entry == .musicPlaylist ? "Music couldn't play a playlist called “\(argument)”."
+                    : [.volumeSet, .volumeUp, .volumeDown, .mute, .unmute].contains(entry) ? "The volume didn't change."
                     : "\(app) didn't do that. Check that Aegis may control \(app) in Privacy & Security › Automation."
             )
         }
-        let said = switch entry {
+        return (true, said(entry, argument))
+    }
+
+    /// Maps and System Settings open by their documented links (#45); the owner's words only go in as an encoded value.
+    static func link(_ entry: AppAutomation, _ argument: String) -> URL? {
+        let value = argument.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? ""
+        return switch entry {
+        case .mapsDirections: URL(string: "maps://?daddr=" + value)
+        case .mapsSearch: URL(string: "maps://?q=" + value)
+        case .settingsPage: SettingsPage.page(argument).flatMap { URL(string: "x-apple.systempreferences:" + $0.id) }
+        default: nil
+        }
+    }
+
+    /// What Aegis says once a catalogue entry has run.
+    static func said(_ entry: AppAutomation, _ argument: String) -> String {
+        switch entry {
         case .musicPlay: "Playing."
         case .musicPause: "Paused."
         case .musicNext: "Next song."
         case .musicPrevious: "Previous song."
         case .musicPlaylist: "Playing “\(argument)”."
         case .notesNewNote: "Done. There's a new note called “\(argument)”."
-        default: "Opening " + (URL(string: argument)?.host() ?? argument) + " in a new Safari tab."
+        case .mapsDirections: "Getting directions to \(argument) in Maps."
+        case .mapsSearch: "Searching Maps for \(argument)."
+        case .settingsPage: "Opening \(SettingsPage.page(argument)?.name ?? "") settings."
+        case .volumeSet: "Volume \(argument)%."
+        case .volumeUp: "Turned it up."
+        case .volumeDown: "Turned it down."
+        case .mute: "Muted."
+        case .unmute: "Unmuted."
+        case .darkMode: "Dark mode on."
+        case .lightMode: "Light mode on."
+        case .finderReveal: "Showing “\(URL(fileURLWithPath: argument).lastPathComponent)” in Finder."
+        case .safariNewTab: "Opening " + (URL(string: argument)?.host() ?? argument) + " in a new Safari tab."
         }
-        return (true, said)
     }
 
     /// Runs a fixed AppleScript with `osascript`; arguments arrive as `argv`, never inside the script. Whether it worked.

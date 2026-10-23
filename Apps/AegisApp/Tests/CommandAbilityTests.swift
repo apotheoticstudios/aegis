@@ -124,13 +124,47 @@ final class CommandAbilityTests: XCTestCase {
     }
 
     func testCatalogueScriptsTakeArgumentsOnlyAsArgv() {
-        XCTAssertEqual(Set(PanelModel.scripts.keys), Set(AppAutomation.allCases).subtracting([.finderReveal]))
+        let links: Set<AppAutomation> = [.finderReveal, .mapsDirections, .mapsSearch, .settingsPage]
+        XCTAssertEqual(Set(PanelModel.scripts.keys), Set(AppAutomation.allCases).subtracting(links))
         for (entry, script) in PanelModel.scripts {
-            let takesArgument = [AppAutomation.musicPlaylist, .notesNewNote, .safariNewTab].contains(entry)
+            let takesArgument = [AppAutomation.musicPlaylist, .notesNewNote, .safariNewTab, .volumeSet].contains(entry)
             XCTAssertEqual(script.contains("on run argv"), takesArgument, entry.rawValue)
             XCTAssertEqual(script.contains("item 1 of argv"), takesArgument, entry.rawValue)
             XCTAssertFalse(script.contains("do shell script"), entry.rawValue)
         }
+    }
+}
+
+extension CommandAbilityTests {
+    /// Maps and Settings pages open by link, with the owner's words encoded as one value (#45).
+    func testMapsAndSettingsLinksEncodeTheOwnersWords() {
+        XCTAssertEqual(
+            PanelModel.link(.mapsDirections, "Brisbane Airport & daddr=x")?.absoluteString,
+            "maps://?daddr=Brisbane%20Airport%20%26%20daddr%3Dx"
+        )
+        XCTAssertEqual(PanelModel.link(.mapsSearch, "pharmacy")?.absoluteString, "maps://?q=pharmacy")
+        XCTAssertEqual(
+            PanelModel.link(.settingsPage, "wifi")?.absoluteString,
+            "x-apple.systempreferences:com.apple.wifi-settings-extension"
+        )
+        XCTAssertNil(PanelModel.link(.settingsPage, "com.apple.anything"))
+        XCTAssertNil(PanelModel.link(.volumeSet, "30"))
+    }
+
+    func testSystemStepsTheModelPickedAskFirst() async throws {
+        let cases: [(CommandStep, String)] = [
+            (CommandStep(ability: .volume, value: "30"), "Set the volume to 30%? Say yes, or press Run."),
+            (CommandStep(ability: .dark, value: ""), "Turn on dark mode? Say yes, or press Run."),
+            (CommandStep(ability: .settings, value: "bluetooth"), "Open Bluetooth settings? Say yes, or press Open."),
+            (CommandStep(ability: .directions, value: "the airport"), "Get directions to “the airport” in Maps? Say yes, or press Open."),
+        ]
+        for (step, card) in cases {
+            ActionPresence.shared.pending = nil
+            let answer = await model(step).commandPlanAnswer("set things up")
+            XCTAssertEqual(answer?.text, card)
+            XCTAssertEqual(ActionPresence.shared.pending?.guessed, true)
+        }
+        XCTAssertEqual(try file.load().map(\.decision.tier), Array(repeating: .confirm, count: 8))
     }
 }
 
