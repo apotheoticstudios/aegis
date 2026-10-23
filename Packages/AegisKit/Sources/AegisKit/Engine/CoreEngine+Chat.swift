@@ -5,14 +5,14 @@ extension CoreEngine {
     static let chatTokens = 500
 
     /// A conversational reply from the local model. `found` holds context lines Ask's retrieval found, if any.
-    func chat(_ question: String, found: [String], turn: UUID) async -> CoreResponse {
+    func chat(_ question: String, found: [String], turn: UUID, includeNotes: Bool = true) async -> CoreResponse {
         let now = clock()
         if now.timeIntervalSince(conversationAt) > Chat.memory {
             conversation = []
         }
-        let scorer = await meaningScorer(for: question)
-        let notes = await memory.notesForChat(question, now: now, calendar: calendar, meaning: scorer) + dayNotes(now: now)
-            + found.prefix(30).map { "From your messages: " + $0 }
+        let scorer = includeNotes ? await meaningScorer(for: question) : nil
+        let notes = includeNotes ? await memory.notesForChat(question, now: now, calendar: calendar, meaning: scorer) + dayNotes(now: now)
+            + found.prefix(30).map { "From your messages: " + $0 } : []
         let user = Chat.prepare(question, notes: notes, history: conversation, now: now, calendar: calendar)
         do {
             let job = try ModelJob(
@@ -29,7 +29,7 @@ extension CoreEngine {
                 replyJob = nil
             }
             guard result.status == .completed else {
-                return .refused(code: result.status.rawValue)
+                return .refused(code: result.failure?.rawValue ?? result.status.rawValue)
             }
             let reply = result.text.map { Chat.reply($0, owner: question, name: personality.name) } ?? Chat.fallback
             if reply != Chat.fallback, reply != Chat.cannotAct {

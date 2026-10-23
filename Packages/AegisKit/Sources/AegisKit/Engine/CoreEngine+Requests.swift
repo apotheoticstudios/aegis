@@ -183,6 +183,10 @@ extension CoreEngine {
         defer { release() }
         guard currentQuestion == turn else { return .refused(code: "cancelled") }
         do {
+            // Public knowledge must not be forced into the owner's record-citation format.
+            if Chat.isGeneralKnowledge(trimmed), await !CloudHandOff.isPersonal(trimmed, names: contactNames()) {
+                return await chat(trimmed, found: [], turn: turn, includeNotes: false)
+            }
             let input = try await Ask.prepare(
                 question: trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
             )
@@ -198,29 +202,39 @@ extension CoreEngine {
                 }
                 return await chat(trimmed, found: [], turn: turn)
             }
-            let job = try ModelJob(
-                id: "ask-" + UUID().uuidString.lowercased(), model: options.modelName, system: Ask.systemPrompt(),
-                user: input.text, maxTokens: min(Self.answerTokens, ModelJob.maxOutputTokens),
-                deadline: clock().addingTimeInterval(120), inputRevision: SHA256.hex(Array(input.text.utf8))
-            )
-            guard job.validate().isEmpty else {
-                return .refused(code: "too_long")
+            let deadline = clock().addingTimeInterval(120)
+            var correction = ""
+            for attempt in 0 ... 1 {
+                guard currentQuestion == turn else { return .refused(code: "cancelled") }
+                let job = try ModelJob(
+                    id: "ask-" + UUID().uuidString.lowercased(), model: options.modelName,
+                    system: Ask.systemPrompt() + correction,
+                    user: input.text, maxTokens: min(Self.answerTokens, ModelJob.maxOutputTokens),
+                    deadline: deadline, inputRevision: SHA256.hex(Array(input.text.utf8))
+                )
+                guard job.validate().isEmpty else { return .refused(code: "too_long") }
+                let result = try await runQuestionJob(job, turn: turn)
+                guard result.status == .completed else {
+                    return .refused(code: result.failure?.rawValue ?? result.status.rawValue)
+                }
+                let checked = result.text.flatMap(Briefing.extractJSON).map {
+                    Ask.check($0, input: input, model: options.modelName, generatedAt: clock())
+                } ?? .failure(.invalidDraft)
+                switch checked {
+                case let .success(answer):
+                    remember(trimmed, answer.text)
+                    return .answer(answer)
+                case let .failure(reason):
+                    guard attempt == 0, reason == .invalidDraft || reason == .unknownCitation else {
+                        return .refused(code: reason.rawValue)
+                    }
+                    // Fresh attempt over the same evidence, never the rejected model text.
+                    correction = "\nThe previous attempt failed validation (" + reason.rawValue + "). "
+                        + "Return exactly the required JSON fields. Cite only IDs shown in Context. "
+                        + "If the evidence cannot answer, use the exact not-found answer and empty citation arrays."
+                }
             }
-            let result = try await runQuestionJob(job, turn: turn)
-            guard result.status == .completed else {
-                return .refused(code: result.status.rawValue)
-            }
-            guard let text = result.text, let draft = Briefing.extractJSON(text) else {
-                return .refused(code: AskRejection.invalidDraft.rawValue)
-            }
-            switch Ask.check(draft, input: input, model: options.modelName, generatedAt: clock()) {
-            case let .success(answer):
-                remember(trimmed, answer.text)
-                return .answer(answer)
-            case let .failure(reason):
-                // A rejected grounded answer must never escape through unchecked conversation.
-                return .refused(code: reason.rawValue)
-            }
+            return .refused(code: "invalid_draft")
         } catch {
             return .refused(code: "unavailable")
         }
