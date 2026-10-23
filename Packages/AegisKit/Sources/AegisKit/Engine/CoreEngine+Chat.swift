@@ -2,7 +2,8 @@ import Foundation
 
 /// Talking with Aegis (#194): the conversation path of the Ask bar, with notes from the owner's day.
 extension CoreEngine {
-    static let chatTokens = 500
+    /// Room for a full answer when the owner asks for one (#52); chat stays short by the instructions.
+    static let chatTokens = 1200
 
     /// A conversational reply from the local model. `found` holds context lines Ask's retrieval found, if any.
     func chat(_ question: String, found: [String], turn: UUID) async -> CoreResponse {
@@ -13,12 +14,13 @@ extension CoreEngine {
         let scorer = await meaningScorer(for: question)
         let notes = await memory.notesForChat(question, now: now, calendar: calendar, meaning: scorer) + dayNotes(now: now)
             + found.prefix(30).map { "From your messages: " + $0 }
-        let user = Chat.prepare(question, notes: notes, history: conversation, now: now, calendar: calendar)
+        let user = Chat.prepare(question, notes: notes, now: now, calendar: calendar)
         do {
             let job = try ModelJob(
                 id: "chat-" + UUID().uuidString.lowercased(), model: options.modelName, system: Chat.systemPrompt(personality),
                 user: user, maxTokens: min(Self.chatTokens, ModelJob.maxOutputTokens),
-                deadline: now.addingTimeInterval(120), inputRevision: SHA256.hex(Array(user.utf8))
+                deadline: now.addingTimeInterval(120), inputRevision: SHA256.hex(Array(user.utf8)),
+                history: conversation.map { ModelJob.Exchange(owner: $0.owner, aegis: $0.aegis) }, style: .conversation
             )
             guard job.validate().isEmpty else {
                 return .refused(code: "too_long")
@@ -53,7 +55,7 @@ extension CoreEngine {
     /// Keeps the exchange for follow-ups and, on this Mac only, in memory's past exchanges (#222).
     func remember(_ question: String, _ reply: String) {
         conversation.append(Chat.Turn(owner: question, aegis: reply))
-        conversation = Array(conversation.suffix(Chat.maxTurns))
+        conversation = Chat.kept(conversation)
         conversationAt = clock()
         memory.record(PastExchange(at: conversationAt, owner: question, aegis: reply))
         saveMemory()

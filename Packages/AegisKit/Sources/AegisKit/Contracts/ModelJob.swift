@@ -8,6 +8,7 @@ public struct ModelJob: Codable, Sendable, Hashable {
     /// Limits that keep a job bounded whatever the day held.
     public static let maxSystemBytes = 32 * 1024
     public static let maxUserBytes = 64 * 1024
+    public static let maxHistoryBytes = 32 * 1024
     public static let maxOutputTokens = 2000
 
     /// The request ID: a retry with the same ID is the same job.
@@ -20,8 +21,32 @@ public struct ModelJob: Codable, Sendable, Hashable {
     public var deadline: Date
     /// The stored snapshot the input came from, so citations can be checked against exactly that.
     public var inputRevision: String
+    /// Earlier exchanges of a conversation, oldest first, given to the model as its own chat turns before `user`
+    /// (#52). Only the owner's words and Aegis's checked replies; never collected content.
+    public var history: [Exchange]
+    /// How the model picks its words (#52).
+    public var style: Style
 
-    public init(id: String, model: String, system: String, user: String, maxTokens: Int, deadline: Date, inputRevision: String) {
+    /// One earlier exchange of a conversation.
+    public struct Exchange: Codable, Sendable, Hashable {
+        public var owner: String
+        public var aegis: String
+        public init(owner: String, aegis: String) {
+            self.owner = owner
+            self.aegis = aegis
+        }
+    }
+
+    /// `exact` always takes the likeliest word (briefs, JSON, checks); `conversation` samples a little, as Qwen
+    /// recommends for chat, so replies read naturally (#52).
+    public enum Style: String, Codable, Sendable {
+        case exact, conversation
+    }
+
+    public init(
+        id: String, model: String, system: String, user: String, maxTokens: Int, deadline: Date, inputRevision: String,
+        history: [Exchange] = [], style: Style = .exact
+    ) {
         self.id = id
         self.model = model
         self.system = system
@@ -29,6 +54,25 @@ public struct ModelJob: Codable, Sendable, Hashable {
         self.maxTokens = maxTokens
         self.deadline = deadline
         self.inputRevision = inputRevision
+        self.history = history
+        self.style = style
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, model, system, user, maxTokens, deadline, inputRevision, history, style
+    }
+
+    /// A job from a ModelService or AegisCore built before #52 has no history or style.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            id: container.decode(String.self, forKey: .id), model: container.decode(String.self, forKey: .model),
+            system: container.decode(String.self, forKey: .system), user: container.decode(String.self, forKey: .user),
+            maxTokens: container.decode(Int.self, forKey: .maxTokens), deadline: container.decode(Date.self, forKey: .deadline),
+            inputRevision: container.decode(String.self, forKey: .inputRevision),
+            history: container.decodeIfPresent([Exchange].self, forKey: .history) ?? [],
+            style: container.decodeIfPresent(Style.self, forKey: .style) ?? .exact
+        )
     }
 
     /// Errors as "field: message" (empty when the job may be sent).
@@ -48,6 +92,9 @@ public struct ModelJob: Codable, Sendable, Hashable {
         }
         if user.utf8.count > Self.maxUserBytes {
             errors.append("user: over \(Self.maxUserBytes) bytes")
+        }
+        if history.reduce(0, { $0 + $1.owner.utf8.count + $1.aegis.utf8.count }) > Self.maxHistoryBytes {
+            errors.append("history: over \(Self.maxHistoryBytes) bytes")
         }
         if !(1 ... Self.maxOutputTokens).contains(maxTokens) {
             errors.append("max_tokens: must be 1 to \(Self.maxOutputTokens)")

@@ -30,7 +30,7 @@ extension CoreEngine {
         }
         let shown = CloudHandOff.shown(reply)
         conversation.append(Chat.Turn(owner: question, aegis: shown, via: provider))
-        conversation = Array(conversation.suffix(Chat.maxTurns))
+        conversation = Chat.kept(conversation)
         conversationAt = clock()
         memory.record(PastExchange(at: conversationAt, owner: question, aegis: shown))
         saveMemory()

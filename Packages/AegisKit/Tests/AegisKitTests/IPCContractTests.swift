@@ -37,6 +37,21 @@ final class IPCContractTests: XCTestCase {
         XCTAssertEqual(empty.validate(), ["id: empty", "input_revision: empty"])
     }
 
+    func testModelJobCarriesAConversationAndStillReadsOlderJobs() throws {
+        var chat = job()
+        chat.history = [ModelJob.Exchange(owner: "Hi", aegis: "Hello.")]
+        chat.style = .conversation
+        try roundTrip(chat)
+        chat.history = [ModelJob.Exchange(owner: "", aegis: String(repeating: "x", count: ModelJob.maxHistoryBytes + 1))]
+        XCTAssertEqual(chat.validate(), ["history: over \(ModelJob.maxHistoryBytes) bytes"])
+        // A job written before #52 has neither field.
+        var older = try XCTUnwrap(JSONSerialization.jsonObject(with: IPCCoding.encode(job())) as? [String: Any])
+        older["history"] = nil
+        older["style"] = nil
+        let decoded = try IPCCoding.decode(ModelJob.self, from: JSONSerialization.data(withJSONObject: older))
+        XCTAssertEqual(decoded, job())
+    }
+
     func testModelJobResultRules() throws {
         let done = ModelJobResult(
             jobID: "job-1",
