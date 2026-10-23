@@ -90,7 +90,7 @@ public enum Chat {
     /// A standalone knowledge question, subject to the local personal-data gate before routing.
     static func isGeneralKnowledge(_ text: String) -> Bool {
         text.range(
-            of: #"^\s*(?:please\s+)?(?:explain\b|why\b|what (?:is|are)\b|who (?:is|was)\b|how (?:does|do)\b|compare\b|tell me about\b)"#,
+            of: #"^\s*(?:(?:please|can you|could you)\s+)?(?:explain\b|why\b|what (?:is|are)\b|who (?:is|was)\b|how (?:does|do)\b|compare\b|tell me about\b)"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
     }
