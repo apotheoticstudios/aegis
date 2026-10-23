@@ -190,6 +190,16 @@ extension CoreEngine {
             if let text = input.directAnswer {
                 return .answer(Answer(text: text, eventIDs: [], scheduleIDs: [], model: "aegis", generatedAt: clock()))
             }
+            if input.isEmpty, FollowUpQuestion.leansOnPrevious(trimmed), let last = conversation.last, last.via == nil {
+                let followInput = try await Ask.prepare(
+                    question: last.owner + " " + trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
+                )
+                guard currentQuestion == turn else { return .refused(code: "cancelled") }
+                // The earlier question supplies retrieval terms only; its records stay local as conversation NOTES.
+                if !followInput.isEmpty {
+                    return await chat(trimmed, found: Chat.contextLines(followInput.text), turn: turn)
+                }
+            }
             // Small talk, general questions and anything the owner's data doesn't cover: a conversation (#194),
             // or, with automatic hand-off on, Claude or ChatGPT for a complex general question (#223).
             if (Chat.isSmallTalk(trimmed) && !input.prefersGrounded) || Chat.isRequestToAct(trimmed) || input.isEmpty {
