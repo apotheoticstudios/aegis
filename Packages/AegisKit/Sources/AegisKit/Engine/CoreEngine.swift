@@ -82,6 +82,8 @@ public actor CoreEngine: CoreService {
     /// The conversational reply being written, for speaking while thinking (#263).
     var replyJob: (id: String, question: String)?
     var conversationAt = Date.distantPast
+    /// Whether the last exchange was a grounded answer about the owner's records rather than a conversation (#54).
+    var conversationGrounded = false
     /// The owner's chat lines waiting to be learned from, the pending learning pass and its model job (#282).
     var learnQueue: [String] = []
     var learnTicket: UUID?

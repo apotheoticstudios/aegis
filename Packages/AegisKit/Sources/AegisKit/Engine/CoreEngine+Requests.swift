@@ -203,6 +203,13 @@ extension CoreEngine {
             if let text = input.directAnswer {
                 return .answer(Answer(text: text, eventIDs: [], scheduleIDs: [], model: "aegis", generatedAt: clock()))
             }
+            // A follow-up to a conversation stays one (#54): grounded answers see no earlier turns, so a question about
+            // what Aegis just said must not become a search of the owner's messages. Records found go along as notes.
+            if !input.prefersGrounded, !conversationGrounded, let last = conversation.last, last.via == nil,
+               FollowUpQuestion.continues(trimmed, from: last, now: clock(), calendar: calendar)
+            {
+                return await chat(trimmed, found: Chat.contextLines(input.text), turn: turn)
+            }
             // Small talk, general questions and anything the owner's data doesn't cover: a conversation (#194),
             // or, with automatic hand-off on, Claude or ChatGPT for a complex general question (#223).
             if (Chat.isSmallTalk(trimmed) && !input.prefersGrounded) || Chat.isRequestToAct(trimmed) || input.isEmpty {
@@ -229,6 +236,7 @@ extension CoreEngine {
             switch Ask.check(draft, input: input, model: options.modelName, generatedAt: clock()) {
             case let .success(answer):
                 remember(trimmed, answer.text)
+                conversationGrounded = true
                 return .answer(answer)
             case let .failure(reason):
                 // A rejected grounded answer must never escape through unchecked conversation.

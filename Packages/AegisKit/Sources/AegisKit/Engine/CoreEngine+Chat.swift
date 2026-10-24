@@ -62,6 +62,7 @@ extension CoreEngine {
         conversation.append(Chat.Turn(owner: question, aegis: reply))
         conversation = Chat.kept(conversation)
         conversationAt = clock()
+        conversationGrounded = false
         memory.record(PastExchange(at: conversationAt, owner: question, aegis: reply))
         saveMemory()
     }

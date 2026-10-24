@@ -23,6 +23,22 @@ enum FollowUpQuestion {
         }
     }
 
+    /// Whether a question carries on from the last exchange (#54): it refers back, only asks for more ("tell me
+    /// more", "why?"), or shares a word with it ("the compressor" after Aegis described a heat pump).
+    static func continues(_ question: String, from last: Chat.Turn, now: Date, calendar: Calendar) -> Bool {
+        let words = AskQuery.words(question)
+        let keywords = Set(AskQuery(question, now: now, calendar: calendar).keywords)
+        return leansOnPrevious(question) || !words.isEmpty && words.allSatisfy(generic.contains)
+            || !keywords.subtracting(generic).isDisjoint(with: AskQuery.words(last.owner + " " + last.aegis))
+    }
+
+    /// Words that ask for more of the same rather than name a subject ("tell me more", "why?", "go on", "how so?").
+    private static let generic: Set<String> = [
+        "more", "else", "again", "explain", "elaborate", "simpler", "simply", "shorter", "longer", "detail", "details",
+        "example", "examples", "another", "continue", "keep", "going", "really", "mean", "means", "meant", "why",
+        "tell", "me", "go", "on", "so", "how", "can", "could", "you", "please", "a", "an", "bit", "little", "give", "some",
+    ]
+
     /// What to search for a follow-up: the previous question's words, then this one's. When this question names
     /// its own time ("and today?"), the previous question's time words go, so the newer time wins.
     static func search(_ question: String, after previous: String, now: Date, calendar: Calendar) -> String {
