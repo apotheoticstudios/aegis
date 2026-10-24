@@ -19,23 +19,42 @@ final class ConversationFollowUpTests: XCTestCase {
         XCTAssertTrue(chat.user.contains("From your messages: "), "what the search found goes along as notes")
     }
 
+    func testWhatIsSomethingItMentionedStaysInTheConversation() async throws {
+        for question in ["What is a refrigerant?", "Explain that again"] {
+            let (core, model) = try await engine()
+            _ = await core.handle(.ask(question: "Explain how a heat pump works"))
+            _ = await core.handle(.ask(question: question))
+            let jobs = await model.jobs
+            XCTAssertFalse(jobs.contains { $0.id.hasPrefix("ask-") }, question)
+            XCTAssertTrue(jobs.last?.id.hasPrefix("chat-") == true, question)
+        }
+    }
+
     func testAQuestionAboutTheOwnersMessagesStillCitesThem() async throws {
-        let (core, model) = try await engine()
-        _ = await core.handle(.ask(question: "Explain how a heat pump works"))
-        _ = await core.handle(.ask(question: "What did my messages say about the compressor?"))
-        let jobs = await model.jobs
-        XCTAssertTrue(jobs.last?.id.hasPrefix("ask-") == true, "a question about messages is answered from them")
+        for question in ["What did my messages say about the compressor?", "Who told me about the compressor?"] {
+            let (core, model) = try await engine()
+            _ = await core.handle(.ask(question: "Explain how a heat pump works"))
+            _ = await core.handle(.ask(question: question))
+            let jobs = await model.jobs
+            XCTAssertTrue(jobs.last?.id.hasPrefix("ask-") == true, "\(question): answered from the messages, with citations")
+        }
     }
 
     func testWhatCarriesOn() {
         let last = Chat.Turn(owner: "Explain how a heat pump works", aegis: "It moves heat with a compressor and a refrigerant.")
         func continues(_ text: String) -> Bool {
-            FollowUpQuestion.continues(text, from: last, now: now, calendar: .current)
+            FollowUpQuestion.continues(text, after: [last], now: now, calendar: .current)
         }
-        for text in ["How does the compressor work?", "Tell me more", "Why?", "What does the refrigerant do?", "Is it efficient?"] {
+        for text in [
+            "How does the compressor work?", "Tell me more", "Why?", "What does the refrigerant do?", "Is it efficient?",
+            "What is a refrigerant?", "Explain that again", "How tall?", "Can you describe the refrigerant cycle in more detail please",
+        ] {
             XCTAssertTrue(continues(text), text)
         }
-        for text in ["What's on tomorrow?", "Did anyone email me about dinner?", "Write a poem about cats"] {
+        for text in [
+            "What's on tomorrow?", "Did anyone email me about dinner?", "Write a poem about cats today",
+            "Who told me about the compressor?", "What is my next meeting?", "Any messages about the compressor?",
+        ] {
             XCTAssertFalse(continues(text), text)
         }
     }
@@ -48,7 +67,15 @@ final class ConversationFollowUpTests: XCTestCase {
             title: nil, body: "The compressor on the fridge is making a noise again", content: .complete, observations: [],
             senderHandle: "robin@example.invalid"
         )
-        try await store.ingest(CollectionBatch(source: .messages, status: .init(ok: true, code: .ok), events: [event], checkpoint: nil))
+        let refrigerant = Event(
+            source: .imessage, sourceRecordID: "example-refrigerant", appID: nil, sender: "Example Robin", threadID: "example-thread",
+            eventTime: now.addingTimeInterval(-500), eventTimeSource: .sent, captureTime: now,
+            title: nil, body: "Picked up the refrigerant for the aircon", content: .complete, observations: [],
+            senderHandle: "robin@example.invalid"
+        )
+        try await store.ingest(CollectionBatch(
+            source: .messages, status: .init(ok: true, code: .ok), events: [event, refrigerant], checkpoint: nil
+        ))
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("follow-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: folder) }

@@ -206,7 +206,7 @@ extension CoreEngine {
             // A follow-up to a conversation stays one (#54): grounded answers see no earlier turns, so a question about
             // what Aegis just said must not become a search of the owner's messages. Records found go along as notes.
             if !input.prefersGrounded, !conversationGrounded, let last = conversation.last, last.via == nil,
-               FollowUpQuestion.continues(trimmed, from: last, now: clock(), calendar: calendar)
+               FollowUpQuestion.continues(trimmed, after: conversation, now: clock(), calendar: calendar)
             {
                 return await chat(trimmed, found: Chat.contextLines(input.text), turn: turn)
             }
