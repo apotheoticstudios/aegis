@@ -93,7 +93,7 @@ extension CoreEngine {
         format.calendar = calendar
         format.timeZone = calendar.timeZone
         format.locale = Locale.autoupdatingCurrent
-        format.dateFormat = "EEE HH:mm"
+        format.dateFormat = "EEE h:mm a"
         let occurrences = await (try? store.occurrences(from: now, to: end)) ?? []
         let reminders = await (try? store.reminders(from: now.addingTimeInterval(-86400), to: end)) ?? []
         return occurrences.sorted { $0.start < $1.start }.prefix(6).map {

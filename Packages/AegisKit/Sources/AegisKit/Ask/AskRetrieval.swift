@@ -125,9 +125,9 @@ enum AskRetrieval {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "EEEE, d MMM yyyy, HH:mm"
+        formatter.dateFormat = "EEEE, d MMM yyyy, h:mm a"
         func date(_ date: Date, allDay: Bool = false) -> String {
-            formatter.dateFormat = allDay ? "d MMM yyyy (all-day)" : "EEE, d MMM yyyy, HH:mm"
+            formatter.dateFormat = allDay ? "d MMM yyyy (all-day)" : "EEE, d MMM yyyy, h:mm a"
             return formatter.string(from: date)
         }
         func matches(_ title: String) -> Bool {
@@ -175,7 +175,7 @@ enum AskRetrieval {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "EEE d MMM, HH:mm"
+        formatter.dateFormat = "EEE d MMM, h:mm a"
         let source = switch event.source {
         case .imessage: "iMessage"
         case .sms: "SMS"
@@ -225,7 +225,7 @@ enum AskRetrieval {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = calendar.timeZone
         formatter.calendar = calendar
-        formatter.dateFormat = "EEEE, d MMM yyyy, HH:mm"
+        formatter.dateFormat = "EEEE, d MMM yyyy, h:mm a"
         let header = "Today is \(formatter.string(from: now)) (\(calendar.timeZone.identifier)).\nQuestion: "
             + jsonString(question) + "\nContext (a bounded selection of available records, not a complete inbox or day):"
         guard header.unicodeScalars.count < 8000 else { throw PipelineError.invalidPolicy }

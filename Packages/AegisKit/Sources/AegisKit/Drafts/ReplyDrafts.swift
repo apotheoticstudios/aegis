@@ -67,7 +67,7 @@ public enum ReplyDrafts {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "EEE d MMM, HH:mm"
+        formatter.dateFormat = "EEE d MMM, h:mm a"
         func line(_ event: Event) -> String {
             let who = SenderDisplay.isOutgoing(event) ? "You" : (BriefLayout.speaker(event) ?? "Someone")
             return "[\(event.id)] \(formatter.string(from: event.eventTime)) · \(oneLine(who)): "
