@@ -58,6 +58,28 @@ final class FollowUpQuestionTests: XCTestCase {
         XCTAssertTrue(chat.user.hasSuffix("OWNER SAYS: " + followUp))
     }
 
+    func testAnUnrelatedMessageWithTheSameWordDoesNotWinOverTheThread() async throws {
+        let (core, model, event) = try await engine(unrelated: "Example Robin: she said the parcel arrived")
+        _ = await core.handle(.ask(question: firstQuestion))
+        _ = await core.handle(.ask(question: followUp))
+        let jobs = await model.jobs
+        XCTAssertEqual(jobs.filter { $0.id.hasPrefix("ask-") }.count, 1, "the follow-up isn't answered from the unrelated message")
+        let chat = try XCTUnwrap(jobs.last { $0.id.hasPrefix("chat-") })
+        XCTAssertTrue(chat.user.contains(event.body))
+        XCTAssertFalse(chat.user.contains("parcel"))
+    }
+
+    func testTheNewerTimeWinsInAFollowUpSearch() {
+        let now = Date(timeIntervalSince1970: 1_791_700_000)
+        let search = FollowUpQuestion.search("And today?", after: "Did Example Sam message me yesterday?", now: now, calendar: .current)
+        XCTAssertFalse(search.lowercased().contains("yesterday"))
+        XCTAssertTrue(search.contains("Example Sam") && search.contains("today"))
+        XCTAssertEqual(
+            FollowUpQuestion.search("what did she want?", after: "Did Example Sam message me yesterday?", now: now, calendar: .current),
+            "Did Example Sam message me yesterday? what did she want?", "without its own time the earlier one stays"
+        )
+    }
+
     func testFollowUpWithoutPreviousTurnHasNoRetrievedMessageNotes() async throws {
         let (core, model, _) = try await engine()
         guard case .answer = await core.handle(.ask(question: followUp)) else {
@@ -81,7 +103,7 @@ final class FollowUpQuestionTests: XCTestCase {
     }
 
     /// Uses only synthetic messages, contacts, a fixed clock and in-memory persistence.
-    private func engine() async throws -> (CoreEngine, FollowUpModel, Event) {
+    private func engine(unrelated: String? = nil) async throws -> (CoreEngine, FollowUpModel, Event) {
         let now = Date(timeIntervalSince1970: 1_791_700_000)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .gmt
@@ -92,14 +114,21 @@ final class FollowUpQuestionTests: XCTestCase {
             senderHandle: "sam@example.invalid"
         )
         let store = MemoryStore()
+        let other = unrelated.map {
+            Event(
+                source: .imessage, sourceRecordID: "example-unrelated", appID: nil, sender: "Example Robin", threadID: "example-other",
+                eventTime: now.addingTimeInterval(-30), eventTimeSource: .sent, captureTime: now,
+                title: nil, body: $0, content: .complete, observations: [], senderHandle: "robin@example.invalid"
+            )
+        }
         try await store.ingest(CollectionBatch(
-            source: .messages, status: .init(ok: true, code: .ok), events: [event], checkpoint: nil
+            source: .messages, status: .init(ok: true, code: .ok), events: [event] + (other.map { [$0] } ?? []), checkpoint: nil
         ))
         let contacts = ContactIndex([
             .init(id: "example-sam", displayName: "Example Sam", emails: ["sam@example.invalid"]),
         ])
         let ownInput = try await Ask.prepare(question: followUp, now: now, calendar: calendar, store: store, contacts: contacts)
-        XCTAssertTrue(ownInput.isEmpty, "The follow-up's own words must not match the synthetic message.")
+        XCTAssertEqual(ownInput.isEmpty, unrelated == nil, "On its own the follow-up matches only an unrelated message.")
         XCTAssertNil(ownInput.directAnswer)
         let model = FollowUpModel(eventID: event.id)
         let core = try CoreEngine(

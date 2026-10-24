@@ -183,22 +183,25 @@ extension CoreEngine {
         defer { release() }
         guard currentQuestion == turn else { return .refused(code: "cancelled") }
         do {
-            let input = try await Ask.prepare(
-                question: trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
-            )
-            guard currentQuestion == turn else { return .refused(code: "cancelled") }
-            if let text = input.directAnswer {
-                return .answer(Answer(text: text, eventIDs: [], scheduleIDs: [], model: "aegis", generatedAt: clock()))
-            }
-            if input.isEmpty, FollowUpQuestion.leansOnPrevious(trimmed), let last = conversation.last, last.via == nil {
+            // A follow-up is searched with the previous question first: on its own, "what did she want?" would
+            // match any message with "she" in it.
+            if FollowUpQuestion.leansOnPrevious(trimmed), let last = conversation.last, last.via == nil {
                 let followInput = try await Ask.prepare(
-                    question: last.owner + " " + trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
+                    question: FollowUpQuestion.search(trimmed, after: last.owner, now: clock(), calendar: calendar),
+                    now: clock(), calendar: calendar, store: store, contacts: contactIndex()
                 )
                 guard currentQuestion == turn else { return .refused(code: "cancelled") }
                 // The earlier question supplies retrieval terms only; its records stay local as conversation NOTES.
                 if !followInput.isEmpty {
                     return await chat(trimmed, found: Chat.contextLines(followInput.text), turn: turn)
                 }
+            }
+            let input = try await Ask.prepare(
+                question: trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
+            )
+            guard currentQuestion == turn else { return .refused(code: "cancelled") }
+            if let text = input.directAnswer {
+                return .answer(Answer(text: text, eventIDs: [], scheduleIDs: [], model: "aegis", generatedAt: clock()))
             }
             // Small talk, general questions and anything the owner's data doesn't cover: a conversation (#194),
             // or, with automatic hand-off on, Claude or ChatGPT for a complex general question (#223).

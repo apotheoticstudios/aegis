@@ -1,3 +1,5 @@
+import Foundation
+
 /// A small, pure English heuristic for questions that need the previous owner's question to retrieve records.
 enum FollowUpQuestion {
     /// Recognizes whole-word references and continuation openings. Capitalized words other than references,
@@ -20,6 +22,18 @@ enum FollowUpQuestion {
                 && !(index == 0 && openings.contains(normalized))
         }
     }
+
+    /// What to search for a follow-up: the previous question's words, then this one's. When this question names
+    /// its own time ("and today?"), the previous question's time words go, so the newer time wins.
+    static func search(_ question: String, after previous: String, now: Date, calendar: Calendar) -> String {
+        let ownTime = AskQuery(question, now: now, calendar: calendar).messages != AskQuery("", now: now, calendar: calendar).messages
+        guard ownTime else { return previous + " " + question }
+        return previous.replacingOccurrences(of: timeWords, with: " ", options: [.regularExpression, .caseInsensitive]) + " " + question
+    }
+
+    private static let timeWords = #"\b(?:(?:this|last|next)\s+(?:morning|week|monday|tuesday|wednesday|thursday|friday|"#
+        + #"saturday|sunday)|last\s+\d+\s+days|today|tonight|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|"#
+        + #"saturday|sunday)\b"#
 
     private static let references: Set<String> = [
         "she", "he", "they", "them", "her", "him", "his", "their", "it", "that", "this", "those", "these", "there",
