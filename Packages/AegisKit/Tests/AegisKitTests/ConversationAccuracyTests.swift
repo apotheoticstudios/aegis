@@ -61,6 +61,11 @@ final class ConversationAccuracyTests: XCTestCase {
         XCTAssertEqual(input.eventIDs, [target.id])
         XCTAssertNil(input.directAnswer)
         XCTAssertTrue(input.text.contains(target.body))
+        let compound = try await Ask.prepare(
+            question: "That was yesterday. Also, what was that text message I got in Chinese? Can you translate it?",
+            now: now, calendar: calendar, store: store, contacts: nil
+        )
+        XCTAssertEqual(compound.eventIDs, [target.id], "A correction followed by a new request is not a literal keyword search for 'also'")
         let selection = AskSelection(question, query: AskQuery(question, now: now, calendar: calendar))
         XCTAssertNil(selection.sender)
         XCTAssertTrue(selection.terms.isEmpty)

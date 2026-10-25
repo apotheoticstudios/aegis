@@ -80,6 +80,12 @@ func conversationAccuracy(modelDirectory: String, output: String) async throws {
         $0.eventIDs == [parcel.id] && $0.text.lowercased().contains("arrived")
             && ($0.text.lowercased().contains("parcel") || $0.text.lowercased().contains("package"))
     }
+    try await check(
+        "compound-translation",
+        "That was yesterday. Also, what was that text message I got in Chinese? Can you translate it?"
+    ) {
+        $0.eventIDs == [parcel.id] && $0.text.lowercased().contains("arrived")
+    }
     try await check("dont-remember", "Don't remember that.") { $0.model == "memory" }
     guard case let .memories(notes) = await core.handle(.memories) else { throw CocoaError(.coderInvalidValue) }
     reports.append(["case": "no-accidental-facts", "passed": notes.isEmpty])

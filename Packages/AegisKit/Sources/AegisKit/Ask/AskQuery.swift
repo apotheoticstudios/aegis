@@ -15,7 +15,7 @@ struct AskQuery {
         let text = " " + words.joined(separator: " ") + " "
         let stopText = "what when where who did does the about asked ask tell me my from with have has was were any there that this "
             + "and for are can could would should how why you your please today yesterday tomorrow morning tonight week last next days plans s"
-        let filler = " want wants wanted need needs say says said anything something anyone someone everything get got"
+        let filler = " want wants wanted need needs say says said anything something anyone someone everything get got also"
         let stop = Set((stopText + filler).split(separator: " ").map(String.init))
         var seen = Set<String>()
         keywords = words.filter { $0.count >= 3 && !stop.contains($0) && seen.insert($0).inserted }
