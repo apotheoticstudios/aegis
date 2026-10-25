@@ -14,7 +14,7 @@ Aegis is a private, Iron Man–style assistant that runs entirely on the user's 
 
 - **Local and private.** All data and all AI processing stay on the Mac. Nothing is sent to the cloud, with one owner-enabled exception: questions with nothing personal in them can be handed to Claude or ChatGPT with the owner's own API key (ADR-0017). Only the owner's words go, never their data or Aegis's memory.
 - **Thoughtless.** After a short one-time setup, the user does nothing. Aegis starts itself, maintains itself and learns on its own.
-- **Silent until opened.** No sounds, notifications, voice or fan noise while the panel is closed. It works quietly in the background and speaks only when the panel opens. The one opt-in exception is Aegis Mode, which keeps a visual shell on screen, still without sounds or interruptions.
+- **Silent until opened.** No sounds, notifications, voice or fan noise while the panel is closed. It works quietly in the background and speaks only when the panel opens. The one opt-in exception is AegisShell, which keeps a visual shell on screen, still without sounds or interruptions.
 - **Light.** At most 3 GB of RAM when idle, on a 24 GB Mac (ADR-0025). Small always-on helpers may stay loaded; the large model loads only when needed.
 - **Full features at any assignment.** The minimum assignment (20 GB) gets every feature. Assigning more buys a smarter model and longer memory, not extra features.
 - **Acts only on your command.** Aegis reads everything, but it only acts (controls apps, sends messages, operates the home) when the user commands it, with confirmation for anything consequential.
@@ -253,7 +253,7 @@ With the panel closed, Aegis is invisible and inaudible, and uses at most 3 GB o
 ### Limit: the Mac must be awake
 
 - A sleeping MacBook pauses Aegis. It catches up instantly on wake.
-- **Wake the Mac for the brief** (optional, off by default, set on the Schedule screen): the Mac wakes itself shortly before the wake-up time, so the brief is ready even if it was asleep. macOS asks for an administrator password once, in its own dialog; Aegis never sees it. Reliable when plugged in; on battery with the lid closed, macOS may sleep again first, and the brief is then written when the Mac is opened. Turning it off removes the schedule. It is the only system setting Aegis changes outside Aegis Mode, so it gets an ADR before it is built.
+- **Wake the Mac for the brief** (optional, off by default, set on the Schedule screen): the Mac wakes itself shortly before the wake-up time, so the brief is ready even if it was asleep. macOS asks for an administrator password once, in its own dialog; Aegis never sees it. Reliable when plugged in; on battery with the lid closed, macOS may sleep again first, and the brief is then written when the Mac is opened. Turning it off removes the schedule. It is the only system setting Aegis changes outside AegisShell, so it gets an ADR before it is built.
 - For true always-on use, a Mac mini works as a 24/7 hub, with the MacBook acting as the screen for the panel; an iPhone screen is an optional later add-on.
 
 ## Interface, voice and personality
@@ -476,24 +476,24 @@ MCP as the plugin standard (Swift SDK), Playwright for browsing, SearXNG for pri
 - Never-list: keep it fixed, or make payments, deletion and credentials unlockable per category with a strong confirm.
 - Stage 0 speed benchmark: the same five tasks through each tier on a real Mac.
 
-## Aegis Mode (OS-style shell)
+## AegisShell (OS-style shell)
 
-Aegis Mode turns the Mac into a Aegis operating environment: a shell over macOS that replaces the everyday desktop experience with Aegis's own, while macOS keeps running underneath. It is built on the core Aegis app and is activated on demand: it runs only while the user has engaged it, and normal macOS returns the moment it's dismissed.
+AegisShell turns the Mac into a Aegis operating environment: a shell over macOS that replaces the everyday desktop experience with Aegis's own, while macOS keeps running underneath. It is built on the core Aegis app and is activated on demand: it runs only while the user has engaged it, and normal macOS returns the moment it's dismissed.
 
-### Activating and leaving Aegis Mode
+### Activating and leaving AegisShell
 
 | Way in | Example |
 | --- | --- |
 | Hotkey | A dedicated shortcut (separate from the ⌥ Space panel hotkey) |
 | Voice | "Aegis, engage" (only when the wake word is enabled) |
-| Menu bar | "Engage Aegis Mode" from the hex icon |
+| Menu bar | "Engage AegisShell" from the hex icon |
 | Panel | An Engage button in the HUD |
 | Optional schedule or workspace | e.g. engage automatically on the Mac mini hub, or when the "Work" workspace starts; off by default |
 
 - **On engage:** a short transition; the Dock and menu bar hide, the live HUD desktop, Aegis top bar and custom widgets appear, and the current window positions are saved.
-- **On disengage** (same hotkey, "Aegis, stand down", or the top bar's exit control): everything Aegis Mode added is removed, the Dock and menu bar return, and windows go back where they were.
-- **Resources:** the live desktop, top bar and custom widgets use no RAM or GPU while Aegis Mode is not engaged.
-- **Always available exit:** if Aegis Mode ever misbehaves, the disengage hotkey and the menu bar icon still restore normal macOS.
+- **On disengage** (same hotkey, "Aegis, stand down", or the top bar's exit control): everything AegisShell added is removed, the Dock and menu bar return, and windows go back where they were.
+- **Resources:** the live desktop, top bar and custom widgets use no RAM or GPU while AegisShell is not engaged.
+- **Always available exit:** if AegisShell ever misbehaves, the disengage hotkey and the menu bar icon still restore normal macOS.
 
 ### Why a shell, not a real OS
 
@@ -501,7 +501,7 @@ Aegis Mode turns the Mac into a Aegis operating environment: a shell over macOS 
 - A shell gets the OS feel with SIP left on and normal app permissions.
 - It grants no extra data access: macOS still checks every permission per app, so the same one-time grants apply.
 
-### What Aegis Mode adds
+### What AegisShell adds
 
 | Feature | What it does |
 | --- | --- |
@@ -518,8 +518,8 @@ Aegis Mode turns the Mac into a Aegis operating environment: a shell over macOS 
 
 Two kinds, both interactive:
 
-1. **Native macOS desktop widgets (WidgetKit)** — available even without Aegis Mode. macOS draws and refreshes them, so they cost almost nothing. Buttons and toggles only; Apple controls frame, sizes and refresh rate.
-2. **Custom Aegis widgets (Aegis Mode)** — Aegis-rendered panels at desktop level with full styling: chamfered frames, live animation, mini reactor, sliders, text input. More RAM and GPU, usable when the desktop is visible.
+1. **Native macOS desktop widgets (WidgetKit)** — available even without AegisShell. macOS draws and refreshes them, so they cost almost nothing. Buttons and toggles only; Apple controls frame, sizes and refresh rate.
+2. **Custom Aegis widgets (AegisShell)** — Aegis-rendered panels at desktop level with full styling: chamfered frames, live animation, mini reactor, sliders, text input. More RAM and GPU, usable when the desktop is visible.
 
 | Widget | Shows | Interaction |
 | --- | --- | --- |
@@ -529,13 +529,13 @@ Two kinds, both interactive:
 | Home | Garage, doors, lights, temperature | Light and scene toggles; locks and garage open the panel to confirm |
 | Brief | Today's headline | Play the brief aloud |
 | World | Weather front, tracked flight | Open the World view |
-| Ask | A mini command line | Type or speak a question (Aegis Mode only) |
+| Ask | A mini command line | Type or speak a question (AegisShell only) |
 | System | Storage, RAM, sources health | Opens the fix if something broke |
 
 ### Rules
 
 - **Activated on demand.** Not active all the time: it runs only after the user engages it, and is disengaged by default at login. With it disengaged, Aegis stays invisible and silent until the panel opens. A dedicated hub (e.g. a Mac mini) can opt to engage it automatically.
-- **No sounds by default.** Even in Aegis Mode, interface sounds are optional and nothing interrupts.
+- **No sounds by default.** Even in AegisShell, interface sounds are optional and nothing interrupts.
 - **Privacy on screen.** Each widget has a "hide details" option ("3 waiting" instead of names), and all widgets hide content during screen sharing and when the Mac is locked.
 - **Performance.** The live desktop freezes to a static frame when covered by windows, on battery, or when the Mac is busy; custom widgets pause when not visible.
 - **What stays macOS:** login screen, password and permission prompts, System Settings, App Store windows, and the inside of other apps' windows.
@@ -604,7 +604,7 @@ Setup is 15 screens shown one at a time, each holding one category of options. R
 | 9 | Privacy | Never-read apps; never-read chats or people; FileVault check |
 | 10 | Personality | Preset, name, form of address, sliders, live text preview |
 | 11 | Voice | On or off; voice choice; warmth, speed and sci-fi sliders; wake word; spoken preview (with a "hear the higher-band voice" sample) |
-| 12 | Interface | HUD hotkey, theme and colours, panel size and position, menu bar icon style; Aegis Mode activation (hotkey, voice phrase, optional auto-engage); desktop widgets |
+| 12 | Interface | HUD hotkey, theme and colours, panel size and position, menu bar icon style; AegisShell activation (hotkey, voice phrase, optional auto-engage); desktop widgets |
 | 13 | Silence and alerts | Menu bar glow; break silence for emergencies (off by default); who can break it (defaults to detected VIPs); home warnings at night |
 | 14 | Tune-up | 30-second benchmark on the user's Mac picks the final model size and compression |
 | 15 | Ready | Summary (e.g. "40 GB assigned · Classic personality · 7 sources · 12 home devices · brief ready at 7:00am"), then the first panel opens and Aegis introduces itself |
@@ -652,7 +652,7 @@ Every feature below is available at any storage assignment; assigning more only 
 | Multi-step tasks | Plans shown in the panel, then run step by step |
 | World view | God's Eye View globe with live public data and the user's flights, trips and home |
 | Desktop widgets | Interactive native widgets for status, replies, home, brief and more |
-| Aegis Mode | Opt-in OS-style shell: live HUD desktop, top bar, launcher, window layouts, workspaces, custom widgets |
+| AegisShell | Opt-in OS-style shell: live HUD desktop, top bar, launcher, window layouts, workspaces, custom widgets |
 | Plain-language control | "Jake's my brother", "ignore this group chat", "movie time" routines |
 | Learning | Priorities adapt to what the user opens, ignores and replies to |
 | Deep think | Larger model for hard questions (about 50 GB or more assigned, with 32 GB+ RAM) |
@@ -680,12 +680,12 @@ Addons are modular parts of Aegis: mainly custom versions of existing apps (mail
 
 - **Separate apps, one plug-in contract:** each addon is its own process, started on demand and quiet when idle, so the idle footprint of Aegis does not grow. Addons use the same process split as the rest of Aegis.
 - **Custom versions of existing apps:** an addon can stand in for an app the user already uses, doing the same job with a design that matches Aegis. The original app stays installed and usable.
-- **Perfect integration:** because Aegis and the addon share one contract, Aegis uses the addon's native actions and data instead of reading the screen or clicking. This is faster and does not break when an app updates. Every action an addon offers is available to voice, the panel, rules and Aegis Mode.
+- **Perfect integration:** because Aegis and the addon share one contract, Aegis uses the addon's native actions and data instead of reading the screen or clicking. This is faster and does not break when an app updates. Every action an addon offers is available to voice, the panel, rules and AegisShell.
 - **Shared context and look:** addons use Aegis's design system, people and context, and can open each other (for example, open an email's sender in the contacts addon).
 - **Modular:** Aegis runs fully without any addon. Installing one adds capability; removing one never breaks the core.
 - **Manifest:** each addon declares its name, the data it can provide, the commands Aegis may send it, and the permissions it needs. The user approves these once, per addon, in the wizard or settings.
 - **Two-way:** Aegis reads an addon's data into its event stream and can command it ("show CPU and memory", "start a 60-second capture"). Commands follow the usual confirmation tiers.
-- **Shown in the panel and Aegis Mode:** an addon can provide an interactive widget for the panel or the desktop.
+- **Shown in the panel and AegisShell:** an addon can provide an interactive widget for the panel or the desktop.
 - **Performance monitor (first addon):** live CPU, memory, GPU, disk, network, temperature and battery. Aegis can answer "why is my Mac slow?" from it, name the heavy app, and offer to quit it.
 - **Aegis uses it too:** the monitor supplies the free-memory reading for the active-task RAM budget, so heavy tools choose a lighter method when the Mac is busy.
 - **Open questions:** whether anyone besides the owner may write addons, and how addons are sandboxed (default: an addon sees only its own data, and nothing from Aegis's message and mail store unless the user grants it; a mail addon handles mail because it is the mail app), and whether custom versions are built from scratch or from open-source apps (licences to check).
@@ -739,11 +739,11 @@ The Mac running Aegis becomes a store of the user's whole personal life, so secu
 | Dismissed notifications vanish | Database watched by file-change events and copied within a second |
 | App updates change databases (WhatsApp, Messages, notifications) | Self-healing collectors, two notification recorders |
 | Apple Mail fetches only while it is running, and Microsoft began switching off Exchange Web Services (the connection Apple Mail uses for work Microsoft 365 accounts) on 1 October 2026, with full removal on 1 April 2027 | Aegis starts Mail hidden in the background and checks that it is running; work or school accounts use Outlook's Mac notifications (sender, subject, preview) until Apple Mail supports Microsoft Graph, which Apple has promised for a macOS 27 update |
-| Full Disk Access, Accessibility and Automation permissions are fiddly | Guided permission screens, re-checks on launch; Aegis Mode does not remove them |
+| Full Disk Access, Accessibility and Automation permissions are fiddly | Guided permission screens, re-checks on launch; AegisShell does not remove them |
 | Prompt injection now that Aegis can act | Actions only from the user's own commands; read content never triggers actions |
 | Wrong or harmful action | Confirmation tiers, plans shown before running, action log, undo, a never-allowed list (payments, deletion, passwords) |
 | UI automation breaks when apps update | Prefer frameworks, AppleScript and Shortcuts; screen-level control only as fallback |
-| Aegis Mode breaks with macOS updates (desktop layer, hidden Dock and menu bar) | Shell kept optional and separate from the core app; falls back to normal macOS |
+| AegisShell breaks with macOS updates (desktop layer, hidden Dock and menu bar) | Shell kept optional and separate from the core app; falls back to normal macOS |
 | Live desktop and custom widgets cost GPU and battery | Freeze when covered, on battery or under load; native widgets as the light default |
 | Widgets expose personal details on screen | Hide-details option; content hidden during screen sharing and when locked |
 | Total silence could hide a real emergency | Optional "break silence for emergencies" |
@@ -789,7 +789,7 @@ Aegis is a native Mac app written in Swift, split into small processes so the al
 
 ### Processes
 
-1. **Aegis app:** menu bar icon, panel, wizard, settings, Aegis Mode.
+1. **Aegis app:** menu bar icon, panel, wizard, settings, AegisShell.
 2. **Aegis Core (launch agent):** collectors, rules, classifier, database; always on, tiny. It reads Calendar, Reminders and Contacts itself: the permissions the user gives the app reach it (ADR-0013).
 3. **Model service (on-demand launch agent):** launchd starts it when Aegis Core asks for a brief, even with the app closed; it loads the LLM, answers over XPC and exits to free RAM (ADR-0013).
 4. **Home helper (Catalyst):** HomeKit access.
@@ -798,7 +798,7 @@ Aegis is a native Mac app written in Swift, split into small processes so the al
 
 The parts communicate through XPC. Each side checks the other's code signature (Aegis's own team), and Aegis is signed with the same team from its very first install, because macOS remembers a background agent's first signature (ADR-0013).
 
-### Aegis Mode
+### AegisShell
 
 | Part | Technology |
 | --- | --- |
@@ -813,7 +813,7 @@ The parts communicate through XPC. Each side checks the other's code signature (
 | Multiple monitors | NSScreen and screen-change notifications |
 | Performance guards | Window occlusion state, thermal state, power source |
 
-Aegis Mode does not control Spaces (no public API) and does not replace Finder or the real menu bar.
+AegisShell does not control Spaces (no public API) and does not replace Finder or the real menu bar.
 
 ## Development plan
 
@@ -834,7 +834,7 @@ AI agents do most of the building, so estimates in days or weeks aren't meaningf
 | 5 | Actions | Home control and app control with safety rules |
 | 6 | Product readiness | Setup wizard, storage assignment, tune-up, self-healing, signed builds |
 | 7 | Extras and World view | Meeting prep, drafts, commitments, God's Eye View |
-| 8 | Aegis Mode | The activatable OS-style shell |
+| 8 | AegisShell | The activatable OS-style shell |
 
 ### Stage 0: Prototype and risk tests
 
@@ -948,7 +948,7 @@ AI agents do most of the building, so estimates in days or weeks aren't meaningf
 
 **Done when:** each extra works end to end, and the World view loads and fully unloads without affecting idle RAM.
 
-### Stage 8: Aegis Mode
+### Stage 8: AegisShell
 
 **Goal:** the activatable OS-style shell.
 
@@ -959,7 +959,7 @@ AI agents do most of the building, so estimates in days or weeks aren't meaningf
 - Custom interactive desktop widgets.
 - Performance guards: freeze when covered, on battery or under load.
 
-**Done when:** Aegis Mode engages and disengages cleanly every time, restores the Mac exactly as it was (including after a forced crash), and uses no resources while disengaged.
+**Done when:** AegisShell engages and disengages cleanly every time, restores the Mac exactly as it was (including after a forced crash), and uses no resources while disengaged.
 
 ### Throughout every stage
 

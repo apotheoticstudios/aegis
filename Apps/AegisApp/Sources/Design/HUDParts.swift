@@ -114,7 +114,7 @@ extension View {
 }
 
 // shortcut: no backdrop blur, as only the void and its soft wash sit behind panels, where a blur shows nothing; add a
-// material if panels ever float over busy content (Aegis Mode's desktop).
+// material if panels ever float over busy content (AegisShell's desktop).
 struct HUDGlass: View {
     let tone: HUDColor
     var cut = HUD.chamferMd

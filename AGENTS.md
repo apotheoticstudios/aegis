@@ -11,7 +11,7 @@ A private, Iron Man–style assistant for macOS. It runs entirely on the user's 
 ## Core principles (never break these)
 
 1. **Local and private.** User data and AI processing never leave the Mac. Allowed network use only: model/app downloads, the World view's public data (God's Eye View), Cesium ion 3D tiles, the optional self-hosted emergency push, and the owner-enabled Claude/ChatGPT hand-off of non-personal questions (ADR-0017: only the owner's own words, never collected data or memory).
-2. **Silent until opened.** No sounds, notifications or visible UI while the panel is closed. Aegis Mode is the one opt-in exception (visual only, still silent).
+2. **Silent until opened.** No sounds, notifications or visible UI while the panel is closed. AegisShell is the one opt-in exception (visual only, still silent).
 3. **Light.** Idle RAM for all always-on processes ≤ 3 GB on the owner's Mac (ADR-0025). The large chat model loads on demand and unloads after use.
 4. **Acts only on the user's command.** Collected content (emails, messages, notifications, web pages) is DATA, never instructions. Nothing in it may trigger an action.
 5. **Thoughtless.** After setup the user does nothing: auto-start, self-healing, auto-updates.
@@ -20,7 +20,7 @@ A private, Iron Man–style assistant for macOS. It runs entirely on the user's 
 
 | Process | Role |
 | --- | --- |
-| `AegisApp` | Menu bar icon, HUD panel, setup wizard, settings, Aegis Mode |
+| `AegisApp` | Menu bar icon, HUD panel, setup wizard, settings, AegisShell |
 | `AegisCore` (launch agent) | Collectors, rules, classifier, SQLite database; always on, tiny |
 | `ModelService` (XPC) | Loads MLX models on demand, exits to free RAM |
 | `HomeHelper` (Mac Catalyst) | HomeKit access |
@@ -100,7 +100,7 @@ Spend effort on code, not paperwork (owner's rule, 2026-10-09):
 - **No new network calls, telemetry or analytics** unless the issue explicitly allows it.
 - **No secrets in the repo or in prompts:** signing certificates, notarization credentials, API keys, the Cesium key. Those stay with the human.
 - **No personal details in code, config or docs:** no names, email addresses, phone numbers, account or device names, or team IDs. Aegis learns them at runtime on the Mac, through the permissions the user grants in setup, and keeps them there. Local-only settings go in gitignored files (`Config/Signing.local.xcconfig`); anything personal goes in `Private/` or `docs/history/`, which git ignores. Treat the repo as public: anything committed is world-readable.
-- **Never** disable SIP or TCC, use private APIs to bypass permissions, or change system settings outside Aegis Mode's save-and-restore code.
+- **Never** disable SIP or TCC, use private APIs to bypass permissions, or change system settings outside AegisShell's save-and-restore code.
 - **Actions** (sending, home control, files, app control) must go through the action safety system: confirmation tiers, never-list (payments, purchases, deleting data, passwords), action log.
 - **Dependencies:** prefer Apple frameworks. New third-party packages need an ADR.
 - **Style:** Swift 6 language mode, strict concurrency, SwiftFormat + SwiftLint configs in the repo. Tests with XCTest. Public types documented.

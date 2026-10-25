@@ -1,15 +1,15 @@
-# Aegis Mode: build plan
+# AegisShell: build plan
 
-What it is: [`DESIGN.md` › Aegis Mode](../design/DESIGN.md#aegis-mode-os-style-shell). A shell over macOS that makes the Mac feel like Aegis's own operating environment while it's engaged, and leaves no trace when it isn't. Visuals: [`docs/design/aegis-mode-brief.md`](../design/aegis-mode-brief.md).
+What it is: [`DESIGN.md` › AegisShell](../design/DESIGN.md#aegisshell-os-style-shell). A shell over macOS that makes the Mac feel like Aegis's own operating environment while it's engaged, and leaves no trace when it isn't. Visuals: [`docs/design/aegisshell-brief.md`](../design/aegisshell-brief.md).
 
 Status: planned, nothing built. Each stage below is one issue and one PR (or a few small ones), merged only when its acceptance checks pass.
 
 ## Ground rules (from AGENTS.md and the spec)
 
-- **On demand only.** Off at login. Nothing Aegis Mode adds uses CPU, GPU or RAM while it's disengaged.
-- **Always an exit.** The disengage hotkey and the menu bar icon restore normal macOS even if something in Aegis Mode fails. Disengaging restores everything it changed: Dock, menu bar, wallpaper, window positions.
+- **On demand only.** Off at login. Nothing AegisShell adds uses CPU, GPU or RAM while it's disengaged.
+- **Always an exit.** The disengage hotkey and the menu bar icon restore normal macOS even if something in AegisShell fails. Disengaging restores everything it changed: Dock, menu bar, wallpaper, window positions.
 - **No SIP or private APIs.** Public APIs only; macOS asks permission per feature (Accessibility for window management, Automation for apps).
-- **System settings only through save-and-restore.** Any macOS setting Aegis Mode changes (for example Dock auto-hide) is saved first and put back on disengage, crash or quit. This is the one place AGENTS.md allows Aegis to change system settings.
+- **System settings only through save-and-restore.** Any macOS setting AegisShell changes (for example Dock auto-hide) is saved first and put back on disengage, crash or quit. This is the one place AGENTS.md allows Aegis to change system settings.
 - **Silent.** No sounds unless the owner turns interface sounds on.
 - **Privacy on screen.** Widgets hide names and content during screen sharing, while the Mac is locked, and when "hide details" is on.
 - **Actions follow the safety system.** Anything a widget or the launcher does goes through ActionPolicy (tiers, never-list, action log), exactly like commands in the panel.
@@ -28,14 +28,14 @@ A throwaway prototype in `Prototype/` that answers, on the owner's Mac (macOS 26
 | Multiple displays, full-screen apps, Spaces | It must not break normal use. | Decide per display; step aside for full-screen apps. |
 | Cost while engaged | Budget. | Measure CPU, GPU and window server load with everything showing; target under 5% CPU at rest. |
 
-Output: `docs/stages/AEGIS-MODE-SPIKE.md` with the answers (numbers only, no personal data) and an ADR (`docs/decisions/`) for the approach and every macOS setting Aegis Mode will touch.
+Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no personal data) and an ADR (`docs/decisions/`) for the approach and every macOS setting AegisShell will touch.
 
 ## Stage 1 — Engage and disengage
 
-- Engage from a dedicated hotkey, the menu bar ("Engage Aegis Mode"), a panel button and "Aegis, engage"; disengage the same ways plus "Aegis, stand down".
+- Engage from a dedicated hotkey, the menu bar ("Engage AegisShell"), a panel button and "Aegis, engage"; disengage the same ways plus "Aegis, stand down".
 - Save state on engage (Dock and menu bar settings, wallpaper, window frames) to a file in Aegis's folder; restore on disengage, on quit, and on the next launch after a crash.
 - The engage/disengage transition from the design brief.
-- **Done when:** engaging and disengaging 20 times in a row leaves macOS exactly as before (checked automatically: settings and window frames compared), crash recovery restores state, and nothing Aegis Mode added runs while disengaged.
+- **Done when:** engaging and disengaging 20 times in a row leaves macOS exactly as before (checked automatically: settings and window frames compared), crash recovery restores state, and nothing AegisShell added runs while disengaged.
 
 ## Stage 2 — Aegis top bar
 
@@ -58,7 +58,7 @@ Output: `docs/stages/AEGIS-MODE-SPIKE.md` with the answers (numbers only, no per
 
 ## Stage 5 — Launcher
 
-- In Aegis Mode, ⌥Space opens the launcher style of the panel: one bar to open apps, files and settings, ask, and run commands (reusing the general command system, ADR-0031).
+- In AegisShell, ⌥Space opens the launcher style of the panel: one bar to open apps, files and settings, ask, and run commands (reusing the general command system, ADR-0031).
 - **Done when:** the top results match what Spotlight would open for app and file names, and every action goes through ActionPolicy.
 
 ## Stage 6 — Window management and workspaces
@@ -73,7 +73,7 @@ Output: `docs/stages/AEGIS-MODE-SPIKE.md` with the answers (numbers only, no per
 
 ## Dependencies and order
 
-Stage 0 decides feasibility and goes first. Stages 1–2 are the minimum usable Aegis Mode. Home widgets and workspace home scenes wait for Home control. The design brief should be designed before Stage 2 starts; Stage 1's transition can use a placeholder.
+Stage 0 decides feasibility and goes first. Stages 1–2 are the minimum usable AegisShell. Home widgets and workspace home scenes wait for Home control. The design brief should be designed before Stage 2 starts; Stage 1's transition can use a placeholder.
 
 ## Risks
 

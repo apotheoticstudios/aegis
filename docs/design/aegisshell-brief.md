@@ -1,7 +1,7 @@
-# Aegis Mode: visual design brief
+# AegisShell: visual design brief
 
-For: the Project: Aegis design system (the same system the HUD panel uses, ADR-0029). Hand this brief to it to design Aegis Mode's visuals.
-What Aegis Mode is: [`DESIGN.md` › Aegis Mode](DESIGN.md#aegis-mode-os-style-shell). Build plan: [`docs/stages/AEGIS-MODE.md`](../stages/AEGIS-MODE.md).
+For: the Project: Aegis design system (the same system the HUD panel uses, ADR-0029). Hand this brief to it to design AegisShell's visuals.
+What AegisShell is: [`DESIGN.md` › AegisShell](DESIGN.md#aegisshell-os-style-shell). Build plan: [`docs/stages/AEGISSHELL.md`](../stages/AEGISSHELL.md).
 
 ## The idea in one line
 
@@ -22,7 +22,7 @@ Every surface below uses the Project: Aegis design system as it stands:
 
 - **Displays.** A 14–16" MacBook with a notch (about 1470 × 956 points) is the primary target; also show a 27" external display (2560 × 1440) and a two-display setup.
 - **The notch.** Nothing important can sit behind the camera notch at the top centre.
-- **Other apps stay theirs.** Aegis Mode sits behind and around ordinary app windows (Safari, Mail, Xcode). It can't restyle the inside of their windows. Show the desktop both empty and with 2–3 normal app windows open over it.
+- **Other apps stay theirs.** AegisShell sits behind and around ordinary app windows (Safari, Mail, Xcode). It can't restyle the inside of their windows. Show the desktop both empty and with 2–3 normal app windows open over it.
 - **macOS still appears sometimes.** The real menu bar slides down when the pointer hits the top edge; system pop-ups (passwords, permissions) and the login screen stay macOS. Designs should look intentional next to them.
 - **Readable over time.** People work in this for hours: the live desktop must be calm, low-contrast enough not to distract, and have a static version.
 - **Performance.** Prefer effects that can freeze to a still frame. Avoid many separately animated glowing layers; glows should be able to flatten into one layer.
@@ -32,7 +32,7 @@ Every surface below uses the Project: Aegis design system as it stands:
 ## Surfaces to design
 
 ### 1. Engage and disengage transition
-- From normal macOS to Aegis Mode (about 1.5–2 s): the Dock and menu bar recede, the frame traces on around the screen, the live desktop resolves out of noise, the top bar and widgets build on.
+- From normal macOS to AegisShell (about 1.5–2 s): the Dock and menu bar recede, the frame traces on around the screen, the live desktop resolves out of noise, the top bar and widgets build on.
 - The reverse on disengage (faster, about 1 s).
 - A Reduce Motion version (a simple fade).
 
@@ -47,7 +47,7 @@ Every surface below uses the Project: Aegis design system as it stands:
 - Variants: idle, something urgent, quiet hours (night), the still frame used when frozen.
 - One composition per theme, at both display sizes, and with app windows covering most of it.
 
-### 4. Launcher (⌥Space in Aegis Mode)
+### 4. Launcher (⌥Space in AegisShell)
 - A single command bar in the HUD style: type or speak; results for apps, files, settings, commands ("run the Work shortcut") and questions.
 - States: empty with suggestions, typing with mixed results, a command needing confirmation (the existing confirmation card style), listening by voice, no results.
 
@@ -88,4 +88,4 @@ Also: how widgets look while being moved, resized and arranged (a placement grid
 
 ## Out of scope for this brief
 
-The login screen, macOS system pop-ups, System Settings, and the insides of other apps' windows: Aegis Mode can't change these.
+The login screen, macOS system pop-ups, System Settings, and the insides of other apps' windows: AegisShell can't change these.
