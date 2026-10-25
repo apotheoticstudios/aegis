@@ -48,6 +48,10 @@ extension CoreEngine {
 
     func readResponse(_ request: CoreRequest) async -> CoreResponse? {
         switch request {
+        case let .publicLookup(question):
+            return await planPublicLookup(question)
+        case let .answerPublic(id, sources):
+            return await answerPublicLookup(id, sources: sources)
         case .partialReply:
             return await partialReply()
         case .latestBrief:

@@ -300,6 +300,7 @@ final class RecordingCore: CoreService, @unchecked Sendable {
     // swiftlint:disable:next cyclomatic_complexity
     func handle(_ request: CoreRequest) async -> CoreResponse {
         switch request {
+        case .publicLookup, .answerPublic: return .refused(code: "web_local")
         case .latestBrief:
             var brief = SampleCoreService.brief(now: storedAt)
             brief.storedAt = storedAt
