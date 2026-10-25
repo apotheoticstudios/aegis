@@ -51,7 +51,7 @@ extension CoreEngine {
         guard learnTicket == ticket, let result, result.status == .completed, let text = result.text else { return }
         learnQueue.removeAll { lines.contains($0) }
         learnTicket = nil
-        let facts = FactExtractor.parse(text)
+        let facts = MemoryFact.supported(FactExtractor.parse(text), by: lines)
         guard !facts.isEmpty, memory.learningPaused != true else { return }
         // Per fact, not per batch: a flagged fact is quarantined while clean ones stay usable.
         let flagged = facts.filter { !scanner.scan($0).isClean }
@@ -71,10 +71,12 @@ extension CoreEngine {
         guard questionJobID == nil, let job = try? Reflection.job(notes: memory.reflectionNotes, model: options.modelName, now: clock()),
               job.validate().isEmpty
         else { return }
+        let turn = currentQuestion
         learnJobID = job.id
         let result = try? await model.run(job)
         learnJobID = nil
-        guard let result, result.status == .completed, let text = result.text, memory.learningPaused != true else { return }
+        guard currentQuestion == turn, questionJobID == nil, let result, result.status == .completed, let text = result.text,
+              memory.learningPaused != true else { return }
         let scanner = InjectionScanner()
         let previous = memory
         memory.reflect(FactExtractor.parse(text).filter { scanner.scan($0).isClean }, now: clock())

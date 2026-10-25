@@ -87,6 +87,20 @@ func conversationAccuracy(modelDirectory: String, output: String) async throws {
         $0.eventIDs == [parcel.id] && $0.text.lowercased().contains("arrived")
     }
     try await check("dont-remember", "Don't remember that.") { $0.model == "memory" }
+    try await check(
+        "spoken-question-with-correction",
+        "Not too bad. Um, what have I got on today? Not tomorrow. No, for the rest of today."
+    ) {
+        $0.model != "memory" && $0.scheduleIDs == [visit.id] && !$0.text.lowercased().contains("remember")
+            && !$0.text.lowercased().contains("holiday")
+    }
+    try await check(
+        "unpunctuated-spoken-question",
+        "Not too bad um what have I got on today not tomorrow no for the rest of today"
+    ) {
+        $0.model != "memory" && $0.scheduleIDs == [visit.id] && !$0.text.lowercased().contains("remember")
+    }
+    try await check("reject-chatter-memory", "No, don't remember that.") { $0.model == "memory" }
     guard case let .memories(notes) = await core.handle(.memories) else { throw CocoaError(.coderInvalidValue) }
     reports.append(["case": "no-accidental-facts", "passed": notes.isEmpty])
     try JSONSerialization.data(withJSONObject: reports, options: [.sortedKeys, .prettyPrinted])

@@ -23,7 +23,9 @@ extension CoreEngine {
     func memoryResponse(_ question: String) -> CoreResponse? {
         let now = clock()
         let previous = memory
-        switch MemoryCommand.parse(question) ?? MemoryCommand.statedFact(question).map(MemoryCommand.remember) {
+        let explicit = MemoryCommand.parse(question)
+        let implicit = memory.learningPaused == true ? nil : MemoryCommand.statedFact(question)
+        switch explicit ?? implicit.map(MemoryCommand.remember) {
         case var .remember(text):
             // "Remember that" on its own: what the owner just told Aegis, never Aegis's reply (which may hold
             // collected content).

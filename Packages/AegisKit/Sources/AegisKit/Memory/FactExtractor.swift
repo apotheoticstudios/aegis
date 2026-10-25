@@ -21,23 +21,23 @@ public enum FactExtractor {
     You extract durable, long-term facts about the owner from things the owner said to their assistant. \
     A good fact is stable over time and useful in future conversations: preferences, identity, goals, ongoing \
     projects, constraints, or relationships. Ignore one-off task details, small talk, questions, requests, and \
-    anything about the assistant itself. Write each fact in the owner's own words and first person, for example \
-    "I prefer morning meetings" or "My sister is called Sam".
+    anything about the assistant itself. Select facts verbatim from the owner's words, without paraphrasing, \
+    combining, completing or inferring anything. \
+    Never save a question, request, correction, greeting or temporary state.
 
     Respond with ONLY a JSON array of short fact strings (each under 200 characters). If there is nothing worth \
     remembering, respond with [].
     """
 
-    /// True for a line that could hold a fact: a few words, not just a greeting or thanks.
+    /// Only clearly stated durable facts are eligible for background learning. A question is not consent to
+    /// turn its wording into a fact, even when speech recognition omits punctuation.
     public static func worthReading(_ line: String) -> Bool {
-        let words = line.split { $0.isWhitespace }
-        guard words.count >= 4, line.unicodeScalars.count <= CoreRequest.maxQuestionScalars else { return false }
-        return !Chat.isSmallTalk(line) || words.count >= 8
+        MemoryCommand.statedFact(line) != nil
     }
 
     /// The model job for a batch of the owner's lines.
     public static func job(owner lines: [String], model: String, now: Date) throws -> ModelJob {
-        let said = lines.suffix(maxLines).map { "- " + $0.replacingOccurrences(of: "\n", with: " ") }
+        let said = lines.filter(worthReading).suffix(maxLines).map { "- " + $0.replacingOccurrences(of: "\n", with: " ") }
         let user = "THE OWNER SAID:\n" + said.joined(separator: "\n")
         return try ModelJob(
             id: "learn-" + UUID().uuidString.lowercased(), model: model, system: systemPrompt, user: user,
@@ -67,7 +67,7 @@ public enum FactExtractor {
         if let open = content.firstIndex(of: "["), let close = content.lastIndex(of: "]"), open < close,
            let array = try? JSONSerialization.jsonObject(with: Data(content[open ... close].utf8)) as? [Any]
         {
-            return array.map { ($0 as? String) ?? "\($0)" }
+            return array.compactMap { $0 as? String }
         }
         // Unlike OpenJarvis, prose lines are not facts: "There is nothing to remember." must not become one.
         return content.split(whereSeparator: \.isNewline).compactMap { line in

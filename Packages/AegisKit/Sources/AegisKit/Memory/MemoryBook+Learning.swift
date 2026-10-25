@@ -24,7 +24,8 @@ public extension MemoryBook {
         var changed = 0
         for (text, origin) in tagged {
             let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !words.isEmpty, words.unicodeScalars.count <= Self.maxNoteScalars else { continue }
+            guard !words.isEmpty, words.unicodeScalars.count <= Self.maxNoteScalars,
+                  origin == .quarantined || MemoryCommand.statedFact(words) != nil else { continue }
             let key = MemoryText.normalise(words)
             if let index = notes.firstIndex(where: { $0.kind != .shortcut && MemoryText.normalise($0.text) == key }) {
                 notes[index].lastUsedAt = now

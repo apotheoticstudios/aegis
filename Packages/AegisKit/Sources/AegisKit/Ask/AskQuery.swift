@@ -32,15 +32,16 @@ struct AskQuery {
             DateInterval(start: start, end: end)
         }
         var explicit: DateInterval?
-        if text.contains(" this morning ") {
+        let relative = Self.relativeDay(in: text)
+        if relative == "this morning" {
             explicit = interval(day(0), calendar.date(byAdding: .hour, value: 12, to: day(0))!)
-        } else if text.contains(" tonight ") {
+        } else if relative == "tonight" {
             explicit = interval(calendar.date(byAdding: .hour, value: 18, to: day(0))!, day(1))
-        } else if text.contains(" yesterday ") {
+        } else if relative == "yesterday" {
             explicit = interval(day(-1), day(0))
-        } else if text.contains(" tomorrow ") {
+        } else if relative == "tomorrow" {
             explicit = interval(day(1), day(2))
-        } else if text.contains(" today ") {
+        } else if relative == "today" {
             explicit = interval(day(0), day(1))
         } else if let week = calendar.dateInterval(of: .weekOfYear, for: now) {
             for (phrase, offset) in [("this week", 0), ("last week", -7), ("next week", 7)] where text.contains(" " + phrase + " ") {
@@ -78,5 +79,16 @@ struct AskQuery {
             calendar.date(byAdding: .day, value: -7, to: now)!,
             calendar.date(byAdding: .day, value: 7, to: now)!
         )
+    }
+
+    /// Speech corrections use the last affirmative day, never a negated alternative (“today, not tomorrow”).
+    private static func relativeDay(in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"\b(?:(not|except|excluding)\s+(?:for\s+)?)?(this morning|tonight|yesterday|tomorrow|today)\b"#
+        ) else { return nil }
+        return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match -> String? in
+            guard match.range(at: 1).location == NSNotFound, let range = Range(match.range(at: 2), in: text) else { return nil }
+            return String(text[range])
+        }.last
     }
 }

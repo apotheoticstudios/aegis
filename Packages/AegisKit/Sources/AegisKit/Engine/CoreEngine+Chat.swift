@@ -38,7 +38,7 @@ extension CoreEngine {
                 return .refused(code: result.failure?.rawValue ?? result.status.rawValue)
             }
             let reply = result.text.map { Chat.reply($0, owner: question, name: personality.name) } ?? Chat.fallback
-            if reply != Chat.fallback, reply != Chat.cannotAct {
+            if reply != Chat.fallback, reply != Chat.cannotAct, reply != Chat.memoryNotSaved {
                 remember(question, reply)
             }
             // Only the owner's words are learned from (#282); the reply may quote collected messages.
