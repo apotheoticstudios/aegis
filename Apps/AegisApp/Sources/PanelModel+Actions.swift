@@ -13,8 +13,8 @@ final class ActionPresence {
     @ObservationIgnored var lastAdded: AddedItem?
     /// The owner's shortcut names and when they were read (ADR-0031).
     @ObservationIgnored var shortcuts: (names: [String], at: Date)?
-    /// A plan's approved steps after the message card it stopped at (#47).
-    @ObservationIgnored var planRest: [PlanStep]?
+    /// A plan's approved steps after the message card it stopped at (#47), bound to that card's request (#59).
+    @ObservationIgnored var planRest: (after: UUID, steps: [PlanStep])?
     /// The owner's last command, for follow-ups (#49).
     @ObservationIgnored var context: CommandContext?
     /// The owner asked Aegis something other than a command since; "again" is then the chat's (#49).
@@ -94,7 +94,7 @@ extension PanelModel {
                 done = "Cancelled."
             }
             // A plan or a skill paused at this step carries on (#47, #286).
-            let more = await [resumePlan(), resumeSkill()].filter { !$0.isEmpty }.joined(separator: " ")
+            let more = await [resumePlan(after: pending.request.id), resumeSkill()].filter { !$0.isEmpty }.joined(separator: " ")
             return Self.said(more.isEmpty ? done : done + " " + more)
         }
         if let routine = await routineAnswer(question, origin: origin) {
@@ -152,20 +152,22 @@ extension PanelModel {
     }
 
     /// One command the owner asked for, at its tier: a card for reminders and events, the rest through `ability`.
-    private func perform(_ command: ActionCommand, origin: ActionOrigin) async -> String {
+    private func perform(_ command: ActionCommand, origin: ActionOrigin, guessed: Bool = false) async -> String {
         switch command {
         case .reminder, .event:
             let request = ActionRequest(payload: command.payload, origin: origin)
             let text = command.summary(calendar: .current)
             return await propose(command, request: request, text: text) == nil ? "That's not something I can do." : text + " Say yes, or press Add."
         default:
-            return await ability(command, origin: origin)
+            return await ability(command, origin: origin, guessed: guessed)
         }
     }
 
     /// Remembers the owner's command for a follow-up (#49): their words, what Aegis did and the other matches it found.
-    func note(_ words: String, _ command: ActionCommand?, target: String? = nil, candidates: [ActionCommand] = []) {
-        ActionPresence.shared.context = CommandContext(words: words, command: command, target: target, candidates: candidates, at: Date())
+    func note(_ words: String, _ command: ActionCommand?, target: String? = nil, candidates: [ActionCommand] = [], guessed: Bool = false) {
+        ActionPresence.shared.context = CommandContext(
+            words: words, command: command, target: target, candidates: candidates, at: Date(), guessed: guessed
+        )
         ActionPresence.shared.chattedSince = false
     }
 
@@ -192,19 +194,24 @@ extension PanelModel {
             default: break
             }
             presence.context?.at = Date()
-            return await Self.said(perform(command, origin: origin))
+            // What the model picked asks first on every replay too (#59).
+            return await Self.said(perform(command, origin: origin, guessed: context.guessed))
         }
     }
 
     /// The owner pressed Add (or Open, Run, Send).
     func confirmAction() async {
         let pressed = ActionPresence.shared.pending?.button ?? "Add"
+        let answered = ActionPresence.shared.pending?.request.id
         let done = await performPending()
-        let more = await [resumePlan(), resumeSkill()].filter { !$0.isEmpty }.joined(separator: " ")
+        let more = await [resumePlan(after: answered), resumeSkill()].filter { !$0.isEmpty }.joined(separator: " ")
         let reply = more.isEmpty ? done : done + " " + more
         askState = .answered(question: pressed, answer: Self.said(reply))
         remember(Exchange(question: pressed, answer: Self.said(reply), failure: nil))
-        voice.speak(reply)
+        // A long step may outlast the panel: Aegis never speaks while it's closed.
+        if HUDPresence.shared.open {
+            voice.speak(reply)
+        }
     }
 
     /// The owner pressed Cancel, or said no.
@@ -214,10 +221,11 @@ extension PanelModel {
         if pending.plan.isEmpty {
             await log(pending.request, .cancelled, guessed: pending.guessed)
         }
-        for step in pending.plan {
-            if let request = step.request {
-                await log(request, .cancelled, guessed: step.guessed)
-            }
+        await cancel(pending.plan)
+        // Cancelling a plan's message cancels the rest of that plan (#59).
+        if let rest = ActionPresence.shared.planRest, rest.after == pending.request.id {
+            ActionPresence.shared.planRest = nil
+            await cancel(rest.steps)
         }
     }
 
@@ -239,7 +247,7 @@ extension PanelModel {
             guard let found = await Self.found(name, reveal: reveal) else { return nil }
             command = found
         }
-        note(question, command)
+        note(question, command, guessed: true)
         return await Self.said(ability(command, origin: .ownerTyped, guessed: true))
     }
 
@@ -354,7 +362,9 @@ extension PanelModel {
     @discardableResult
     func log(_ request: ActionRequest, _ outcome: ActionOutcomeCode, guessed: Bool = false) async -> ActionDecision {
         let automatic = !guessed && [ActionVerb.open, .run].contains(request.payload.verb)
-        let decision = ActionPolicy.decision(for: request, settings: .init(panelIsOpen: true, minimumTier: automatic ? .auto : .confirm))
+        let decision = ActionPolicy.decision(
+            for: request, settings: .init(panelIsOpen: HUDPresence.shared.open, minimumTier: automatic ? .auto : .confirm)
+        )
         try? await actions?.append(ActionLogEntry(time: Date(), request: request, decision: decision, outcomeCode: outcome))
         return decision
     }
@@ -424,6 +434,8 @@ extension PanelModel {
 
     /// Runs one of the owner's shortcuts with Apple's `shortcuts` tool. A long one keeps going after 20 seconds.
     private static func runShortcut(_ name: String) async -> (Bool, String) {
+        // App tests run inside Aegis: they never run the owner's shortcuts.
+        guard !WorldSidecar.isTestHost else { return (false, "Shortcuts don't run under tests.") }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
         process.arguments = ["run", name]

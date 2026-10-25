@@ -14,6 +14,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 | #8 | The Project: Aegis design system: five screens, tokens, fonts (ADR-0029) | agent:claude | claude/8-design-foundation | In review; next: settings windows, theme picker |
 | #8 | The design's motion: each screen builds itself as it shows (ADR-0029) | agent:claude | claude/8-design-motion | In review; waits for the owner's go-ahead |
 | #52 | Proper chatbot conversation: fuller answers, 20 turns for 30 min, follow-ups about the day (Codex), cached turns in ModelService (first word ≈ 1.3 s, was 3.2 s), natural wording | agent:claude | claude/52-chatbot-conversation | In review; the owner tries it live next |
+| #59 | Codex review of general commands: findings 1–5 fixed (model picks stay asked-first on replay, real file targets, never-list word forms, plans stop on panel close, plan resume bound to its message card); 6 is the chat session's | agent:claude | claude/59-command-safety-fixes | Merged |
 | #49 | Follow-ups in context: "the other one", "the second one", "close it", "show it in Finder", "again", "do the same for X" (ADR-0031) | agent:claude | claude/49-follow-ups | Merged; not yet tried by voice |
 | #47 | General commands, slice 4: multi-step plans shown before they run, one OK (ADR-0031) | agent:claude | claude/47-multi-step-plans | Merged; the agreed design is complete |
 | #45 | General commands, slice 3: Maps, Settings pages, volume and dark mode (ADR-0031) | agent:claude | claude/45-maps-settings-volume | Merged |

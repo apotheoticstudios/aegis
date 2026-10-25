@@ -21,31 +21,55 @@ extension PanelModel {
         let wanted = FileName(spoken)
         let home = URL(fileURLWithPath: NSHomeDirectory())
         if let known = wanted.known {
-            return [known.isEmpty ? home.path : home.appendingPathComponent(known).path]
+            return [openable(known.isEmpty ? home.path : home.appendingPathComponent(known).path, wanted: wanted, home: home.path)]
+                .compactMap(\.self)
         }
         // App tests run inside Aegis: they never search the owner's files.
         let pattern = wanted.name.replacingOccurrences(of: #"[*?]"#, with: "", options: .regularExpression)
         guard !WorldSidecar.isTestHost, !pattern.isEmpty else { return [] }
-        let inside = home.path + "/"
         let matches = await FileSearch().run(NSPredicate(format: "%K LIKE[cd] %@", NSMetadataItemFSNameKey, "*" + pattern + "*"))
-            .filter { match in
-                let url = URL(fileURLWithPath: match.path).resolvingSymlinksInPath()
-                guard url.path.hasPrefix(inside),
-                      !url.path.dropFirst(inside.count).split(separator: "/").contains(where: { $0.hasPrefix(".") })
-                else { return false }
-                var folder: ObjCBool = false
-                FileManager.default.fileExists(atPath: url.path, isDirectory: &folder)
-                // A program without an ending would run in Terminal when opened.
-                guard folder.boolValue || !FileManager.default.isExecutableFile(atPath: url.path) else { return false }
-                return wanted.folder ? folder.boolValue
-                    : wanted.extensions.isEmpty || wanted.extensions.contains(url.pathExtension.lowercased())
+            .compactMap { match in
+                openable(match.path, wanted: wanted, home: home.path).map { (
+                    path: $0,
+                    name: URL(fileURLWithPath: match.path),
+                    used: match.used
+                ) }
             }
-        let exact = { (path: String) -> Int in
-            let url = URL(fileURLWithPath: path)
-            return [url.lastPathComponent, url.deletingPathExtension().lastPathComponent]
+        let exact = { (url: URL) -> Int in
+            [url.lastPathComponent, url.deletingPathExtension().lastPathComponent]
                 .contains { $0.caseInsensitiveCompare(wanted.name) == .orderedSame } ? 1 : 0
         }
-        return matches.sorted { (exact($0.path), $0.used) > (exact($1.path), $1.used) }.prefix(10).map(\.path)
+        var seen = Set<String>()
+        return matches.sorted { (exact($0.name), $0.used) > (exact($1.name), $1.used) }.map(\.path)
+            .filter { seen.insert($0).inserted }.prefix(10).map(\.self)
+    }
+
+    /// The real file or folder behind a path, with Finder aliases and symlinks followed, when Aegis may open it for
+    /// this request: inside the home folder, not hidden, not a program, of the kind asked for, and allowed by the
+    /// policy. The real path is what's logged and opened, never the link (#59).
+    static func openable(_ path: String, wanted: FileName, home: String) -> String? {
+        var url = URL(fileURLWithPath: path)
+        for _ in 0 ..< 8 {
+            let next = ((try? URL(resolvingAliasFileAt: url, options: [.withoutUI, .withoutMounting])) ?? url).resolvingSymlinksInPath()
+            if next == url {
+                break
+            }
+            url = next
+        }
+        let root = URL(fileURLWithPath: home).resolvingSymlinksInPath().path
+        let real = url.path
+        var folder: ObjCBool = false
+        guard real == root || real.hasPrefix(root + "/"),
+              !real.dropFirst(root.count).split(separator: "/").contains(where: { $0.hasPrefix(".") }),
+              FileManager.default.fileExists(atPath: real, isDirectory: &folder),
+              let kind = try? url.resourceValues(forKeys: [.isAliasFileKey, .isApplicationKey]),
+              kind.isAliasFile != true, kind.isApplication != true,
+              // A program without an ending would run in Terminal when opened.
+              folder.boolValue || !FileManager.default.isExecutableFile(atPath: real),
+              wanted.folder ? folder.boolValue : wanted.extensions.isEmpty || wanted.extensions.contains(url.pathExtension.lowercased())
+        else { return nil }
+        let request = ActionRequest(payload: .file(path: real, verb: .open), origin: .ownerTyped)
+        return ActionPolicy.decision(for: request, settings: .init(panelIsOpen: true)).allowed ? real : nil
     }
 
     /// The catalogue's fixed scripts. An argument only ever arrives as `item 1 of argv`, never inside the script.

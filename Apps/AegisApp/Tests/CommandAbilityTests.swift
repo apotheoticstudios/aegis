@@ -15,6 +15,7 @@ final class CommandAbilityTests: XCTestCase {
         file = try ActionLogFile(url: folder.appendingPathComponent("audit.json"))
         ActionPresence.shared.pending = nil
         ActionPresence.shared.shortcuts = (["Work", "Pay Rent"], Date())
+        HUDPresence.shared.open = true
     }
 
     override func tearDown() async throws {
@@ -22,6 +23,8 @@ final class CommandAbilityTests: XCTestCase {
         ActionPresence.shared.shortcuts = nil
         ActionPresence.shared.context = nil
         ActionPresence.shared.chattedSince = false
+        ActionPresence.shared.planRest = nil
+        HUDPresence.shared.open = false
         try? FileManager.default.removeItem(at: folder)
     }
 
@@ -268,6 +271,100 @@ extension CommandAbilityTests {
         model.endVoiceConversation()
         XCTAssertNil(ActionPresence.shared.context)
         XCTAssertTrue(try file.load().allSatisfy { $0.domain == .reminder })
+    }
+}
+
+/// Codex review #59: regressions for the five action-safety findings.
+extension CommandAbilityTests {
+    /// 1: a follow-up to something the model picked asks first again, instead of running at once.
+    func testAgainAfterAModelPickAsksFirstAgain() async throws {
+        let model = model(CommandStep(ability: .shortcut, value: "Work"))
+        _ = await model.commandPlanAnswer("start my work day")
+        XCTAssertEqual(ActionPresence.shared.context?.guessed, true)
+        let again = await model.actionAnswer("again")
+        XCTAssertEqual(again?.text, "Run the shortcut “Work”? Say yes, or press Run.")
+        XCTAssertEqual(ActionPresence.shared.pending?.guessed, true)
+        let entries = try file.load()
+        XCTAssertEqual(entries.map(\.outcomeCode), [.proposed, .awaitingConfirmation, .cancelled, .proposed, .awaitingConfirmation])
+        XCTAssertTrue(entries.allSatisfy { $0.decision.tier == .confirm })
+    }
+
+    /// 2: links and Finder aliases are followed, and the real target is what's checked and opened.
+    func testFilesAreCheckedAtTheirRealTarget() throws {
+        let home = folder.appendingPathComponent("home", isDirectory: true)
+        let manager = FileManager.default
+        try manager.createDirectory(
+            at: home.appendingPathComponent("Cleanup.app/Contents", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try manager.createDirectory(at: home.appendingPathComponent(".hidden", isDirectory: true), withIntermediateDirectories: true)
+        let budget = home.appendingPathComponent("Budget 2026.numbers")
+        try Data("synthetic".utf8).write(to: budget)
+        let program = home.appendingPathComponent("tidy")
+        try Data("#!/bin/sh\n".utf8).write(to: program)
+        try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        let outside = folder.appendingPathComponent("Outside.numbers")
+        try Data("synthetic".utf8).write(to: outside)
+        let link = { (name: String, target: URL) throws -> String in
+            let url = home.appendingPathComponent(name)
+            try manager.createSymbolicLink(at: url, withDestinationURL: target)
+            return url.path
+        }
+        let alias = { (name: String, target: URL) throws -> String in
+            let url = home.appendingPathComponent(name)
+            try URL.writeBookmarkData(target.bookmarkData(options: .suitableForBookmarkFile), to: url)
+            return url.path
+        }
+        let real = budget.resolvingSymlinksInPath().path
+        let any = FileName("Budget")
+        XCTAssertEqual(try PanelModel.openable(link("Budget", budget), wanted: any, home: home.path), real)
+        XCTAssertEqual(try PanelModel.openable(alias("Budget alias", budget), wanted: any, home: home.path), real)
+        XCTAssertNil(try PanelModel.openable(link("Budget link", home.appendingPathComponent("Cleanup.app")), wanted: any, home: home.path))
+        XCTAssertNil(try PanelModel.openable(alias("Budget app", home.appendingPathComponent("Cleanup.app")), wanted: any, home: home.path))
+        XCTAssertNil(try PanelModel.openable(link("Budget tidy", program), wanted: any, home: home.path))
+        XCTAssertNil(try PanelModel.openable(link("Budget out", outside), wanted: any, home: home.path))
+        XCTAssertNil(try PanelModel.openable(link("Budget hidden", home.appendingPathComponent(".hidden")), wanted: any, home: home.path))
+        XCTAssertNil(try PanelModel.openable(
+            link("Budget gone", home.appendingPathComponent("missing.numbers")),
+            wanted: any,
+            home: home.path
+        ))
+        XCTAssertNil(PanelModel.openable(budget.path, wanted: FileName("Budget folder"), home: home.path), "not the kind asked for")
+    }
+
+    /// 4: an approved plan stops when the panel closes, and nothing is allowed while it's closed.
+    func testAPlanStopsWhenThePanelCloses() async throws {
+        let model = model()
+        let request = ActionRequest(payload: ActionCommand.quitApp(name: "Synthetic Closed App").payload, origin: .ownerTyped)
+        HUDPresence.shared.open = false
+        let said = await model.runPlan([PlanStep(command: .quitApp(name: "Synthetic Closed App"), request: request, said: "quit it")])
+        XCTAssertEqual(said, "I stopped the plan when the panel closed.")
+        let entries = try file.load()
+        XCTAssertEqual(entries.map(\.outcomeCode), [.cancelled])
+        XCTAssertEqual(entries.first?.decision.tier, .never)
+        XCTAssertTrue(entries.first?.decision.reasonCodes.contains(.panelClosed) == true)
+        let decision = await model.log(request, .proposed)
+        XCTAssertFalse(decision.allowed)
+    }
+
+    /// 5: a plan waiting on a message card resumes only after that card, and cancelling it cancels the rest.
+    func testAPlansRestIsBoundToItsMessageCard() async throws {
+        let model = model()
+        let message = ActionRequest(payload: .message(recipientHandle: "synthetic-handle", text: "Synthetic"), origin: .ownerTyped)
+        let step = ActionRequest(payload: ActionCommand.quitApp(name: "Synthetic Closed App").payload, origin: .ownerTyped)
+        let rest = [PlanStep(command: .quitApp(name: "Synthetic Closed App"), request: step, said: "quit it")]
+        ActionPresence.shared.planRest = (message.id, rest)
+        let unrelated = await model.resumePlan(after: UUID())
+        XCTAssertEqual(unrelated, "")
+        XCTAssertNotNil(ActionPresence.shared.planRest)
+        let draft = MessageDraft(channel: .message, name: "Synthetic", handle: "synthetic-handle", text: "Synthetic", subject: nil)
+        ActionPresence.shared.pending = PendingAction(command: nil, message: draft, request: message, text: "Send?", at: Date(), needed: 2)
+        await model.cancelAction()
+        XCTAssertNil(ActionPresence.shared.planRest)
+        XCTAssertEqual(try file.load().map(\.requestID), [message.id, step.id])
+        XCTAssertEqual(try file.load().map(\.outcomeCode), [.cancelled, .cancelled])
+        let later = await model.resumePlan(after: message.id)
+        XCTAssertEqual(later, "", "nothing is left to resume")
     }
 }
 

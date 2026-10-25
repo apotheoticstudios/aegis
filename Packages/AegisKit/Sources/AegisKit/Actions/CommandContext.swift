@@ -82,12 +82,17 @@ public struct CommandContext: Sendable, Equatable {
     /// Every match, best first, when there was a choice (files, apps).
     public let candidates: [ActionCommand]
     public var at: Date
+    /// The local model picked it, so every replay asks first too (#59).
+    public let guessed: Bool
 
-    public init(words: String, command: ActionCommand?, target: String? = nil, candidates: [ActionCommand] = [], at: Date) {
+    public init(
+        words: String, command: ActionCommand?, target: String? = nil, candidates: [ActionCommand] = [], at: Date, guessed: Bool = false
+    ) {
         self.words = words
         self.command = command
         self.target = target ?? command.flatMap { Self.target($0, in: words) }
         self.candidates = candidates
+        self.guessed = guessed
         self.at = at
     }
 

@@ -63,11 +63,17 @@ extension PanelModel {
     func runPlan(_ steps: [PlanStep]) async -> String {
         var said: [String] = []
         for (index, step) in steps.enumerated() {
+            // Silent while closed: an approved plan stops when the panel closes (#59).
+            guard HUDPresence.shared.open else {
+                await cancel(Array(steps.dropFirst(index)))
+                said.append("I stopped the plan when the panel closed.")
+                break
+            }
             guard let command = step.command, let request = step.request else {
                 await said.append(messageAnswer(step.message ?? "", origin: .ownerTyped)?.text ?? "I couldn't work out that message.")
-                if ActionPresence.shared.pending != nil {
+                if let card = ActionPresence.shared.pending {
                     let rest = Array(steps.dropFirst(index + 1))
-                    ActionPresence.shared.planRest = rest.isEmpty ? nil : rest
+                    ActionPresence.shared.planRest = rest.isEmpty ? nil : (card.request.id, rest)
                     break
                 }
                 continue
@@ -79,11 +85,20 @@ extension PanelModel {
         return said.joined(separator: " ")
     }
 
-    /// The rest of a plan, once the message card it stopped at is answered.
-    func resumePlan() async -> String {
-        guard ActionPresence.shared.pending == nil, let rest = ActionPresence.shared.planRest else { return "" }
+    /// The rest of a plan, once the message card it stopped at (and only that card) has been sent (#59).
+    func resumePlan(after answered: UUID?) async -> String {
+        guard ActionPresence.shared.pending == nil, let rest = ActionPresence.shared.planRest, rest.after == answered else { return "" }
         ActionPresence.shared.planRest = nil
-        return await runPlan(rest)
+        return await runPlan(rest.steps)
+    }
+
+    /// Logs steps that won't run.
+    func cancel(_ steps: [PlanStep]) async {
+        for step in steps {
+            if let request = step.request {
+                await log(request, .cancelled, guessed: step.guessed)
+            }
+        }
     }
 
     /// A part's command with its app, shortcut or file found, and whether the local model picked it; nil if it

@@ -107,7 +107,7 @@ extension PanelModel {
 
     @discardableResult
     func logMessage(_ request: ActionRequest, _ outcome: ActionOutcomeCode) async -> ActionDecision {
-        let decision = ActionPolicy.decision(for: request, settings: .init(panelIsOpen: true))
+        let decision = ActionPolicy.decision(for: request, settings: .init(panelIsOpen: HUDPresence.shared.open))
         try? await actions?.append(ActionLogEntry(time: Date(), request: request, decision: decision, outcomeCode: outcome))
         return decision
     }

@@ -32,12 +32,17 @@ public enum ActionPolicy {
         .security: .securitySetting, .privacy: .privacySetting, .password: .credentials, .credentials: .credentials,
     ]
 
+    /// Every common form of each word ("Deleting", "Ordered", "Purchases"), since a shortcut's name is all Aegis sees (#59).
     private static let forbiddenShortcutWords: [(String, ActionReasonCode)] = [
-        (#"\bpay(?:s|ing|ment|ments)?\b"#, .payment),
-        (#"\b(?:buy|buying|purchase|order|checkout|check out)\b"#, .purchase),
-        (#"\b(?:transfer|send money|wire money)\b"#, .moneyTransfer),
-        (#"\b(?:delete|erase|remove|trash|wipe|purge|empty (?:the )?(?:trash|bin))\b"#, .deletion),
-        (#"\b(?:passwords?|passcodes?|credentials?|keychain|log ?ins?)\b"#, .credentials),
+        (#"\b(?:re)?pa(?:y|ys|ying|id|yment|yments)\b"#, .payment),
+        (#"\b(?:buy|buys|buying|bought|purchas(?:e|es|ed|ing)|orders?|ordering|ordered|check(?:ing)? ?out|checkouts?)\b"#, .purchase),
+        (#"\b(?:transfer(?:s|red|ring)?|send(?:s|ing)? money|sent money|wir(?:e|es|ed|ing) money)\b"#, .moneyTransfer),
+        (
+            #"\b(?:delet(?:e|es|ed|ing|ion)|eras(?:e|es|ed|ing|er)|remov(?:e|es|ed|ing|al)|trash(?:es|ed|ing)?|wip(?:e|es|ed|ing)|"#
+                + #"purg(?:e|es|ed|ing)|empt(?:y|ies|ied|ying) (?:the )?(?:trash|bin))\b"#,
+            .deletion
+        ),
+        (#"\b(?:passwords?|passcodes?|credentials?|keychains?|log(?:ging)? ?ins?|sign(?:ing)? ?ins?)\b"#, .credentials),
         (#"\b(?:firewall|filevault|gatekeeper)\b"#, .securitySetting),
     ]
 

@@ -77,6 +77,28 @@ final class CommandPlanTests: XCTestCase {
         }
     }
 
+    /// Codex review #59: every common form of a never-list word, not only its base form.
+    func testNeverListCoversWordForms() {
+        let forbidden: [(String, ActionReasonCode)] = [
+            ("Deleting Old Files", .deletion), ("Deleted items cleanup", .deletion), ("Erasing the disk", .deletion),
+            ("Removing duplicates", .deletion), ("Trashing downloads", .deletion), ("Wiping caches", .deletion),
+            ("Emptying the bin", .deletion), ("Ordering groceries", .purchase), ("Reorder: Ordered parts", .purchase),
+            ("Purchases this month", .purchase), ("Purchasing tickets", .purchase), ("Buying lunch", .purchase),
+            ("Bought tickets", .purchase), ("Checking out cart", .purchase), ("Transferring savings", .moneyTransfer),
+            ("Transferred to Sam", .moneyTransfer), ("Sending money home", .moneyTransfer), ("Paying bills", .payment),
+            ("Paid rent", .payment), ("Repay loan", .payment), ("Payments due", .payment), ("Logging in to bank", .credentials),
+            ("Sign in to work", .credentials), ("Keychains backup", .credentials),
+        ]
+        for (name, reason) in forbidden {
+            let result = decide(.shortcut(name: name))
+            XCTAssertEqual(result.tier, .never, name)
+            XCTAssertEqual(result.reasonCodes, [reason], name)
+        }
+        for name in ["Paris trip", "Payroll calendar", "Erasmus notes", "Recording memo", "Wifi on"] {
+            XCTAssertEqual(decide(.shortcut(name: name)).tier, .auto, name)
+        }
+    }
+
     func testLooksLikeCommand() {
         for text in ["run work", "Hey Aegis, open the weather bureau site", "turn the lights on", "start my work day", "play some jazz"] {
             XCTAssertTrue(CommandPlan.looksLikeCommand(text), text)
