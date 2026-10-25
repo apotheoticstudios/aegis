@@ -107,9 +107,12 @@ private actor ConversationModel: ModelClient {
         if job.id.hasPrefix("ask-"), let text = result.text, let draft = Briefing.extractJSON(text) {
             let events = draft["event_ids"] as? [String] ?? []
             let schedule = draft["schedule_ids"] as? [String] ?? []
+            let answer = draft["answer"] as? String ?? ""
             print("Synthetic citation check: event_count=\(events.count), schedule_count=\(schedule.count), "
                 + "events_known=\(events.allSatisfy { job.user.contains("[" + $0 + "]") }), "
-                + "schedule_known=\(schedule.allSatisfy { job.user.contains("[" + $0 + "]") })")
+                + "schedule_known=\(schedule.allSatisfy { job.user.contains("[" + $0 + "]") }), "
+                + "answer_lines=\(answer.filter { $0 == "\n" }.count + 1), "
+                + "answer_has_record_id=\(answer.range(of: #"\b(?:ev|cal|rem|occ)_[0-9a-f]{6,}"#, options: .regularExpression) != nil)")
         }
         return result
     }
