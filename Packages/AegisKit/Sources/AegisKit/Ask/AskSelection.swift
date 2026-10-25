@@ -77,7 +77,8 @@ struct AskSelection {
             options: [.regularExpression, .caseInsensitive]
         ) != nil
         let received = words.contains { ["get", "got", "receive", "received", "inbox"].contains($0) }
-        direction = sent ? .outgoing : (received ? .incoming : nil)
+        // “What have I got on today?” asks for the calendar, not incoming communications.
+        direction = query.schedule && requested == nil ? nil : (sent ? .outgoing : (received ? .incoming : nil))
         let pattern = #"\b(?:from|sent by|written by)\s+(.+?)(?=\s+(?:today|yesterday|tonight|this|last|next|on|about|regarding|"#
             + #"say|said|says|to|in|from|mention|mentions|mentioned)\b|[?!]|\.(?:\s|$)|$)"#
         let timeWords = Set(["today", "yesterday", "tonight", "this", "last", "next"])

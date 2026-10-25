@@ -168,6 +168,15 @@ final class ConversationAccuracyTests: XCTestCase {
             return XCTFail("Expected a calendar answer")
         }
         XCTAssertEqual(answer.scheduleIDs, [current.id])
+        for spoken in [
+            "Not too bad. Um, what have I got on today? Not tomorrow. No, for the rest of today.",
+            "Not too bad um what have I got on today not tomorrow no for the rest of today",
+        ] {
+            guard case let .answer(spokenAnswer) = await core.handle(.ask(question: spoken))
+            else { return XCTFail("Expected calendar answer") }
+            XCTAssertEqual(spokenAnswer.scheduleIDs, [current.id])
+            XCTAssertNotEqual(spokenAnswer.model, "memory")
+        }
         let scheduleJobs = await model.jobs
         let schedule = try XCTUnwrap(scheduleJobs.last)
         XCTAssertTrue(schedule.user.contains(current.title))

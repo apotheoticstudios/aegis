@@ -8,11 +8,11 @@ enum MemoryFact {
         guard !line.isEmpty, !line.contains(where: { $0.isNewline || $0 == "?" || $0 == "？" }),
               !matches(uncertain, line), !matches(temporary, line), !matches(dependent, line),
               !Chat.isRequestToAct(line) else { return false }
+        // A mixed turn is not one assertion. Dots inside an email or decimal are fine.
+        guard !matches(#"[.!;]\s+\S"#, line) else { return false }
         if SenderAlias.parse(line) != nil {
             return true
         }
-        // A mixed turn is not one assertion. Dots inside an email or decimal are fine.
-        guard !matches(#"[.!;]\s+\S"#, line) else { return false }
         return assertions.contains { matches($0, line) }
     }
 
@@ -44,7 +44,7 @@ enum MemoryFact {
     }
 
     private static let uncertain = #"[?？]|^[\"“>]|\b(?:what|who|whose|when|where|why|how|which|whether|if|maybe|perhaps|suppose|imagine)\b|"#
-        + #"\b(?:can|could|would|will|do|did|have) you\b|\b(?:tell me|show me|help me|do not remember|don't remember)\b"#
+        + #"\b(?:can|could|would|will|do|did|have) you\b|\b(?:tell me|show me|help me|(?:do not|don't|never) (?:remember|save|store|learn|record))\b"#
     private static let dependent = #"^(?:it|that|this|they|he|she|these|those|there)\b|\b(?:it|that|this|something|anything)\s*[.!]*$"#
     private static let temporary = #"\b(?:today|tonight|tomorrow|yesterday|now|earlier|later|currently|just|tired|hungry|thirsty|bored|sleepy|confused)\b|"#
         + #"\bthis (?:morning|afternoon|evening|week|weekend)\b"#

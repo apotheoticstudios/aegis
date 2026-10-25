@@ -16,6 +16,7 @@ final class MemoryAdmissionTests: XCTestCase {
         "It was yesterday. From Example Store.", "I work at Example Office today",
         "Example Alex is at the concert tonight", "Example Alex was at the concert",
         "My brother is Example Alex, what did he say", "No, don't remember that.",
+        "My favourite colour is blue, don't save that", "0400 000 001 is Example Alex. Nice.",
         "I am vegetarian? Actually never mind.", "I am vegetarian？ No, that is a question.",
         "The email says my brother is Example Alex", "Suppose I am vegetarian", "I want you to answer my question",
     ]
@@ -65,6 +66,7 @@ final class MemoryAdmissionTests: XCTestCase {
         ] {
             let query = AskQuery(text, now: now, calendar: calendar)
             XCTAssertTrue(query.schedule)
+            XCTAssertNil(AskSelection(text, query: query).direction, "An agenda question is not a request for incoming messages")
             XCTAssertEqual(query.calendarWindow.start, today)
             XCTAssertEqual(query.calendarWindow.end, calendar.date(byAdding: .day, value: 1, to: today))
         }
@@ -87,7 +89,7 @@ final class MemoryAdmissionTests: XCTestCase {
             "Got it. I'll remember that you have plans today.",
             "I've saved your question.",
             "I will store that for later.",
-            "Added that to my memory.",
+            "Added that to my memory.", "I’ll remember that.",
         ] {
             XCTAssertNil(Chat.check(reply))
             XCTAssertEqual(Chat.reply(reply), Chat.memoryNotSaved)
