@@ -104,12 +104,7 @@ enum AskRetrieval {
                 includeAll: selection.overview
             )
         lines = query.schedule ? schedules + lines : lines + schedules
-        let modelQuestion = selection.translating
-            ? "Translate the selected source text now, into the requested language or otherwise the owner's language. "
-            + (selection.singleTranslation ? "The most recent matching message is selected. " : "")
-            + "Provide the actual translation, not an offer. Owner request: " + question
-            : question
-        var input = try assemble(lines, question: modelQuestion, now: now, calendar: calendar)
+        var input = try assemble(lines, question: selection.modelQuestion(question), now: now, calendar: calendar)
         input.prefersGrounded = selection.isReadRequest || onlySender || query.schedule
         if selection.isReadRequest, input.isEmpty {
             input.directAnswer = "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."

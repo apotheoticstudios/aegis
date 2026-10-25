@@ -23,6 +23,14 @@ struct AskSelection {
         )
     }
 
+    /// Make the active read-only translation task explicit for a small model.
+    func modelQuestion(_ question: String) -> String {
+        guard translating else { return question }
+        return "Translate the selected source text now, into the requested language or otherwise the owner's language. "
+            + (singleTranslation ? "The most recent matching message is selected. " : "")
+            + "Provide the actual translation, not an offer. Owner request: " + question
+    }
+
     init(_ question: String, query: AskQuery) {
         let words = AskQuery.words(question)
         let translating = words.contains("translate") || words.contains("translation")
