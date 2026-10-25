@@ -21,6 +21,10 @@ struct AskQuery {
         keywords = words.filter { $0.count >= 3 && !stop.contains($0) && seen.insert($0).inserted }
         schedule = words.contains { ["when", "calendar", "meeting", "appointment", "remind", "reminder", "due", "schedule"].contains($0) }
             || text.contains("today s plans") || text.contains("tomorrow s plans")
+            || question.range(
+                of: #"\b(?:what am i doing|what (?:do i have|have i got)(?: planned| on)?|what'?s on)\b"#,
+                options: [.regularExpression, .caseInsensitive]
+            ) != nil
         func day(_ offset: Int) -> Date {
             calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now))!
         }

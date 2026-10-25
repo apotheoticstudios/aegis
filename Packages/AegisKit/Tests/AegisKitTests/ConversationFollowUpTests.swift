@@ -16,7 +16,11 @@ final class ConversationFollowUpTests: XCTestCase {
         XCTAssertFalse(jobs.contains { $0.id.hasPrefix("ask-") }, "not a search of the owner's messages")
         let chat = try XCTUnwrap(jobs.last { $0.id.hasPrefix("chat-") })
         XCTAssertEqual(chat.history.map(\.owner), ["Explain how a heat pump works"])
-        XCTAssertTrue(chat.user.contains("From your messages: "), "what the search found goes along as notes")
+        XCTAssertFalse(
+            chat.user.contains("From your messages: "),
+            "A general explanation needs conversation history, not incidental private records"
+        )
+        XCTAssertFalse(chat.user.contains("fridge is making a noise"))
     }
 
     func testWhatIsSomethingItMentionedStaysInTheConversation() async throws {

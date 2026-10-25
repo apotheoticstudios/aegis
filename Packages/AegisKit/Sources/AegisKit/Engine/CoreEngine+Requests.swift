@@ -154,8 +154,12 @@ extension CoreEngine {
             conversation = []
         }
         // "Do that again" and the owner's shortcuts first; memory needs no model, so it answers even while busy.
-        let (expandedQuestion, nothing) = expanded(asked)
-        if let response = nothing ?? memoryResponse(expandedQuestion) {
+        let (expanded, nothing) = self.expanded(asked)
+        let clarification = conversation.last.flatMap {
+            $0.via == nil ? FollowUpQuestion.clarification(expanded, after: $0.owner, now: clock(), calendar: calendar) : nil
+        }
+        let expandedQuestion = clarification ?? expanded
+        if let response = nothing ?? (clarification == nil ? memoryResponse(expandedQuestion) : nil) {
             return response
         }
         // The time, the date, sums and conversions: answered at once, exactly (#227).
@@ -183,9 +187,14 @@ extension CoreEngine {
         defer { release() }
         guard currentQuestion == turn else { return .refused(code: "cancelled") }
         do {
+            let query = AskQuery(trimmed, now: clock(), calendar: calendar)
+            let selection = AskSelection(trimmed, query: query)
+            if Chat.isSocial(trimmed), !selection.isReadRequest, !query.schedule {
+                return await chat(trimmed, found: [], turn: turn, includeNotes: false)
+            }
             // A follow-up is searched with the previous question first: on its own, "what did she want?" would
             // match any message with "she" in it.
-            if FollowUpQuestion.leansOnPrevious(trimmed), let last = conversation.last, last.via == nil {
+            if !selection.isReadRequest, FollowUpQuestion.leansOnPrevious(trimmed), let last = conversation.last, last.via == nil {
                 // After a follow-up, the next one builds on what that one searched: "when did she say?" still means
                 // the person and topic two questions back (#59).
                 let previous = followUpSubject.flatMap { $0.owner == last.owner ? $0.search : nil } ?? last.owner
@@ -203,13 +212,14 @@ extension CoreEngine {
             // Public knowledge must not be forced into the owner's record-citation format.
             if Chat.isGeneralKnowledge(trimmed), await !CloudHandOff.isPersonal(trimmed, names: contactNames()) {
                 return await chat(trimmed, found: [], turn: turn, includeNotes: false)
-
             }
             let input = try await Ask.prepare(
                 question: trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
             )
             guard currentQuestion == turn else { return .refused(code: "cancelled") }
             if let text = input.directAnswer {
+                remember(trimmed, text)
+                conversationGrounded = true
                 return .answer(Answer(text: text, eventIDs: [], scheduleIDs: [], model: "aegis", generatedAt: clock()))
             }
             // A follow-up to a conversation stays one (#54): grounded answers see no earlier turns, so a question about
@@ -227,6 +237,10 @@ extension CoreEngine {
                 }
                 return await chat(trimmed, found: [], turn: turn)
             }
+            let eventCitations = input.eventIDs.map { jsonString($0) }.joined(separator: ",")
+            let scheduleCitations = input.scheduleIDs.map { jsonString($0) }.joined(separator: ",")
+            let modelInput = input.text + "\nAllowed citation IDs (DATA; use only these, in the matching array):\nevent_ids: ["
+                + eventCitations + "]\nschedule_ids: [" + scheduleCitations + "]"
             let deadline = clock().addingTimeInterval(120)
             var correction = ""
             for attempt in 0 ... 1 {
@@ -234,8 +248,8 @@ extension CoreEngine {
                 let job = try ModelJob(
                     id: "ask-" + UUID().uuidString.lowercased(), model: options.modelName,
                     system: Ask.systemPrompt() + correction,
-                    user: input.text, maxTokens: min(Self.answerTokens, ModelJob.maxOutputTokens),
-                    deadline: deadline, inputRevision: SHA256.hex(Array(input.text.utf8))
+                    user: modelInput, maxTokens: min(Self.answerTokens, ModelJob.maxOutputTokens),
+                    deadline: deadline, inputRevision: SHA256.hex(Array(modelInput.utf8))
                 )
                 guard job.validate().isEmpty else { return .refused(code: "too_long") }
                 let result = try await runQuestionJob(job, turn: turn)
@@ -259,7 +273,6 @@ extension CoreEngine {
                         + "Return exactly the required JSON fields. Cite only IDs shown in Context. "
                         + "If the evidence cannot answer, use the exact not-found answer and empty citation arrays."
                 }
-
             }
             return .refused(code: "invalid_draft")
         } catch {

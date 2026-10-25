@@ -60,10 +60,24 @@ public enum MemoryCommand: Sendable, Equatable {
         ) != nil {
             return .forget("everything")
         }
-        if ["forget it", "forget that", "forget about it", "forget about that"].contains(lower) {
+        if [
+            "forget it",
+            "forget that",
+            "forget about it",
+            "forget about that",
+            "don't remember that",
+            "dont remember that",
+            "do not remember that",
+            "don't remember it",
+            "dont remember it",
+            "do not remember it",
+        ].contains(lower) {
             return .forget("that")
         }
-        if let what = capture(#"^(?:forget (?:that |about )?|delete the memory (?:about |of )?|stop remembering )(.+)$"#, in: line) {
+        if let what = capture(
+            #"^(?:forget (?:that |about )?|delete the memory (?:about |of )?|stop remembering |(?:don't|dont|do not) remember )(.+)$"#,
+            in: line
+        ) {
             return .forget(what)
         }
         // "If I say I'm sick, will they believe me?" is a question, not a shortcut.
@@ -123,8 +137,9 @@ public enum MemoryCommand: Sendable, Equatable {
         }
         // Assertions can have introductory clauses; preserve the owner's words instead of inventing extracted facts.
         guard !Chat.isRequestToAct(line), line.range(of: momentary, options: [.regularExpression, .caseInsensitive]) == nil,
+              line.range(of: #"^(?:it|that|this|they|he|she|these|those|there)\b"#, options: [.regularExpression, .caseInsensitive]) == nil,
               line.range(
-                  of: #"^(?:have|has|had|am|was|were|any|anything|explain|describe|show|read|summari[sz]e|help|find|search|"#
+                  of: #"^(?:have|has|had|am|was|were|any|anything|explain|describe|show|read|translate|summari[sz]e|help|find|search|"#
                       +
                       #"check|look|list|write|draft|give|calculate|convert|stop|pause|start|end|continue|thanks|thank you|hello|good morning|good night)\b"#,
                   options: [.regularExpression, .caseInsensitive]

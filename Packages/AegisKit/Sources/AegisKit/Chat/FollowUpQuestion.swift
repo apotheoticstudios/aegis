@@ -2,6 +2,32 @@ import Foundation
 
 /// A small, pure English heuristic for questions that need the previous owner's question to retrieve records.
 enum FollowUpQuestion {
+    /// Time/sender fragments refine a local read request, including one that found no records.
+    /// A complete new question never inherits the previous task's sender or date.
+    static func clarification(_ question: String, after previous: String, now: Date, calendar: Calendar) -> String? {
+        let before = AskSelection(previous, query: AskQuery(previous, now: now, calendar: calendar))
+        guard before.source != nil, MemoryCommand.parse(question) == nil else { return nil }
+        let current = AskSelection(question, query: AskQuery(question, now: now, calendar: calendar))
+        let fragment = question.range(
+            of: #"^\s*(?:(?:no|actually)[, ]+)?(?:(?:it|that|this)\s+(?:was|is)\s+(?:yesterday|today|last|on)\b|(?:and\s+)?from\s+|(?:yesterday|today|last night)[.! ]*$)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        guard fragment, current.source == nil, !Chat.isRequestToAct(question),
+              question.range(
+                  of: #"(?:^|[.!?]\s+)(?:also[, ]+)?(?:what|how|why|who|when|where|translate|explain|tell|show)\b"#,
+                  options: [.regularExpression, .caseInsensitive]
+              ) == nil else { return nil }
+        var prior = previous
+        let sender = AskSelection("read the message " + question, query: AskQuery(question, now: now, calendar: calendar)).sender
+        if sender != nil, let old = before.sender {
+            prior = prior.replacingOccurrences(
+                of: #"\b(?:from|sent by|written by)\s+"# + NSRegularExpression.escapedPattern(for: old),
+                with: "", options: [.regularExpression, .caseInsensitive]
+            )
+        }
+        return search(question, after: prior, now: now, calendar: calendar)
+    }
+
     /// Recognizes whole-word references and continuation openings. Capitalized words other than references,
     /// "I" and common question openings are treated as possible new names, so they prevent carrying context.
     /// This deliberately avoids guessing identities or resolving names without a contact index.

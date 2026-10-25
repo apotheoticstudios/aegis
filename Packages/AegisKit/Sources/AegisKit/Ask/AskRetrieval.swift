@@ -104,7 +104,7 @@ enum AskRetrieval {
             )
         lines = query.schedule ? schedules + lines : lines + schedules
         var input = try assemble(lines, question: question, now: now, calendar: calendar)
-        input.prefersGrounded = selection.isReadRequest || onlySender
+        input.prefersGrounded = selection.isReadRequest || onlySender || query.schedule
         if selection.isReadRequest, input.isEmpty {
             input.directAnswer = "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."
         } else if namedPerson, input.isEmpty {
@@ -141,7 +141,9 @@ enum AskRetrieval {
             where item.start < scheduleWindow
             .end && (item.end > scheduleWindow.start || item.start >= scheduleWindow.start) && matches(item.title)
         {
-            let time = item.isAllDay ? date(item.start, allDay: true) : date(item.start) + "…" + date(item.end)
+            let time = item.isAllDay
+                ? date(item.start, allDay: true) + "…" + date(item.end, allDay: true) + " (end exclusive)"
+                : date(item.start) + "…" + date(item.end)
             let location = item.location.map { " · " + quoted($0) } ?? ""
             scheduleLines.append((
                 item.start,

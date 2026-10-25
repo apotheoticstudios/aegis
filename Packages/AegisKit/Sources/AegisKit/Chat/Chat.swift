@@ -103,6 +103,42 @@ public enum Chat {
         return smallTalk.contains { line == $0 || line.hasPrefix($0 + " ") }
     }
 
+    /// A greeting or acknowledgement, rather than a request for the owner's day or records.
+    static func isSocial(_ text: String) -> Bool {
+        let line = AskQuery.words(text).joined(separator: " ")
+        return [
+            "hi",
+            "hey",
+            "hello",
+            "hello there",
+            "how are you",
+            "how are you going",
+            "how s it going",
+            "hows it going",
+            "thanks",
+            "thank you",
+            "cheers",
+            "sweet",
+            "nice",
+            "cool",
+            "ok",
+            "okay",
+            "great",
+            "good morning",
+            "good afternoon",
+            "good evening",
+            "good night",
+        ].contains(line)
+    }
+
+    /// Only explicit day/status requests receive the broad day notes; ordinary conversation never does.
+    static func wantsDayContext(_ text: String) -> Bool {
+        text.range(
+            of: #"\b(?:what'?s up|what is up|catch me up|what'?s next|what is next|anything new|my day|my plans)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
     /// "Can you text Alex…", "remind me to…", "turn off the lights": requests to act, which Aegis can't do yet.
     /// They go to conversation (which says so), never to a search of the owner's messages.
     public static func isRequestToAct(_ text: String) -> Bool {
