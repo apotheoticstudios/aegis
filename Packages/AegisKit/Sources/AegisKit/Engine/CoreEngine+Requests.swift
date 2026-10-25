@@ -186,13 +186,17 @@ extension CoreEngine {
             // A follow-up is searched with the previous question first: on its own, "what did she want?" would
             // match any message with "she" in it.
             if FollowUpQuestion.leansOnPrevious(trimmed), let last = conversation.last, last.via == nil {
+                // After a follow-up, the next one builds on what that one searched: "when did she say?" still means
+                // the person and topic two questions back (#59).
+                let previous = followUpSubject.flatMap { $0.owner == last.owner ? $0.search : nil } ?? last.owner
+                let search = FollowUpQuestion.search(trimmed, after: previous, now: clock(), calendar: calendar)
                 let followInput = try await Ask.prepare(
-                    question: FollowUpQuestion.search(trimmed, after: last.owner, now: clock(), calendar: calendar),
-                    now: clock(), calendar: calendar, store: store, contacts: contactIndex()
+                    question: search, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
                 )
                 guard currentQuestion == turn else { return .refused(code: "cancelled") }
                 // The earlier question supplies retrieval terms only; its records stay local as conversation NOTES.
                 if !followInput.isEmpty {
+                    followUpSubject = (trimmed, search)
                     return await chat(trimmed, found: Chat.contextLines(followInput.text), turn: turn)
                 }
             }

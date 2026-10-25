@@ -69,6 +69,18 @@ final class FollowUpQuestionTests: XCTestCase {
         XCTAssertFalse(chat.user.contains("parcel"))
     }
 
+    func testASecondFollowUpKeepsTheSubject() async throws {
+        let (core, model, event) = try await engine(unrelated: "Example Robin: she did say the parcel arrived")
+        _ = await core.handle(.ask(question: firstQuestion))
+        _ = await core.handle(.ask(question: followUp))
+        _ = await core.handle(.ask(question: "When did she say?"))
+        let jobs = await model.jobs
+        let chat = try XCTUnwrap(jobs.last { $0.id.hasPrefix("chat-") })
+        XCTAssertTrue(chat.user.hasSuffix("OWNER SAYS: When did she say?"))
+        XCTAssertTrue(chat.user.contains(event.body), "still Example Sam's message about the plumber (#59)")
+        XCTAssertFalse(chat.user.contains("parcel"), "not another sender's message with the same words")
+    }
+
     func testTheNewerTimeWinsInAFollowUpSearch() {
         let now = Date(timeIntervalSince1970: 1_791_700_000)
         let search = FollowUpQuestion.search("And today?", after: "Did Example Sam message me yesterday?", now: now, calendar: .current)

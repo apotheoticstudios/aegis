@@ -84,6 +84,8 @@ public actor CoreEngine: CoreService {
     var conversationAt = Date.distantPast
     /// Whether the last exchange was a grounded answer about the owner's records rather than a conversation (#54).
     var conversationGrounded = false
+    /// The last follow-up and the words it was searched with, so the next one keeps its subject (#59).
+    var followUpSubject: (owner: String, search: String)?
     /// The owner's chat lines waiting to be learned from, the pending learning pass and its model job (#282).
     var learnQueue: [String] = []
     var learnTicket: UUID?
