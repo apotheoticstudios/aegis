@@ -82,7 +82,7 @@ final class AegisAppTests: XCTestCase {
             now: now, calendar: calendar
         )
         XCTAssertEqual(rows.map(\.title), ["Holiday", "Standup", "Lunch", "Pay invoice", "Bins", "Call back"])
-        XCTAssertEqual(rows.map(\.time), ["ALL DAY", "09:00–09:30", "12:00–13:00", "OVERDUE", "DUE", "17:00"])
+        XCTAssertEqual(rows.map(\.time), ["ALL DAY", "9:00 AM–9:30 AM", "12:00 PM–1:00 PM", "OVERDUE", "DUE", "5:00 PM"])
         XCTAssertEqual(rows[2].detail, "Cafe")
         XCTAssertEqual(rows[3].kind, .overdue)
     }

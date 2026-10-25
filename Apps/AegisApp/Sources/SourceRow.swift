@@ -61,7 +61,7 @@ enum SourcePresentation {
         let format = DateFormatter()
         format.calendar = calendar
         format.timeZone = calendar.timeZone
-        format.dateFormat = calendar.isDate(date, inSameDayAs: now) ? "HH:mm" : "EEE d MMM HH:mm"
+        format.dateFormat = calendar.isDate(date, inSameDayAs: now) ? "h:mm a" : "EEE d MMM h:mm a"
         return format.string(from: date)
     }
 

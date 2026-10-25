@@ -96,7 +96,7 @@ struct LogsScreen: View {
     /// Log times read as a terminal's, to the second.
     private static let clock = {
         let format = DateFormatter()
-        format.dateFormat = "HH:mm:ss"
+        format.dateFormat = "h:mm:ss a"
         return format
     }()
 

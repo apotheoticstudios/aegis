@@ -483,7 +483,7 @@ enum BriefPresentation {
         let format = DateFormatter()
         format.calendar = calendar
         format.timeZone = calendar.timeZone
-        format.dateFormat = "HH:mm"
+        format.dateFormat = "h:mm a"
         let events = occurrences.filter { $0.status != .cancelled && $0.start < dayEnd && $0.end > dayStart }
             .sorted { ($0.isAllDay ? 0 : 1, $0.start) < ($1.isAllDay ? 0 : 1, $1.start) }
             .map { occurrence in
