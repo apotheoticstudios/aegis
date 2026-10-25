@@ -10,6 +10,7 @@ enum AskRetrieval {
     static func prepare(
         question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?
     ) async throws -> AskInput {
+        let question = AskSelection.requestText(question)
         let query = AskQuery(question, now: now, calendar: calendar)
         let window = query.messages
         let selection = AskSelection(question, query: query)
@@ -87,7 +88,7 @@ enum AskRetrieval {
                 }
                 return $0.id < $1.id
             }
-        let events = Array(matched.prefix(25))
+        let events = Array(matched.prefix(selection.singleTranslation ? 1 : 25))
         var lines = events.map {
             Line(
                 id: $0.id,
@@ -103,7 +104,12 @@ enum AskRetrieval {
                 includeAll: selection.overview
             )
         lines = query.schedule ? schedules + lines : lines + schedules
-        var input = try assemble(lines, question: question, now: now, calendar: calendar)
+        let modelQuestion = selection.translating
+            ? "Translate the selected source text now, into the requested language or otherwise the owner's language. "
+            + (selection.singleTranslation ? "The most recent matching message is selected. " : "")
+            + "Provide the actual translation, not an offer. Owner request: " + question
+            : question
+        var input = try assemble(lines, question: modelQuestion, now: now, calendar: calendar)
         input.prefersGrounded = selection.isReadRequest || onlySender || query.schedule
         if selection.isReadRequest, input.isEmpty {
             input.directAnswer = "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."

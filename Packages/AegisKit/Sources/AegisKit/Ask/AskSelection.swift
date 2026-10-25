@@ -8,14 +8,26 @@ struct AskSelection {
     let direction: Event.Direction?
     let terms: [String]
     let overview: Bool
+    let translating: Bool
+    let singleTranslation: Bool
     private let chinese: Bool
     var isReadRequest: Bool {
         source != nil || overview || sender != nil
     }
 
+    /// A correction to the previous topic does not date or replace the new request after “also”.
+    static func requestText(_ question: String) -> String {
+        question.replacingOccurrences(
+            of: #"^\s*(?:that|it|this)\s+(?:was|is)\s+(?:yesterday|today|last night)[.!]?\s+(?:also|anyway)[,:]?\s+(.+)$"#,
+            with: "$1", options: [.regularExpression, .caseInsensitive]
+        )
+    }
+
     init(_ question: String, query: AskQuery) {
         let words = AskQuery.words(question)
         let translating = words.contains("translate") || words.contains("translation")
+        self.translating = translating
+        singleTranslation = translating && !words.contains { ["messages", "texts", "emails"].contains($0) }
         chinese = translating && question.range(
             of: #"\b(?:from|in)\s+(?:chinese|mandarin|cantonese)\b|\b(?:chinese|mandarin|cantonese)\s+(?:text|message|email)\b"#,
             options: [.regularExpression, .caseInsensitive]
