@@ -1,4 +1,4 @@
-# ADR-0031: Read-only public-topic searches
+# ADR-0032: Read-only public-topic searches
 
 Status: owner approved, 2026-10-23. Contract issue #37.
 

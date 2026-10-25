@@ -75,7 +75,8 @@ extension CoreEngine {
             // Keep only the checked reply in the local, short-lived conversation for follow-ups.
             // Do not call remember(), saveMemory(), or queueLearning() for public-source material.
             conversation.append(Chat.Turn(owner: pending.question, aegis: answer.text))
-            conversation = Array(conversation.suffix(Chat.maxTurns))
+            conversation = Chat.kept(conversation)
+            conversationGrounded = false
             conversationAt = clock()
             return .answer(answer)
         } catch { return .refused(code: "unavailable") }
