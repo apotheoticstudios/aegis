@@ -16,7 +16,7 @@ public enum Reflection {
     You consolidate what an assistant knows about its owner into observations. Rules: each observation covers exactly \
     one facet (a relationship, a routine, a preference, a goal or an ongoing project); say only what the notes support \
     and never calculate, guess or adjust numbers; keep different people and topics separate; when notes conflict, the \
-    newer note wins; skip momentary chatter. Write each observation as one short sentence to the owner ("You…").
+    newer note wins; skip momentary chatter. Select only an existing note verbatim, changing first person to second person ("You…"). Do not paraphrase or infer a new fact.
 
     Reply with ONLY a JSON array of at most 5 strings. If the notes support nothing beyond what they already say, \
     reply with [].
@@ -44,14 +44,18 @@ public extension MemoryBook {
     /// What reflection reads: the owner's own notes and learned facts, oldest first; never shortcuts, quarantined or
     /// earlier observations.
     var reflectionNotes: [MemoryNote] {
-        notes.filter { $0.kind != .shortcut && ($0.origin == nil || $0.origin == .owner || $0.origin == .learned) }
-            .sorted { $0.createdAt < $1.createdAt }
+        notes.filter {
+            $0.kind != .shortcut && ($0.origin == nil || $0.origin == .owner || $0.origin == .learned)
+                && MemoryFact.isDurable($0.text)
+        }
+        .sorted { $0.createdAt < $1.createdAt }
     }
 
     /// Replaces the previous observations with these (at most five) and records the time.
     mutating func reflect(_ observations: [String], now: Date, id: () -> String = MemoryBook.newID) {
+        let supported = MemoryFact.supported(observations, by: reflectionNotes.map(\.text), toOwner: true)
         notes.removeAll { $0.origin == .reflected }
-        for text in observations.prefix(Reflection.maxObservations) {
+        for text in supported.prefix(Reflection.maxObservations) {
             let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !words.isEmpty, words.unicodeScalars.count <= Self.maxNoteScalars else { continue }
             add(MemoryNote(id: id(), kind: .fact, text: words, createdAt: now, origin: .reflected))

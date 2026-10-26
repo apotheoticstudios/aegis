@@ -10,14 +10,16 @@ enum AskRetrieval {
     static func prepare(
         question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?, plan: SearchPlan? = nil
     ) async throws -> AskInput {
+        let question = AskSelection.requestText(question)
         // Not a question about the owner's records: nothing is searched, and the conversation answers it.
         if plan?.lookup == false {
             return AskInput(text: "", eventIDs: [], scheduleIDs: [])
         }
         let rules = AskQuery(question, now: now, calendar: calendar)
-        let query = plan.map { AskQuery(plan: $0, rules: rules, now: now, calendar: calendar) } ?? rules
+        let query = plan.map { AskQuery(plan: $0, rules: rules, now: now, calendar: calendar, question: question) } ?? rules
         let window = query.messages
-        let selection = plan.map { AskSelection(plan: $0, query: query) } ?? AskSelection(question, query: query)
+        let selection = plan.map { AskSelection(plan: $0, query: query, question: question) } ?? AskSelection(question, query: query)
+        let communications = plan.map { !$0.places.intersection([.messages, .mail]).isEmpty } ?? true
         func resolve(_ events: [Event]) -> [Event] {
             contacts.map { resolveSenders(events, index: $0) } ?? events
         }
@@ -42,7 +44,7 @@ enum AskRetrieval {
             .contains(where: AskQuery.words(question).contains))
         // Page the window so a named person's recent records cannot be hidden by an older first page.
         var cursor: EventCursor?
-        while true {
+        while communications {
             let page = try await store.events(from: window.start, to: window.end, after: cursor, limit: 1000)
             for event in resolve(page) where selection.matches(event, senderIDs: senderIDs)
                 && ((person(event) && (!askIntent || BriefInputPolicy.asksOwner(event))) || selection.sender != nil || selection.overview)
@@ -60,7 +62,7 @@ enum AskRetrieval {
         }
         // A named person selects their messages; their name is not a search word (owner's test questions).
         let searchWords = selection.terms.filter { !mentionedNameWords.contains($0) }
-        if !searchWords.isEmpty {
+        if communications, !searchWords.isEmpty {
             func include(_ results: [Event]) {
                 for event in resolve(results) where selection.matches(event, senderIDs: senderIDs) && (!onlySender || person(event)) {
                     candidates[event.id] = event
@@ -92,7 +94,7 @@ enum AskRetrieval {
                 }
                 return $0.id < $1.id
             }
-        let events = Array(matched.prefix(25))
+        let events = Array(matched.prefix(selection.singleTranslation ? 1 : 25))
         var lines = events.map {
             Line(
                 id: $0.id,
@@ -109,8 +111,8 @@ enum AskRetrieval {
             includeAll: selection.overview
         )
         lines = query.schedule ? schedules + lines : lines + schedules
-        var input = try assemble(lines, question: question, now: now, calendar: calendar)
-        input.prefersGrounded = selection.isReadRequest || onlySender
+        var input = try assemble(lines, question: selection.modelQuestion(question), now: now, calendar: calendar)
+        input.prefersGrounded = selection.isReadRequest || onlySender || query.schedule
         if input.isEmpty {
             input.directAnswer = nothingFound(query: query, selection: selection, plan: plan, onlySender: onlySender, named: namedPerson)
         }
@@ -164,7 +166,9 @@ enum AskRetrieval {
             where item.start < scheduleWindow
             .end && (item.end > scheduleWindow.start || item.start >= scheduleWindow.start) && matches(item.title)
         {
-            let time = item.isAllDay ? date(item.start, allDay: true) : date(item.start) + "…" + date(item.end)
+            let time = item.isAllDay
+                ? date(item.start, allDay: true) + "…" + date(item.end, allDay: true) + " (end exclusive)"
+                : date(item.start) + "…" + date(item.end)
             let location = item.location.map { " · " + quoted($0) } ?? ""
             scheduleLines.append((
                 item.start,

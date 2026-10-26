@@ -27,6 +27,9 @@ public enum Chat {
     /// Spoken when the model claimed or promised an action Aegis can't take yet (#241), instead of the fallback.
     public static let cannotAct = "I can't do that myself yet, sorry. I can help you word it, though."
 
+    /// A model reply cannot confirm a memory write; the memory handler provides that acknowledgement itself.
+    static let memoryNotSaved = "I haven't saved that as a memory."
+
     /// The chat instructions with Aegis's identity and personality (#241).
     public static func systemPrompt(_ personality: Personality = .standard) -> String {
         guard let url = Bundle.module.url(forResource: "chat-prompt", withExtension: "md"),
@@ -61,6 +64,7 @@ public enum Chat {
             guard let range = Range(match.range, in: text) else { continue }
             let piece = String(text[start ..< range.upperBound])
             let unsafe = piece.contains("\u{1}")
+                || piece.range(of: claimedMemory, options: [.regularExpression, .caseInsensitive]) != nil
                 || piece.range(of: claimedAction, options: [.regularExpression, .caseInsensitive]) != nil
             guard !unsafe, text[..<range.upperBound].unicodeScalars.count <= maxReplyScalars else { break }
             end = range.upperBound
@@ -85,7 +89,18 @@ public enum Chat {
         if let text = check(named, owner: owner) {
             return text
         }
+        if named.range(of: claimedMemory, options: [.regularExpression, .caseInsensitive]) != nil {
+            return memoryNotSaved
+        }
         return named.range(of: claimedAction, options: [.regularExpression, .caseInsensitive]) != nil ? cannotAct : fallback
+    }
+
+    /// A standalone knowledge question, subject to the local personal-data gate before routing.
+    static func isGeneralKnowledge(_ text: String) -> Bool {
+        text.range(
+            of: #"^\s*(?:please\s+)?(?:explain\b|why\b|what (?:is|are)\b|who (?:is|was)\b|how (?:does|do)\b|compare\b|tell me about\b)"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 
     /// Greetings and small talk go straight to conversation (no search of the owner's data).
@@ -93,6 +108,68 @@ public enum Chat {
         let words = text.lowercased().unicodeScalars.filter { CharacterSet.letters.contains($0) || $0 == " " || $0 == "'" }
         let line = String(String.UnicodeScalarView(words)).split(separator: " ").joined(separator: " ")
         return smallTalk.contains { line == $0 || line.hasPrefix($0 + " ") }
+    }
+
+    /// A greeting or acknowledgement, rather than a request for the owner's day or records.
+    static func isSocial(_ text: String) -> Bool {
+        var words = AskQuery.words(text)
+        let courtesy: Set = ["mate", "sir", "buddy", "bro", "pal", "there", "aegis", "jarvis"]
+        while let last = words.last, courtesy.contains(last) {
+            words.removeLast()
+        }
+        let line = words.joined(separator: " ")
+        if [
+            "hi",
+            "hey",
+            "hello",
+            "hello there",
+            "how are you",
+            "how are you going",
+            "how are you doing",
+            "how s it going",
+            "hows it going",
+            "thanks",
+            "thank you",
+            "cheers",
+            "sweet",
+            "nice",
+            "cool",
+            "ok",
+            "okay",
+            "great",
+            "good morning",
+            "good afternoon",
+            "good evening",
+            "good night",
+            "what s up",
+            "whats up",
+            "wassup",
+            "sup",
+            "yo",
+        ].contains(line) {
+            return true
+        }
+        guard ["hi", "hey", "hello", "yo", "wassup", "sup", "hiya", "gday"].contains(words.first ?? "") else { return false }
+        if isSocial(words.dropFirst().joined(separator: " ")) {
+            return true
+        }
+        // A salutation is not permission to discard a request in the same utterance.
+        let taskWords: Set = [
+            "what", "whats", "when", "where", "who", "why", "which", "how", "can", "could", "would", "will",
+            "did", "does", "do", "is", "are", "was", "were",
+            "read", "translate", "explain", "tell", "show", "find", "remember", "forget", "send", "open", "play",
+            "calendar", "email", "emails", "message", "messages", "today", "tomorrow", "yesterday", "plans", "schedule",
+            "got", "have", "remind", "add", "run", "stop", "turn", "set", "call", "delete", "book", "order", "buy", "pay",
+        ]
+        return !words.dropFirst().contains(where: taskWords.contains)
+    }
+
+    /// Only explicit day/status requests receive the broad day notes; ordinary conversation never does.
+    static func wantsDayContext(_ text: String) -> Bool {
+        text.range(
+            of: #"\b(?:catch me up|what'?s next|what is next|anything new|my day|my plans)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 
     /// "Can you text Alex…", "remind me to…", "turn off the lights": requests to act, which Aegis can't do yet.
@@ -191,7 +268,8 @@ public enum Chat {
         }
         guard !text.isEmpty,
               text.range(of: #"\b(?:ev|cal|rem|occ)_[0-9a-f]{6,}"#, options: .regularExpression) == nil,
-              text.range(of: claimedAction, options: [.regularExpression, .caseInsensitive]) == nil
+              text.range(of: claimedAction, options: [.regularExpression, .caseInsensitive]) == nil,
+              text.range(of: claimedMemory, options: [.regularExpression, .caseInsensitive]) == nil
         else { return nil }
         guard text.unicodeScalars.count > maxReplyScalars else { return text }
         let cut = String(String.UnicodeScalarView(text.unicodeScalars.prefix(maxReplyScalars)))
@@ -200,6 +278,9 @@ public enum Chat {
         }
         return cut + "…"
     }
+
+    private static let claimedMemory = #"\bI(?:['’]ll| will| have|['’]ve) (?:remember|remembered|save|saved|store|stored|noted|memorise|memorize|make a note|keep that in mind)\b|"#
+        + #"\b(?:added|saved|committed) (?:that|this|it) to (?:my |your )?(?:memory|memories)\b"#
 
     private static let claimedAction = #"\bI(?:'ve| have)? (?:just )?(?:sent|texted|emailed|messaged|booked|scheduled|called|"#
         + #"deleted|paid|bought|ordered|replied|forwarded|turned (?:on|off)|unlocked|locked)\b|"#

@@ -11,6 +11,11 @@ if args.count == 4, args[3] == "retrieval" {
     exit(0)
 }
 
+if args.count == 4, args[3] == "conversation" {
+    try await conversationAccuracy(modelDirectory: args[1], output: args[2])
+    exit(0)
+}
+
 let cases: [(String, String, String)] = [
     (
         "sender-mention",

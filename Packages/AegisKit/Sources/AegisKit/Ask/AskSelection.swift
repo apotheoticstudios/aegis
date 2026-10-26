@@ -8,12 +8,38 @@ struct AskSelection {
     let direction: Event.Direction?
     let terms: [String]
     let overview: Bool
+    let translating: Bool
+    let singleTranslation: Bool
+    private let chinese: Bool
     var isReadRequest: Bool {
         source != nil || overview || sender != nil
     }
 
+    /// A correction to the previous topic does not date or replace the new request after “also”.
+    static func requestText(_ question: String) -> String {
+        question.replacingOccurrences(
+            of: #"^\s*(?:that|it|this)\s+(?:was|is)\s+(?:yesterday|today|last night)[.!]?\s+(?:also|anyway)[,:]?\s+(.+)$"#,
+            with: "$1", options: [.regularExpression, .caseInsensitive]
+        )
+    }
+
+    /// Make the active read-only translation task explicit for a small model.
+    func modelQuestion(_ question: String) -> String {
+        guard translating else { return question }
+        return "Translate the selected source text now, into the requested language or otherwise the owner's language. "
+            + (singleTranslation ? "The most recent matching message is selected. " : "")
+            + "Provide the actual translation, not an offer. Owner request: " + question
+    }
+
     init(_ question: String, query: AskQuery) {
         let words = AskQuery.words(question)
+        let translating = words.contains("translate") || words.contains("translation")
+        self.translating = translating
+        singleTranslation = translating && !words.contains { ["messages", "texts", "emails"].contains($0) }
+        chinese = translating && question.range(
+            of: #"\b(?:from|in)\s+(?:chinese|mandarin|cantonese)\b|\b(?:chinese|mandarin|cantonese)\s+(?:text|message|email)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
         let timed = words.contains { [
             "today",
             "yesterday",
@@ -50,20 +76,23 @@ struct AskSelection {
             of: #"\b(?:did i|have i|i)\s+(?:send|sent|write|wrote|email|emailed|text|texted)\b"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
-        // "What have I got on" is the calendar, not what arrived.
-        let received = !query.schedule && words.contains { ["get", "got", "receive", "received", "inbox"].contains($0) }
-        direction = sent ? .outgoing : (received ? .incoming : nil)
-        let pattern = #"\b(?:from|sent by|written by)\s+(.+?)(?=\s+(?:today|yesterday|tonight|this|last|next|on|about|regarding|say|said|says|to|in|mention|mentions|mentioned)\b|[?!]|$)"#
-        let raw = source == nil ? nil : question.range(of: pattern, options: [.regularExpression, .caseInsensitive]).map {
-            String(question[$0]).replacingOccurrences(
-                of: #"^(?:from|sent by|written by)\s+"#,
-                with: "",
-                options: [.regularExpression, .caseInsensitive]
-            )
-            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'.,")))
-        }
+        let received = !(query.schedule && requested == nil) && words
+            .contains { ["get", "got", "receive", "received", "inbox"].contains($0) }
+        // “What have I got on today?” asks for the calendar, not incoming communications.
+        direction = query.schedule && requested == nil ? nil : (sent ? .outgoing : (received ? .incoming : nil))
+        let pattern = #"\b(?:from|sent by|written by)\s+(.+?)(?=\s+(?:today|yesterday|tonight|this|last|next|on|about|regarding|"#
+            + #"say|said|says|to|in|from|mention|mentions|mentioned)\b|[?!]|\.(?:\s|$)|$)"#
         let timeWords = Set(["today", "yesterday", "tonight", "this", "last", "next"])
-        sender = raw.flatMap { $0.count <= 100 && !timeWords.contains(AskQuery.words($0).first ?? "") ? $0 : nil }
+        let languages = Self.languages
+        let raw = (try? NSRegularExpression(pattern: pattern, options: .caseInsensitive))?
+            .matches(in: question, range: NSRange(question.startIndex..., in: question)).compactMap { match -> String? in
+                guard let range = Range(match.range(at: 1), in: question) else { return nil }
+                let name = String(question[range]).trimmingCharacters(in: CharacterSet(charactersIn: "\"'., "))
+                guard name.count <= 100, !timeWords.contains(AskQuery.words(name).first ?? ""),
+                      !(translating && languages.contains(name.lowercased())) else { return nil }
+                return name
+            }.last
+        sender = source == nil ? nil : raw
         let sourceWords: Set<String> = switch source {
         case .mail: mailWords
         case .messages: messageWords
@@ -74,24 +103,37 @@ struct AskSelection {
                 + "received receive sent send say says happened happen missed miss new recent latest recently gotten "
                 + "monday tuesday wednesday thursday friday saturday sunday").split(separator: " ").map(String.init)).union(sourceWords)
         let senderWords = Set(AskQuery.words(sender ?? ""))
-        terms = query.keywords.filter { !filler.contains($0) && !senderWords.contains($0) }
+        let translationWords = translating ? languages.union(["text", "translation", "into", "language"]) : []
+        terms = query.keywords.filter { !filler.contains($0) && !senderWords.contains($0) && !translationWords.contains($0) }
         overview = terms.isEmpty && (source != nil || timed && (received || words.contains { ["happened", "missed", "new"].contains($0) }))
     }
 
     /// The model's plan (ADR-0032) as a selection: where to look, who from and which way.
-    init(plan: SearchPlan, query: AskQuery) {
+    init(plan: SearchPlan, query: AskQuery, question: String = "") {
+        let explicit = AskSelection(question, query: query)
         let communication = plan.places.intersection([.messages, .mail])
-        source = communication == [.mail] ? .mail : communication == [.messages] ? .messages : nil
+        let planned: Source? = communication == [.mail] ? .mail : communication == [.messages] ? .messages
+            : communication.isEmpty ? nil : .communications
+        source = explicit.source ?? planned
         // People the plan names may be relations ("the plumber"), not contact names: who sent what is still resolved
         // from the owner's own words against Contacts, never by filtering on the model's word.
-        sender = nil
-        direction = plan.direction
+        sender = explicit.sender
+        direction = explicit.direction ?? plan.direction
+        translating = explicit.translating
+        singleTranslation = explicit.singleTranslation
+        chinese = explicit.chinese
         let named = Set(plan.people.flatMap(AskQuery.words))
-        terms = query.keywords.filter { !named.contains($0) }
+        terms = explicit.terms.filter { !named.contains($0) }
         overview = terms.isEmpty && !communication.isEmpty && !plan.places.contains(.calendar)
     }
 
     func matches(_ event: Event, senderIDs: Set<String> = []) -> Bool {
+        if chinese, !event.body.unicodeScalars.contains(where: {
+            (0x3400 ... 0x4DBF).contains($0.value) || (0x4E00 ... 0x9FFF).contains($0.value)
+                || (0xF900 ... 0xFAFF).contains($0.value) || (0x20000 ... 0x3134F).contains($0.value)
+        }) {
+            return false
+        }
         if source != nil || overview {
             if direction == .incoming, SenderDisplay.isOutgoing(event) {
                 return false
@@ -133,4 +175,11 @@ struct AskSelection {
         String(text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
             .filter { $0.isLetter || $0.isNumber })
     }
+
+    /// Language names in a translation instruction describe the content, rather than its sender.
+    private static let languages: Set<String> = [
+        "chinese", "mandarin", "cantonese", "english", "french", "spanish", "german", "italian", "portuguese",
+        "russian", "ukrainian", "arabic", "hindi", "japanese", "korean", "vietnamese", "thai", "greek", "hebrew",
+        "polish", "dutch", "turkish", "indonesian", "malay", "swedish", "tamil", "bengali", "urdu", "persian",
+    ]
 }

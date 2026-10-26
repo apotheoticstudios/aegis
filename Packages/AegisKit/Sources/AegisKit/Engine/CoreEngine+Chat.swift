@@ -6,39 +6,53 @@ extension CoreEngine {
     static let chatTokens = 1200
 
     /// A conversational reply from the local model. `found` holds context lines Ask's retrieval found, if any.
-    func chat(_ question: String, found: [String], turn: UUID) async -> CoreResponse {
+    func chat(_ question: String, found: [String], turn: UUID, includeNotes: Bool = true) async -> CoreResponse {
         let now = clock()
         if now.timeIntervalSince(conversationAt) > Chat.memory {
             conversation = []
         }
-        let scorer = await meaningScorer(for: question)
-        let notes = await memory.notesForChat(question, now: now, calendar: calendar, meaning: scorer) + dayNotes(now: now)
-            + found.prefix(30).map { "From your messages: " + $0 }
+        let social = Chat.isSocial(question)
+        let includeNotes = includeNotes && !social
+        let scorer = includeNotes ? await meaningScorer(for: question) : nil
+        let day = includeNotes && Chat.wantsDayContext(question) ? await dayNotes(now: now) : []
+        let notes = includeNotes ? await memory.notesForChat(question, now: now, calendar: calendar, meaning: scorer) + day
+            + found.prefix(30).map { "From your messages: " + $0 } : []
         let user = Chat.prepare(question, notes: notes, now: now, calendar: calendar)
         do {
             let job = try ModelJob(
-                id: "chat-" + UUID().uuidString.lowercased(), model: options.modelName, system: Chat.systemPrompt(personality),
-                user: user, maxTokens: min(Self.chatTokens, ModelJob.maxOutputTokens),
+                id: "chat-" + UUID().uuidString.lowercased(), model: options.modelName,
+                system: Chat.systemPrompt(personality) + (social
+                    ?
+                    "\nThis turn is only a greeting or acknowledgement. Reply briefly to it; do not invent or bring up personal events or records." :
+                    ""),
+                user: user, maxTokens: min(social ? 120 : Self.chatTokens, ModelJob.maxOutputTokens),
                 deadline: now.addingTimeInterval(120), inputRevision: SHA256.hex(Array(user.utf8)),
-                history: chatHistory, style: .conversation
+                history: social
+                    ? Array(conversation.reversed().prefix { Chat.isSocial($0.owner) }.reversed()).map {
+                        ModelJob.Exchange(owner: $0.owner, aegis: $0.aegis)
+                    } : chatHistory, style: .conversation
             )
             guard job.validate().isEmpty else {
                 return .refused(code: "too_long")
             }
             replyJob = (job.id, question)
-            let result = try await runQuestionJob(job, turn: turn)
-            if replyJob?.id == job.id {
-                replyJob = nil
+            defer {
+                if replyJob?.id == job.id {
+                    replyJob = nil
+                }
             }
+            let result = try await runQuestionJob(job, turn: turn)
             guard result.status == .completed else {
-                return .refused(code: result.status.rawValue)
+                return .refused(code: result.failure?.rawValue ?? result.status.rawValue)
             }
             let reply = result.text.map { Chat.reply($0, owner: question, name: personality.name) } ?? Chat.fallback
-            if reply != Chat.fallback, reply != Chat.cannotAct {
+            if reply != Chat.fallback, reply != Chat.cannotAct, reply != Chat.memoryNotSaved {
                 remember(question, reply)
             }
             // Only the owner's words are learned from (#282); the reply may quote collected messages.
-            queueLearning(question)
+            if !Chat.isSocial(question), !FollowUpQuestion.leansOnPrevious(question) {
+                queueLearning(question)
+            }
             return .answer(Answer(text: reply, eventIDs: [], scheduleIDs: [], model: options.modelName, generatedAt: clock()))
         } catch {
             return .refused(code: "unavailable")
@@ -93,11 +107,14 @@ extension CoreEngine {
         format.calendar = calendar
         format.timeZone = calendar.timeZone
         format.locale = Locale.autoupdatingCurrent
-        format.dateFormat = "EEE h:mm a"
+        format.dateFormat = "EEE d MMM yyyy, h:mm a"
         let occurrences = await (try? store.occurrences(from: now, to: end)) ?? []
         let reminders = await (try? store.reminders(from: now.addingTimeInterval(-86400), to: end)) ?? []
         return occurrences.sorted { $0.start < $1.start }.prefix(6).map {
-            "Calendar: \($0.title), " + ($0.isAllDay ? "all day" : format.string(from: $0.start)) + EventEvidence.attendees($0)
-        } + reminders.filter { !$0.isCompleted }.prefix(4).map { "Reminder: \($0.title)" }
+            "Calendar: \($0.title), starts " + format.string(from: $0.start) + ", ends " + format.string(from: $0.end)
+                + ($0.isAllDay ? " (all day; end exclusive)" : "") + EventEvidence.attendees($0)
+        } + reminders.filter { !$0.isCompleted }.prefix(4).map {
+            "Reminder: \($0.title)" + ($0.due.map { ", due " + format.string(from: $0.date) } ?? " (no due date)")
+        }
     }
 }

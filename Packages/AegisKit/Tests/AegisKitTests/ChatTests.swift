@@ -100,7 +100,7 @@ final class ChatTests: XCTestCase {
         XCTAssertEqual(jobs.map(\.style), [.conversation, .conversation])
         XCTAssertEqual(jobs[0].history, [])
         XCTAssertEqual(jobs[1].history, [ModelJob.Exchange(owner: "hello there", aegis: "Hello from the model.")])
-        XCTAssertEqual(jobs[1].maxTokens, 1200)
+        XCTAssertEqual(jobs[1].maxTokens, 120, "A greeting stays brief rather than rambling through the owner's day")
     }
 }
 

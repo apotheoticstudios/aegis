@@ -60,10 +60,24 @@ public enum MemoryCommand: Sendable, Equatable {
         ) != nil {
             return .forget("everything")
         }
-        if ["forget it", "forget that", "forget about it", "forget about that"].contains(lower) {
+        if [
+            "forget it",
+            "forget that",
+            "forget about it",
+            "forget about that",
+            "don't remember that",
+            "dont remember that",
+            "do not remember that",
+            "don't remember it",
+            "dont remember it",
+            "do not remember it",
+        ].contains(lower) {
             return .forget("that")
         }
-        if let what = capture(#"^(?:forget (?:that |about )?|delete the memory (?:about |of )?|stop remembering )(.+)$"#, in: line) {
+        if let what = capture(
+            #"^(?:forget (?:that |about )?|delete the memory (?:about |of )?|stop remembering |(?:don't|dont|do not) remember )(.+)$"#,
+            in: line
+        ) {
             return .forget(what)
         }
         // "If I say I'm sick, will they believe me?" is a question, not a shortcut.
@@ -92,58 +106,21 @@ public enum MemoryCommand: Sendable, Equatable {
         + #"what did we (?:talk|chat) about|what were we talking about)\s+(yesterday|today|this morning|this afternoon|"#
         + #"earlier|before|last time)$"#
 
-    /// The owner telling Aegis something about themselves ("I'm vegetarian", "my sister's name is Sam"): worth
-    /// offering to remember, with one click. Nil for questions, commands and anything else.
+    /// A clear lasting fact about the owner, suitable for offering to save. Questions, requests, conversational
+    /// fragments and temporary states are never suggestions; explicit “remember…” remains available for other notes.
     public static func suggestion(_ text: String) -> String? {
-        let line = cleaned(text)
-        let words = line.split(separator: " ").count
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"), (2 ... 30).contains(words),
-              parse(text) == nil,
-              line.lowercased().range(of: suggestionPattern, options: .regularExpression) != nil,
-              line.lowercased().range(of: momentary, options: .regularExpression) == nil
-        else { return nil }
-        return line
+        guard text.split(whereSeparator: \.isWhitespace).count <= 30 else { return nil }
+        return statedFact(text)
     }
 
-    /// A fact stated directly to Aegis, rather than a question, instruction, quotation or imported text.
+    /// Only a positively recognised durable assertion can be saved without an explicit memory command.
+    /// Checking the entire utterance matters: speech often puts a question between a greeting and a correction.
     static func statedFact(_ text: String) -> String? {
+        guard text.unicodeScalars.count <= maxScalars, parse(text) == nil,
+              !text.contains(where: { $0.isNewline || $0 == "?" || $0 == "？" }) else { return nil }
         let line = cleaned(text)
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
-              text.unicodeScalars.count <= maxScalars, !text.contains("\n"), parse(text) == nil,
-              line.range(
-                  of: #"^(?:if|suppose|imagine|perhaps|maybe|what|who|when|where|why|how|is|are|do|does|did|can|could|would|will|should|the (?:message|email|notification|article))\b|^[\"“>]"#,
-                  options: [.regularExpression, .caseInsensitive]
-              ) == nil
-        else { return nil }
-        if SenderAlias.parse(line) != nil {
-            return line
-        }
-        if let personal = suggestion(text) {
-            return personal
-        }
-        // Assertions can have introductory clauses; preserve the owner's words instead of inventing extracted facts.
-        guard !Chat.isRequestToAct(line), line.range(of: momentary, options: [.regularExpression, .caseInsensitive]) == nil,
-              line.range(
-                  of: #"^(?:have|has|had|am|was|were|any|anything|explain|describe|show|read|summari[sz]e|help|find|search|"#
-                      +
-                      #"check|look|list|write|draft|give|calculate|convert|stop|pause|start|end|continue|thanks|thank you|hello|good morning|good night)\b"#,
-                  options: [.regularExpression, .caseInsensitive]
-              ) == nil,
-              line.range(
-                  of: #"\b(?:am|is|are|was|were|have|has|had|live|lives|work|works|like|likes|love|prefer|prefers|need|needs|want|wants|used to|will|can|cannot)\b"#,
-                  options: [.regularExpression, .caseInsensitive]
-              ) != nil else { return nil }
-        return line
+        return MemoryFact.isDurable(line) ? line : nil
     }
-
-    /// How the owner feels or what they're doing right now: not worth keeping.
-    private static let momentary = #"^(?:i'm|i am)\s+(?:so |really |very |a bit |just |still )?(?:tired|hungry|thirsty|bored|"#
-        + #"sleepy|busy|back|here|home|done|good|fine|ok|okay|great|sad|happy|sick|unwell|cold|hot|going|leaving|off|"#
-        + #"about to|running late|late|on my way|out|free|awake|up|ready|confused|stressed|excited|annoyed|lost)\b"#
-
-    private static let suggestionPattern = #"^(?:i'm|i am|i have|i've got|i like|i love|i prefer|i hate|i don't like|"#
-        + #"i dont like|i can't eat|i cant eat|i don't eat|i dont eat|i work|i live|i go to|i study|i was born|"#
-        + #"my [a-z']+(?: [a-z']+)? (?:is|are|was))\b"#
 
     private static let listPattern = #"^(?:what do you remember(?: about me)?|what have i told you(?: to remember)?|"#
         + #"what do you know about me|show me your memory|what'?s in your memory|what is in your memory)$"#

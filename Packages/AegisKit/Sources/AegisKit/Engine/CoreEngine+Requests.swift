@@ -145,6 +145,7 @@ extension CoreEngine {
         }
         let turn = UUID()
         currentQuestion = turn
+        replyJob = nil
         await pauseLearning()
         if let job = questionJobID {
             await model.cancel(jobID: job)
@@ -154,14 +155,21 @@ extension CoreEngine {
             conversation = []
         }
         // "Do that again" and the owner's shortcuts first; memory needs no model, so it answers even while busy.
-        let (expandedQuestion, nothing) = expanded(asked)
-        if let response = nothing ?? memoryResponse(expandedQuestion) {
+        let (expanded, nothing) = self.expanded(asked)
+        let clarification = conversation.last.flatMap {
+            $0.via == nil ? FollowUpQuestion.clarification(expanded, after: $0.owner, now: clock(), calendar: calendar) : nil
+        }
+        let expandedQuestion = clarification ?? expanded
+        if let response = nothing ?? (clarification == nil ? memoryResponse(expandedQuestion) : nil) {
             return response
         }
         // The time, the date, sums and conversions: answered at once, exactly (#227).
         if let quick = QuickAnswer.answer(expandedQuestion, now: clock(), calendar: calendar) {
             remember(expandedQuestion, quick)
             return .answer(Answer(text: quick, eventIDs: [], scheduleIDs: [], model: "aegis", generatedAt: clock()))
+        }
+        if let response = await agenda(expandedQuestion, turn: turn) {
+            return response
         }
         // "Ask Claude…" and follow-ups to a hand-off (#223): they don't need the local model either.
         // Expanded words come from memory, which ADR-0017 never permits sending to a provider.
@@ -177,15 +185,43 @@ extension CoreEngine {
         return note.map { Self.noted(response, $0) } ?? response
     }
 
+    /// Simple overviews remain available while the model is busy or unavailable.
+    private func agenda(_ question: String, turn: UUID) async -> CoreResponse? {
+        let last = conversation.last?.owner
+        let previous = followUpSubject.flatMap { $0.owner == last ? $0.search : nil } ?? last
+        let now = clock()
+        guard let request = AgendaAnswer.request(question, previous: previous, now: now, calendar: calendar) else { return nil }
+        do {
+            let answer = try await AgendaAnswer.answer(
+                request,
+                store: store,
+                coverage: sourceCoverage(at: now),
+                now: now,
+                calendar: calendar
+            )
+            guard currentQuestion == turn else { return .refused(code: "cancelled") }
+            guard answer.validate().isEmpty else { return .refused(code: "too_long") }
+            remember(question, answer.text)
+            conversationGrounded = true
+            followUpSubject = (question, request.canonical)
+            return .answer(answer)
+        } catch { return .refused(code: currentQuestion == turn ? "store_unavailable" : "cancelled") }
+    }
+
     private func answer(_ trimmed: String, cloud: CloudHandOff.Availability, turn: UUID) async -> CoreResponse {
         await interruptBriefForQuestion()
         await acquire()
         defer { release() }
         guard currentQuestion == turn else { return .refused(code: "cancelled") }
         do {
+            let query = AskQuery(trimmed, now: clock(), calendar: calendar)
+            let selection = AskSelection(trimmed, query: query)
+            if Chat.isSocial(trimmed), !selection.isReadRequest, !query.schedule {
+                return await chat(trimmed, found: [], turn: turn, includeNotes: false)
+            }
             // A follow-up is searched with the previous question first: on its own, "what did she want?" would
             // match any message with "she" in it.
-            if FollowUpQuestion.leansOnPrevious(trimmed), let last = conversation.last, last.via == nil {
+            if !selection.isReadRequest, FollowUpQuestion.leansOnPrevious(trimmed), let last = conversation.last, last.via == nil {
                 // After a follow-up, the next one builds on what that one searched: "when did she say?" still means
                 // the person and topic two questions back (#59).
                 let previous = followUpSubject.flatMap { $0.owner == last.owner ? $0.search : nil } ?? last.owner
@@ -200,13 +236,22 @@ extension CoreEngine {
                     return await chat(trimmed, found: Chat.contextLines(followInput.text), turn: turn)
                 }
             }
+            // Public knowledge must not be forced into the owner's record-citation format.
+            if Chat.isGeneralKnowledge(trimmed), await !CloudHandOff.isPersonal(trimmed, names: contactNames()) {
+                return await chat(trimmed, found: [], turn: turn, includeNotes: false)
+            }
             let plan = await searchPlan(trimmed, turn: turn)
             guard currentQuestion == turn else { return .refused(code: "cancelled") }
+            if plan?.lookup == false, !selection.isReadRequest, !query.schedule {
+                return await chat(trimmed, found: [], turn: turn, includeNotes: false)
+            }
             let input = try await Ask.prepare(
                 question: trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex(), plan: plan
             )
             guard currentQuestion == turn else { return .refused(code: "cancelled") }
             if let text = input.directAnswer {
+                remember(trimmed, text)
+                conversationGrounded = true
                 return .answer(Answer(text: text, eventIDs: [], scheduleIDs: [], model: "aegis", generatedAt: clock()))
             }
             // A follow-up to a conversation stays one (#54): grounded answers see no earlier turns, so a question about
@@ -224,33 +269,53 @@ extension CoreEngine {
                 }
                 return await chat(trimmed, found: [], turn: turn)
             }
-            let job = try ModelJob(
-                id: "ask-" + UUID().uuidString.lowercased(), model: options.modelName, system: Ask.systemPrompt(),
-                user: input.text, maxTokens: min(Self.answerTokens, ModelJob.maxOutputTokens),
-                deadline: clock().addingTimeInterval(120), inputRevision: SHA256.hex(Array(input.text.utf8))
-            )
-            guard job.validate().isEmpty else {
-                return .refused(code: "too_long")
-            }
-            let result = try await runQuestionJob(job, turn: turn)
-            guard result.status == .completed else {
-                return .refused(code: result.status.rawValue)
-            }
-            guard let text = result.text, let draft = Briefing.extractJSON(text) else {
-                return .refused(code: AskRejection.invalidDraft.rawValue)
-            }
-            switch Ask.check(draft, input: input, model: options.modelName, generatedAt: clock()) {
-            case let .success(answer):
-                remember(trimmed, answer.text)
-                conversationGrounded = true
-                return .answer(answer)
-            case let .failure(reason):
-                // A rejected grounded answer must never escape through unchecked conversation.
-                return .refused(code: reason.rawValue)
-            }
+            return try await groundedAnswer(input, question: trimmed, turn: turn)
         } catch {
             return .refused(code: "unavailable")
         }
+    }
+
+    /// One fresh bounded repair over the same evidence; rejected text never enters the retry or history.
+    private func groundedAnswer(_ input: AskInput, question: String, turn: UUID) async throws -> CoreResponse {
+        let eventCitations = input.eventIDs.map { jsonString($0) }.joined(separator: ",")
+        let scheduleCitations = input.scheduleIDs.map { jsonString($0) }.joined(separator: ",")
+        let modelInput = input.text + "\nAllowed citation IDs (DATA; use only these, in the matching array):\nevent_ids: ["
+            + eventCitations + "]\nschedule_ids: [" + scheduleCitations + "]"
+        let deadline = clock().addingTimeInterval(120)
+        var correction = ""
+        for attempt in 0 ... 1 {
+            guard currentQuestion == turn else { return .refused(code: "cancelled") }
+            let job = try ModelJob(
+                id: "ask-" + UUID().uuidString.lowercased(), model: options.modelName,
+                system: Ask.systemPrompt() + correction,
+                user: modelInput, maxTokens: min(Self.answerTokens, ModelJob.maxOutputTokens),
+                deadline: deadline, inputRevision: SHA256.hex(Array(modelInput.utf8))
+            )
+            guard job.validate().isEmpty else { return .refused(code: "too_long") }
+            let result = try await runQuestionJob(job, turn: turn)
+            guard result.status == .completed else {
+                return .refused(code: result.failure?.rawValue ?? result.status.rawValue)
+            }
+            let checked = result.text.flatMap(Briefing.extractJSON).map {
+                Ask.check($0, input: input, model: options.modelName, generatedAt: clock())
+            } ?? .failure(.invalidDraft)
+            switch checked {
+            case let .success(answer):
+                remember(question, answer.text)
+                conversationGrounded = true
+                return .answer(answer)
+            case let .failure(reason):
+                guard attempt == 0, reason == .invalidDraft || reason == .unknownCitation else {
+                    return .refused(code: reason.rawValue)
+                }
+                // Fresh attempt over the same evidence, never the rejected model text.
+                correction = "\nThe previous attempt failed validation (" + reason.rawValue + "). "
+                    + "Return exactly the required JSON fields. Cite only IDs shown in Context. "
+                    + "An answer from a record must include its ID in the matching citation array. "
+                    + "If the evidence cannot answer, return exactly " + jsonString(Ask.notFound) + " with empty citation arrays."
+            }
+        }
+        return .refused(code: "invalid_draft")
     }
 }
 

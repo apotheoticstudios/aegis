@@ -23,7 +23,9 @@ extension CoreEngine {
     func memoryResponse(_ question: String) -> CoreResponse? {
         let now = clock()
         let previous = memory
-        switch MemoryCommand.parse(question) ?? MemoryCommand.statedFact(question).map(MemoryCommand.remember) {
+        let explicit = MemoryCommand.parse(question)
+        let implicit = memory.learningPaused == true ? nil : MemoryCommand.statedFact(question)
+        switch explicit ?? implicit.map(MemoryCommand.remember) {
         case var .remember(text):
             // "Remember that" on its own: what the owner just told Aegis, never Aegis's reply (which may hold
             // collected content).
@@ -51,8 +53,28 @@ extension CoreEngine {
                 : "Got it. I'll remember that " + MemoryText.ended(MemoryText.toOwner(note.text, startsSentence: false))
             return memoryAnswer(reply, question: question)
         case let .forget(query):
+            learnQueue = []
+            learnTicket = nil
+            if query == "that", let last = conversation.last,
+               MemoryCommand.statedFact(last.owner) == nil,
+               !(MemoryCommand.parse(last.owner).map {
+                   if case .remember = $0 {
+                       true
+                   } else {
+                       false
+                   }
+               } ?? false)
+            {
+                return memoryAnswer("I haven't saved that as a fact.", question: question)
+            }
             let gone = memory.forget(query)
+            // Forgotten notes must not return through the transcript's recall path or a queued learning pass.
+            func mentions(_ text: String) -> Bool {
+                gone.contains { text.localizedCaseInsensitiveContains($0.text) }
+            }
+            memory.exchanges.removeAll { mentions($0.owner) || mentions($0.aegis) }
             guard saveMemory() else { return memoryWriteFailed(previous, question: question) }
+            conversation.removeAll { mentions($0.owner) || mentions($0.aegis) }
             let reply = switch (query, gone.first) {
             case (_, nil): "I don't have anything like that to forget."
             case ("everything", _): "Done. I've forgotten everything you asked me to remember."

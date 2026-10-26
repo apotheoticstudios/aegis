@@ -177,7 +177,7 @@ final class OwnerMemoryTests: XCTestCase {
     func testLongSavedFactsStillProduceAValidMemoryListAnswer() async throws {
         let core = try engine()
         for index in 0 ..< 3 {
-            _ = await core.handle(.ask(question: "My example fact \(index) is " + String(repeating: "x", count: 450)))
+            _ = await core.handle(.ask(question: "My favourite example hobby \(index) is " + String(repeating: "x", count: 450)))
         }
         guard case let .answer(answer) = await core.handle(.ask(question: "What do you remember?")) else {
             return XCTFail("Expected memory list")
