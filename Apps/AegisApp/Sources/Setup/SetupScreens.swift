@@ -209,13 +209,15 @@ private struct StorageScreen: View {
         let range = wizard.mac.storageRange
         let free = Int(wizard.mac.diskFreeBytes / 1_000_000_000)
         let band = SetupText.band(wizard)
+        // Built in steps: as one expression it timed the older CI compiler out.
+        let steps: [(Int, String)] = [50, 100, 250].filter { range.contains($0) && $0 < range.upperBound - 40 }.map { ($0, "\($0)") }
+        let marks: [(Int, String)] = [(range.lowerBound, "\(range.lowerBound) GB min")] + steps
+            + [(range.upperBound, "\(range.upperBound) max")]
         SetupColumns {
             HUDRangeSlider(
                 label: "Assigned to Aegis", value: $setup.wizard.storageGB, range: range, log: true,
                 recommended: wizard.mac.recommendedStorageGB, warnFrom: free, ticks: 72,
-                marks: [(range.lowerBound, "\(range.lowerBound) GB min")] + [50, 100, 250]
-                    .filter { range.contains($0) && $0 < range.upperBound - 40 }
-                    .map { ($0, "\($0)") } + [(range.upperBound, "\(range.upperBound) max")],
+                marks: marks,
                 hint: "From 20 GB to 75% of \(SetupText.volumeName) (\(free) GB free now). More buys a smarter model and a longer memory, "
                     + "never extra features."
             ) {
