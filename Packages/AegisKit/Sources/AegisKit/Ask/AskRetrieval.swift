@@ -8,7 +8,8 @@ enum AskRetrieval {
     }
 
     static func prepare(
-        question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?
+        question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?,
+        model: (any ModelClient)? = nil, check: AskSemantic.RelevanceCheck? = nil
     ) async throws -> AskInput {
         let question = AskSelection.requestText(question)
         let query = AskQuery(question, now: now, calendar: calendar)
@@ -36,11 +37,23 @@ enum AskRetrieval {
             .contains(where: AskQuery.words(question).contains)
         let onlySender = namedPerson && (askIntent || ["say", "says", "said", "tell", "told", "sent", "wrote", "write"]
             .contains(where: AskQuery.words(question).contains))
+        let useMeaning = model != nil && !selection.overview && !selection.translating && !selection.terms.isEmpty
+            && (selection.source != nil || onlySender) && !(query.schedule && selection.source == nil)
+            && !Chat.isRequestToAct(question)
+        var semanticPool: [Event] = []
         // Page the window so a named person's recent records cannot be hidden by an older first page.
         var cursor: EventCursor?
         while true {
             let page = try await store.events(from: window.start, to: window.end, after: cursor, limit: 1000)
-            for event in resolve(page) where selection.matches(event, senderIDs: senderIDs)
+            let resolved = resolve(page)
+            if useMeaning {
+                semanticPool = AskSemantic.pool(semanticPool + resolved.filter {
+                    $0.eventTime >= window.start && $0.eventTime < window.end
+                        && selection.matches($0, senderIDs: senderIDs)
+                        && (!onlySender || person($0) && (!askIntent || BriefInputPolicy.asksOwner($0)))
+                }, terms: selection.terms)
+            }
+            for event in resolved where selection.matches(event, senderIDs: senderIDs)
                 && ((person(event) && (!askIntent || BriefInputPolicy.asksOwner(event))) || selection.sender != nil || selection.overview)
             {
                 candidates[event.id] = event
@@ -72,30 +85,24 @@ enum AskRetrieval {
             }
         }
 
-        func rank(_ event: Event) -> Int {
-            keywordRank(event, keywords: searchWords) + (person(event) ? 1 : 0)
+        let semantic = if useMeaning, let model {
+            await AskSemantic.matches(semanticPool, terms: searchWords, model: model, check: check)
+        } else {
+            [Event]()
         }
+        for event in semantic {
+            candidates[event.id] = event
+        }
+
         // Notification twins merge into their Messages records, so answers cite the conversation (#153).
         let merged = try EventMerger.merge(candidates.values.sorted { $0.eventTime < $1.eventTime })
         // Planted orders to an assistant are never an answer: they stay out of the context entirely.
         let matched = merged.filter { $0.eventTime >= window.start && $0.eventTime < window.end && !BriefLayout.plantedOrder($0) }
-            .sorted {
-                if rank($0) != rank($1) {
-                    return rank($0) > rank($1)
-                }
-                if $0.eventTime != $1.eventTime {
-                    return $0.eventTime > $1.eventTime
-                }
-                return $0.id < $1.id
-            }
-        let events = Array(matched.prefix(selection.singleTranslation ? 1 : 25))
-        var lines = events.map {
-            Line(
-                id: $0.id,
-                text: line($0, calendar: calendar, bodyLimit: events.count == 1 ? 3600 : 600, terms: searchWords),
-                schedule: false
-            )
+        let ranked = AskSemantic.ordered(matched, semantic: semantic) {
+            keywordRank($0, keywords: searchWords) + (person($0) ? 1 : 0)
         }
+        let events = Array(ranked.prefix(selection.singleTranslation ? 1 : 25))
+        var lines = eventLines(events, calendar: calendar, terms: searchWords)
         let schedules = (onlySender && !query.schedule) || selection.source != nil || selection
             .direction != nil ? [] : try await scheduleLines(
                 query: query,
@@ -104,14 +111,31 @@ enum AskRetrieval {
                 includeAll: selection.overview
             )
         lines = query.schedule ? schedules + lines : lines + schedules
-        var input = try assemble(lines, question: selection.modelQuestion(question), now: now, calendar: calendar)
-        input.prefersGrounded = selection.isReadRequest || onlySender || query.schedule
+        let task = AskSemantic.question(question, hasMatches: !semantic.isEmpty)
+        return try finalized(
+            assemble(lines, question: selection.modelQuestion(task), now: now, calendar: calendar),
+            selection: selection,
+            namedPerson: namedPerson,
+            grounded: selection.isReadRequest || onlySender || query.schedule
+        )
+    }
+
+    private static func finalized(_ input: AskInput, selection: AskSelection, namedPerson: Bool, grounded: Bool) -> AskInput {
+        var input = input
+        input.prefersGrounded = grounded
         if selection.isReadRequest, input.isEmpty {
-            input.directAnswer = "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."
+            input.directAnswer = "I couldn't find matching " + (selection.source == .mail ? "email" : "records")
+                + " for that time in what I have available."
         } else if namedPerson, input.isEmpty {
             input.directAnswer = Ask.notFound
         }
         return input
+    }
+
+    private static func eventLines(_ events: [Event], calendar: Calendar, terms: [String]) -> [Line] {
+        events.map {
+            Line(id: $0.id, text: line($0, calendar: calendar, bodyLimit: events.count == 1 ? 3600 : 600, terms: terms), schedule: false)
+        }
     }
 
     /// Calendar occurrences and reminders for the question's calendar window: at most 10, soonest first.

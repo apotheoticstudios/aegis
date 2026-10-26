@@ -185,6 +185,21 @@ extension CoreEngine {
         return note.map { Self.noted(response, $0) } ?? response
     }
 
+    private func prepareAsk(_ question: String, turn: UUID) async throws -> AskInput {
+        try await AskRetrieval.prepare(
+            question: question,
+            now: clock(),
+            calendar: calendar,
+            store: store,
+            contacts: contactIndex(),
+            model: model
+        ) { job in
+            var job = job
+            job.model = await self.options.modelName
+            return try await self.runQuestionJob(job, turn: turn)
+        }
+    }
+
     private func answer(_ trimmed: String, cloud: CloudHandOff.Availability, turn: UUID) async -> CoreResponse {
         await interruptBriefForQuestion()
         await acquire()
@@ -203,9 +218,7 @@ extension CoreEngine {
                 // the person and topic two questions back (#59).
                 let previous = followUpSubject.flatMap { $0.owner == last.owner ? $0.search : nil } ?? last.owner
                 let search = FollowUpQuestion.search(trimmed, after: previous, now: clock(), calendar: calendar)
-                let followInput = try await Ask.prepare(
-                    question: search, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
-                )
+                let followInput = try await prepareAsk(search, turn: turn)
                 guard currentQuestion == turn else { return .refused(code: "cancelled") }
                 // The earlier question supplies retrieval terms only; its records stay local as conversation NOTES.
                 if !followInput.isEmpty {
@@ -217,9 +230,7 @@ extension CoreEngine {
             if Chat.isGeneralKnowledge(trimmed), await !CloudHandOff.isPersonal(trimmed, names: contactNames()) {
                 return await chat(trimmed, found: [], turn: turn, includeNotes: false)
             }
-            let input = try await Ask.prepare(
-                question: trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
-            )
+            let input = try await prepareAsk(trimmed, turn: turn)
             guard currentQuestion == turn else { return .refused(code: "cancelled") }
             if let text = input.directAnswer {
                 remember(trimmed, text)
@@ -275,7 +286,8 @@ extension CoreEngine {
                     // Fresh attempt over the same evidence, never the rejected model text.
                     correction = "\nThe previous attempt failed validation (" + reason.rawValue + "). "
                         + "Return exactly the required JSON fields. Cite only IDs shown in Context. "
-                        + "If the evidence cannot answer, use the exact not-found answer and empty citation arrays."
+                        + "An answer from a record must include its ID in the matching citation array. "
+                        + "If the evidence cannot answer, return exactly " + jsonString(Ask.notFound) + " with empty citation arrays."
                 }
             }
             return .refused(code: "invalid_draft")

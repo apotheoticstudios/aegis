@@ -6,6 +6,16 @@ import ModelRuntime
 /// accuracy-run MODEL_DIRECTORY OUTPUT_JSON
 let args = CommandLine.arguments
 guard (3 ... 4).contains(args.count) else { exit(2) }
+if args.count == 4, ["intelligence", "intelligence-probe", "intelligence-smoke"].contains(args[3]) {
+    try await intelligenceAccuracy(
+        modelDirectory: args[1],
+        output: args[2],
+        probeOnly: args[3] == "intelligence-probe",
+        caseLimit: args[3] == "intelligence-smoke" ? 3 : .max
+    )
+    exit(0)
+}
+
 if args.count == 4, args[3] == "retrieval" {
     try await retrievalAccuracy(modelDirectory: args[1], output: args[2])
     exit(0)
