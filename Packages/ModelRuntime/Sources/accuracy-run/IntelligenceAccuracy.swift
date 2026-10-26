@@ -81,7 +81,8 @@ func intelligenceAccuracy(modelDirectory: String, output: String, probeOnly: Boo
             var failure = "none"
             switch result {
             case let .answer(answer):
-                let fact = topic.2 == "six" ? answer.text.range(of: #"\b(?:six|6)\b"#, options: .caseInsensitive) != nil
+                let fact = topic.2 == "six" ? answer.text
+                    .range(of: #"\b(?:six|6)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
                     : answer.text.lowercased().contains(topic.2)
                 answerOK = Set(answer.eventIDs) == [events[topicIndex].id] && fact
             case let .refused(code): failure = code
