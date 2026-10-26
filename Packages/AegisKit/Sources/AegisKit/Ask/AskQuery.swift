@@ -46,10 +46,12 @@ struct AskQuery {
                 )
             }
         }
+        // Matched and measured on the same string: lower-casing can change a string's length ("İ" becomes two).
+        let lowered = question.lowercased()
         if explicit == nil,
            let regex = try? NSRegularExpression(pattern: #"\blast\s+(\d+)\s+days\b"#),
-           let match = regex.firstMatch(in: question.lowercased(), range: NSRange(question.startIndex..., in: question)),
-           let range = Range(match.range(at: 1), in: question), let count = Int(question[range]), (1 ... 36500).contains(count)
+           let match = regex.firstMatch(in: lowered, range: NSRange(lowered.startIndex..., in: lowered)),
+           let range = Range(match.range(at: 1), in: lowered), let count = Int(lowered[range]), (1 ... 36500).contains(count)
         {
             explicit = interval(calendar.date(byAdding: .day, value: -count, to: now)!, now)
         }

@@ -70,7 +70,8 @@ final class ModelDownloads {
         try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         let before = received
         try await FileFetch(part: part) { written in
-            Task { @MainActor in self.received = before + written }
+            // Progress hops to the main actor and can land after the file's final count, so it only ever rises.
+            Task { @MainActor in self.received = max(self.received, before + written) }
         }.run(source)
         let sum = try await Task.detached { try Self.sha256(of: part) }.value
         guard sum == file.sha256 else {

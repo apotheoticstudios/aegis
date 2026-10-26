@@ -73,9 +73,11 @@ enum SetupWindow {
     private(set) static var window: NSWindow?
     static let size = CGSize(width: 1360, height: 860)
 
-    /// Shows setup where it stopped, or from the start when `again` (from the menu); `done` runs when it finishes.
+    /// Shows setup where it stopped, or from the start when `again` (from the menu) and it was finished before; `done`
+    /// runs when it finishes.
     static func show(_ app: SetupApp, again: Bool, setup: SetupModel = SetupModel(), done: @escaping () -> Void) {
-        if again {
+        // Closed halfway (Escape), it resumes there rather than starting over.
+        if again, setup.wizard.finished {
             setup.wizard.restart()
         }
         let created = window ?? HUDWindow(

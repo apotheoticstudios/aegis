@@ -25,6 +25,9 @@ final class AskTests: XCTestCase {
             ("Monday", "2026-10-05T00:00:00Z", "2026-10-06T00:00:00Z"),
             ("when Monday", "2026-10-12T00:00:00Z", "2026-10-13T00:00:00Z"),
             ("last 3 days", "2026-10-04T15:00:00Z", "2026-10-07T15:00:00Z"),
+            // Lower-casing "İ" lengthens the text; the count is still read from the right place.
+            ("What did İlker say in the last 3 days", "2026-10-04T15:00:00Z", "2026-10-07T15:00:00Z"),
+            ("ȺȺȺȺ last 12 days", "2026-09-25T15:00:00Z", "2026-10-07T15:00:00Z"),
         ]
         for (phrase, start, end) in cases {
             let query = AskQuery(phrase, now: now, calendar: calendar)
