@@ -104,6 +104,10 @@ private actor QuestionModel: ModelClient {
     }
 
     func run(_ job: ModelJob) async throws -> ModelJobResult {
+        // The search plan (ADR-0032) isn't what these tests time: no plan, so the phrase rules read the question.
+        if job.id.hasPrefix("plan-") {
+            return ModelJobResult(jobID: job.id, status: .completed, text: "")
+        }
         let index = jobs.count
         jobs.append(job)
         return await withCheckedContinuation { continuation in

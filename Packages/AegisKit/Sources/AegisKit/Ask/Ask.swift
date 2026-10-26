@@ -52,10 +52,11 @@ public enum Ask {
 
     /// Finds the context for a question: words, time words ("today", "yesterday", "this week",
     /// weekdays…) and contact names matched against senders. Read-only.
+    /// `plan` is the model's reading of the question (ADR-0032); without one, the phrase rules read it.
     public static func prepare(
-        question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?
+        question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?, plan: SearchPlan? = nil
     ) async throws -> AskInput {
-        try await AskRetrieval.prepare(question: question, now: now, calendar: calendar, store: store, contacts: contacts)
+        try await AskRetrieval.prepare(question: question, now: now, calendar: calendar, store: store, contacts: contacts, plan: plan)
     }
 
     /// Checks a model draft against its input; only a success may be shown.

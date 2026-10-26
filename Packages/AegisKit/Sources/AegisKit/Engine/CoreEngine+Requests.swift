@@ -200,8 +200,10 @@ extension CoreEngine {
                     return await chat(trimmed, found: Chat.contextLines(followInput.text), turn: turn)
                 }
             }
+            let plan = await searchPlan(trimmed, turn: turn)
+            guard currentQuestion == turn else { return .refused(code: "cancelled") }
             let input = try await Ask.prepare(
-                question: trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex()
+                question: trimmed, now: clock(), calendar: calendar, store: store, contacts: contactIndex(), plan: plan
             )
             guard currentQuestion == turn else { return .refused(code: "cancelled") }
             if let text = input.directAnswer {

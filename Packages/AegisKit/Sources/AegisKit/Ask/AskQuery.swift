@@ -5,6 +5,28 @@ struct AskQuery {
     let schedule: Bool
     let messages: DateInterval
     let calendarWindow: DateInterval
+    /// The time the words name, if they name one.
+    let named: DateInterval?
+
+    /// The search the model planned (ADR-0032), with the phrase rules' reading for anything it left open.
+    init(plan: SearchPlan, rules: AskQuery, now: Date, calendar: Calendar) {
+        var seen = Set<String>()
+        keywords = (plan.topics.flatMap(Self.words).filter { $0.count >= 3 } + rules.keywords).filter { seen.insert($0).inserted }
+        // A calendar question about something ("when's the dentist") matches titles by topic; one about a time lists it all.
+        schedule = plan.places.contains(.calendar) && plan.topics.isEmpty
+        let day = { (offset: Int) in calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now))! }
+        named = plan.window(now: now, calendar: calendar)
+        if let window = named {
+            calendarWindow = window
+            // Messages about a time to come were sent before it.
+            messages = window.start >= now ? DateInterval(start: day(-14), end: now)
+                : DateInterval(start: window.start, end: min(window.end, now))
+        } else {
+            // No time named: a topic's appointment may be months ahead.
+            calendarWindow = plan.topics.isEmpty ? rules.calendarWindow : DateInterval(start: day(-30), end: day(120))
+            messages = rules.messages
+        }
+    }
 
     /// Words that ask about the calendar or reminders, plurals included.
     static let scheduleWords: Set = [
@@ -112,5 +134,6 @@ struct AskQuery {
             calendar.date(byAdding: .day, value: -7, to: now)!,
             calendar.date(byAdding: .day, value: 7, to: now)!
         )
+        named = explicit
     }
 }

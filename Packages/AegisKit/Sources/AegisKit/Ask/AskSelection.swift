@@ -78,6 +78,19 @@ struct AskSelection {
         overview = terms.isEmpty && (source != nil || timed && (received || words.contains { ["happened", "missed", "new"].contains($0) }))
     }
 
+    /// The model's plan (ADR-0032) as a selection: where to look, who from and which way.
+    init(plan: SearchPlan, query: AskQuery) {
+        let communication = plan.places.intersection([.messages, .mail])
+        source = communication == [.mail] ? .mail : communication == [.messages] ? .messages : nil
+        // People the plan names may be relations ("the plumber"), not contact names: who sent what is still resolved
+        // from the owner's own words against Contacts, never by filtering on the model's word.
+        sender = nil
+        direction = plan.direction
+        let named = Set(plan.people.flatMap(AskQuery.words))
+        terms = query.keywords.filter { !named.contains($0) }
+        overview = terms.isEmpty && !communication.isEmpty && !plan.places.contains(.calendar)
+    }
+
     func matches(_ event: Event, senderIDs: Set<String> = []) -> Bool {
         if source != nil || overview {
             if direction == .incoming, SenderDisplay.isOutgoing(event) {

@@ -8,11 +8,16 @@ enum AskRetrieval {
     }
 
     static func prepare(
-        question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?
+        question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?, plan: SearchPlan? = nil
     ) async throws -> AskInput {
-        let query = AskQuery(question, now: now, calendar: calendar)
+        // Not a question about the owner's records: nothing is searched, and the conversation answers it.
+        if plan?.lookup == false {
+            return AskInput(text: "", eventIDs: [], scheduleIDs: [])
+        }
+        let rules = AskQuery(question, now: now, calendar: calendar)
+        let query = plan.map { AskQuery(plan: $0, rules: rules, now: now, calendar: calendar) } ?? rules
         let window = query.messages
-        let selection = AskSelection(question, query: query)
+        let selection = plan.map { AskSelection(plan: $0, query: query) } ?? AskSelection(question, query: query)
         func resolve(_ events: [Event]) -> [Event] {
             contacts.map { resolveSenders(events, index: $0) } ?? events
         }
@@ -95,28 +100,39 @@ enum AskRetrieval {
                 schedule: false
             )
         }
-        let schedules = (onlySender && !query.schedule) || selection.source != nil || selection
-            .direction != nil ? [] : try await scheduleLines(
-                query: query,
-                store: store,
-                calendar: calendar,
-                includeAll: selection.overview
-            )
+        let skipSchedule = plan.map { !$0.places.contains(.calendar) }
+            ?? ((onlySender && !query.schedule) || selection.source != nil || selection.direction != nil)
+        let schedules = skipSchedule ? [] : try await scheduleLines(
+            query: query,
+            store: store,
+            calendar: calendar,
+            includeAll: selection.overview
+        )
         lines = query.schedule ? schedules + lines : lines + schedules
         var input = try assemble(lines, question: question, now: now, calendar: calendar)
         input.prefersGrounded = selection.isReadRequest || onlySender
-        // Only for a question purely about the schedule ("what have I got on"): one with a topic of its own goes on as before.
-        if query.schedule, !onlySender, selection.source == nil, selection.terms.allSatisfy(AskQuery.scheduleWords.contains),
-           input.isEmpty
-        {
-            // Said plainly rather than left to a general chat that might guess.
-            input.directAnswer = "There's nothing in your calendar or reminders for that time."
-        } else if selection.isReadRequest, input.isEmpty {
-            input.directAnswer = "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."
-        } else if namedPerson, input.isEmpty {
-            input.directAnswer = Ask.notFound
+        if input.isEmpty {
+            input.directAnswer = nothingFound(query: query, selection: selection, plan: plan, onlySender: onlySender, named: namedPerson)
         }
         return input
+    }
+
+    /// What to say when nothing matched, or nil to let the conversation answer.
+    private static func nothingFound(
+        query: AskQuery, selection: AskSelection, plan: SearchPlan?, onlySender: Bool, named: Bool
+    ) -> String? {
+        // Only for a question purely about the schedule ("what have I got on"): one with a topic of its own goes on as before.
+        let calendarOnly = plan.map { $0.places == [.calendar] }
+            ?? (query.schedule && !onlySender && selection.source == nil && selection.terms.allSatisfy(AskQuery.scheduleWords.contains))
+        if calendarOnly {
+            // Said plainly rather than left to a general chat that might guess.
+            return plan.map { $0.when == nil } == true ? "I couldn't find that in your calendar or reminders."
+                : "There's nothing in your calendar or reminders for that time."
+        }
+        if selection.isReadRequest {
+            return "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."
+        }
+        return named ? Ask.notFound : nil
     }
 
     /// Calendar occurrences and reminders for the question's calendar window, soonest first: up to 30 for a question

@@ -59,6 +59,10 @@ private actor SlowModel: ModelClient {
     private var running: String?
 
     func run(_ job: ModelJob) async throws -> ModelJobResult {
+        // The search plan (ADR-0032) isn't streamed: no plan, so the phrase rules read the question.
+        if job.id.hasPrefix("plan-") {
+            return ModelJobResult(jobID: job.id, status: .completed, text: "")
+        }
         running = job.id
         await withCheckedContinuation { release = $0 }
         running = nil
