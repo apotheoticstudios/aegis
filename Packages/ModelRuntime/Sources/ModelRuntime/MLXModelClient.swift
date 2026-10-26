@@ -228,7 +228,7 @@ struct TokenizerBridge: MLXLMCommon.Tokenizer {
 }
 
 /// Memory recall by meaning (#309): bge-small-en-v1.5 (MIT), loaded on first use from Aegis's folder and unloaded with
-/// ModelService. Only the owner's notes and questions are embedded; vectors go back to AegisCore, nothing is kept here.
+/// ModelService. Owner notes/questions and bounded record excerpts (ADR-0033) are embedded locally; vectors return to AegisCore.
 public extension MLXModelClient {
     func embed(_ texts: [String]) async -> [[Float]]? {
         guard !texts.isEmpty else { return [] }
