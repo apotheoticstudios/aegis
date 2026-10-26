@@ -20,6 +20,8 @@ public enum WorldCommand: Sendable, Equatable {
     case action(name: String, arguments: WorldValue, said: String)
     /// "What about Sydney?": the last World question again, for another place.
     case retarget(place: String)
+    /// "How's the air?", "any volcano alerts?", "any weather warnings?": public data about home, no globe needed.
+    case alerts(WorldAlerts.Kind)
     /// Something the World view won't do, and what to say instead.
     case declined(String)
 
@@ -31,7 +33,7 @@ public enum WorldCommand: Sendable, Equatable {
     ) -> WorldCommand? {
         var line = cleaned(text)
         guard !line.isEmpty, line.count <= 160 else { return nil }
-        if let fixed = fixedCommand(line) {
+        if let fixed = fixedCommand(line) ?? alertCommand(line) {
             return fixed
         }
         if let lastPlace {
@@ -129,6 +131,40 @@ public enum WorldCommand: Sendable, Equatable {
             return onPlace(place) { .tool(name: "show_in_gods_eye_view", arguments: .object(["area": $0])) }
         }
         return nil
+    }
+
+    /// Air quality, eruptions and weather warnings, for home only: another named place is declined, not answered for home.
+    private static func alertCommand(_ line: String) -> WorldCommand? {
+        let air = #"\b(?:air quality|aqi|air pollution|smoke haze|bushfire smoke)\b|\b(?:is|how'?s|how is) the air\b|"#
+            + #"\bis it (?:smoky|smokey|hazy)\b"#
+        let volcano = #"\b(?:volcan(?:o|oes|ic)|eruptions?|erupting|ash clouds?)\b"#
+        // A volcano question is about now, not how volcanoes work.
+        let current = #"\b(?:any|alerts?|warnings?|erupting|eruptions?|active|latest|recent|news|near|nearby|around|happening|today|now)\b"#
+        let warning = #"\b(?:weather|storms?|thunderstorms?|floods?|flooding|fire|heat ?waves?|wind|cyclones?|bom|bureau)\b.*"#
+            + #"\b(?:warnings?|alerts?|watch(?:es)?)\b|\bsevere weather\b|^(?:are there )?any warnings\b"#
+        let kind: WorldAlerts.Kind
+        if line.range(of: air, options: .regularExpression) != nil {
+            kind = .air
+        } else if line.range(of: volcano, options: .regularExpression) != nil, line.range(of: current, options: .regularExpression) != nil {
+            kind = .volcanoes
+        } else if line.range(of: warning, options: .regularExpression) != nil {
+            kind = .warnings
+        } else {
+            return nil
+        }
+        let here = #"^(?:me|us|here|home|my (?:home|house|place|area|region)|where i live|area|region|moment|today|tonight|tomorrow|now|"#
+            + #"this (?:week|area|morning|afternoon|evening))$"#
+        if let place = capture(#"^.*\b(?:in|at|for|near|around|over|across) (?:the )?([a-z][a-z' -]*)$"#, line),
+           place.range(of: here, options: .regularExpression) == nil
+        {
+            let only = switch kind {
+            case .air: "the air at home"
+            case .volcanoes: "for eruptions around home"
+            case .warnings: "the Bureau of Meteorology's warnings for home"
+            }
+            return .declined("I can only check \(only) for now.")
+        }
+        return .alerts(kind)
     }
 
     /// Commands with a fixed form: open, close, trips, home and flight.
