@@ -25,11 +25,19 @@ final class AskTests: XCTestCase {
             ("Monday", "2026-10-05T00:00:00Z", "2026-10-06T00:00:00Z"),
             ("when Monday", "2026-10-12T00:00:00Z", "2026-10-13T00:00:00Z"),
             ("last 3 days", "2026-10-04T15:00:00Z", "2026-10-07T15:00:00Z"),
+            // Lower-casing "İ" lengthens the text; the count is still read from the right place.
+            ("What did İlker say in the last 3 days", "2026-10-04T15:00:00Z", "2026-10-07T15:00:00Z"),
+            ("ȺȺȺȺ last 12 days", "2026-09-25T15:00:00Z", "2026-10-07T15:00:00Z"),
         ]
         for (phrase, start, end) in cases {
             let query = AskQuery(phrase, now: now, calendar: calendar)
-            XCTAssertEqual(query.messages.start, try time(start), phrase)
-            XCTAssertEqual(query.messages.end, try time(end), phrase)
+            XCTAssertEqual(query.calendarWindow, try DateInterval(start: time(start), end: time(end)), phrase)
+            if try time(start) < now {
+                XCTAssertEqual(query.messages, query.calendarWindow, phrase)
+            } else {
+                // Still to come: messages about it were sent before, up to now.
+                XCTAssertEqual(query.messages, try DateInterval(start: time("2026-09-23T15:00:00Z"), end: now), phrase)
+            }
         }
         let query = AskQuery("What did they tell me about the INVOICE?", now: now, calendar: calendar)
         XCTAssertTrue(query.keywords.contains("invoice"))
@@ -118,6 +126,70 @@ final class AskTests: XCTestCase {
         XCTAssertFalse(input.text.contains(outside.id))
         XCTAssertLessThan(input.text.unicodeScalars.count, 8000)
         XCTAssertTrue(Ask.systemPrompt().contains("DATA"))
+    }
+
+    /// The owner's own question (2026-10-26): "what have I got on" is the calendar, "the next week" is the seven days
+    /// from now, and a time still to come is never searched for messages sent in the future.
+    func testEverydayScheduleQuestionsReadTheCalendarAhead() async throws {
+        let now = try time("2026-10-07T15:00:00Z") // a Wednesday
+        let ahead = AskQuery("What have I got on for the next week?", now: now, calendar: calendar)
+        XCTAssertTrue(ahead.schedule)
+        XCTAssertEqual(ahead.calendarWindow, try DateInterval(start: now, end: time("2026-10-14T15:00:00Z")))
+        XCTAssertEqual(ahead.messages, try DateInterval(start: time("2026-09-23T15:00:00Z"), end: now), "messages up to now")
+        let selection = AskSelection("What have I got on for the next week?", query: ahead)
+        XCTAssertNil(selection.direction, "got on isn't what arrived")
+        XCTAssertFalse(selection.isReadRequest)
+
+        let cases = [
+            ("what's on tomorrow", "2026-10-08T00:00:00Z", "2026-10-09T00:00:00Z"),
+            ("am I free this weekend", "2026-10-10T00:00:00Z", "2026-10-12T00:00:00Z"),
+            ("anything on next weekend", "2026-10-17T00:00:00Z", "2026-10-19T00:00:00Z"),
+            ("what's coming up in the next 3 days", "2026-10-07T15:00:00Z", "2026-10-10T15:00:00Z"),
+            ("plans for the next few days", "2026-10-07T15:00:00Z", "2026-10-11T15:00:00Z"),
+            ("what have I got on next week", "2026-10-12T00:00:00Z", "2026-10-19T00:00:00Z"),
+        ]
+        for (phrase, start, end) in cases {
+            let query = AskQuery(phrase, now: now, calendar: calendar)
+            XCTAssertTrue(query.schedule, phrase)
+            XCTAssertEqual(query.calendarWindow, try DateInterval(start: time(start), end: time(end)), phrase)
+            XCTAssertLessThanOrEqual(query.messages.end, now, phrase)
+        }
+        for phrase in [
+            "what meetings do I have tomorrow",
+            "do I have anything on Friday",
+            "am I free at 3 tomorrow",
+            "anything tomorrow?",
+        ] {
+            XCTAssertTrue(AskQuery(phrase, now: now, calendar: calendar).schedule, phrase)
+        }
+        // A question with a topic of its own isn't a calendar question just because it names a time.
+        XCTAssertFalse(AskQuery("Any dinner ideas for tonight given I'm vegetarian?", now: now, calendar: calendar).schedule)
+        // About a time to come, but asking what someone said: messages, searched up to now.
+        let said = AskQuery("what did Sam say about tomorrow", now: now, calendar: calendar)
+        XCTAssertFalse(said.schedule)
+        XCTAssertEqual(said.messages.end, now)
+        XCTAssertFalse(AskQuery("what did I get from Sam today", now: now, calendar: calendar).schedule)
+
+        let store = MemoryStore()
+        let empty = try await Ask.prepare(
+            question: "What have I got on for the next week?", now: now, calendar: calendar, store: store, contacts: nil
+        )
+        XCTAssertEqual(empty.directAnswer, "There's nothing in your calendar or reminders for that time.")
+        let plans = (1 ... 12).map { day in
+            CalendarOccurrence(
+                itemID: "example-\(day)", occurrenceDate: nil, calendarTitle: nil, title: "Example plan \(day)",
+                start: now.addingTimeInterval(Double(day) * 13 * 3600), end: now.addingTimeInterval(Double(day) * 13 * 3600 + 1800),
+                isAllDay: false, timeZone: nil, location: nil, status: .confirmed, captureTime: now, attendees: []
+            )
+        }
+        try await store.ingest(CollectionBatch(
+            source: .calendar, status: .init(ok: true, code: .ok), events: [], occurrences: plans, reminders: [], checkpoint: nil
+        ))
+        let week = try await Ask.prepare(
+            question: "What have I got on for the next week?", now: now, calendar: calendar, store: store, contacts: nil
+        )
+        XCTAssertNil(week.directAnswer)
+        XCTAssertEqual(week.scheduleIDs.count, 12, "every plan in the week, not just the first ten")
     }
 
     func testLowestRankedLinesDroppedAndCitationsStayExact() async throws {

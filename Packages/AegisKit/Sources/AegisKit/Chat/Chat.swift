@@ -112,14 +112,20 @@ public enum Chat {
 
     /// A greeting or acknowledgement, rather than a request for the owner's day or records.
     static func isSocial(_ text: String) -> Bool {
-        let line = AskQuery.words(text).joined(separator: " ")
-        return [
+        var words = AskQuery.words(text)
+        let courtesy: Set = ["mate", "sir", "buddy", "bro", "pal", "there", "aegis", "jarvis"]
+        while let last = words.last, courtesy.contains(last) {
+            words.removeLast()
+        }
+        let line = words.joined(separator: " ")
+        if [
             "hi",
             "hey",
             "hello",
             "hello there",
             "how are you",
             "how are you going",
+            "how are you doing",
             "how s it going",
             "hows it going",
             "thanks",
@@ -135,13 +141,33 @@ public enum Chat {
             "good afternoon",
             "good evening",
             "good night",
-        ].contains(line)
+            "what s up",
+            "whats up",
+            "wassup",
+            "sup",
+            "yo",
+        ].contains(line) {
+            return true
+        }
+        guard ["hi", "hey", "hello", "yo", "wassup", "sup", "hiya", "gday"].contains(words.first ?? "") else { return false }
+        if isSocial(words.dropFirst().joined(separator: " ")) {
+            return true
+        }
+        // A salutation is not permission to discard a request in the same utterance.
+        let taskWords: Set = [
+            "what", "whats", "when", "where", "who", "why", "which", "how", "can", "could", "would", "will",
+            "did", "does", "do", "is", "are", "was", "were",
+            "read", "translate", "explain", "tell", "show", "find", "remember", "forget", "send", "open", "play",
+            "calendar", "email", "emails", "message", "messages", "today", "tomorrow", "yesterday", "plans", "schedule",
+            "got", "have", "remind", "add", "run", "stop", "turn", "set", "call", "delete", "book", "order", "buy", "pay",
+        ]
+        return !words.dropFirst().contains(where: taskWords.contains)
     }
 
     /// Only explicit day/status requests receive the broad day notes; ordinary conversation never does.
     static func wantsDayContext(_ text: String) -> Bool {
         text.range(
-            of: #"\b(?:what'?s up|what is up|catch me up|what'?s next|what is next|anything new|my day|my plans)\b"#,
+            of: #"\b(?:catch me up|what'?s next|what is next|anything new|my day|my plans)\b"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
     }

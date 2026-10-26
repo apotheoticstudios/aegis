@@ -8,8 +8,8 @@ public enum WorldBrief {
     public static func weatherURL(latitude: Double, longitude: Double) -> URL? {
         let lat = (latitude * 10).rounded() / 10, lon = (longitude * 10).rounded() / 10
         let base = "https://api.open-meteo.com/v1/forecast" // privacy-guard: allow-network rounded home forecast, ADR-0024
-        return URL(string: base + "?latitude=\(lat)&longitude=\(lon)&daily=temperature2mMax,temperature2mMin,"
-            + "precipitationProbabilityMax,weatherCode&hourly=precipitation_probability&forecast_days=1&timezone=auto")
+        return URL(string: base + "?latitude=\(lat)&longitude=\(lon)&daily=temperature_2m_max,temperature_2m_min,"
+            + "precipitation_probability_max,weather_code&hourly=precipitation_probability&forecast_days=1&timezone=auto")
     }
 
     /// "Weather at home: 18 to 27°. Rain likely from 3 pm (70%)." Nil when the answer can't be read.

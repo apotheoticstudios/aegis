@@ -8,12 +8,18 @@ enum AskRetrieval {
     }
 
     static func prepare(
-        question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?
+        question: String, now: Date, calendar: Calendar, store: any EventStore, contacts: ContactIndex?, plan: SearchPlan? = nil
     ) async throws -> AskInput {
         let question = AskSelection.requestText(question)
-        let query = AskQuery(question, now: now, calendar: calendar)
+        // Not a question about the owner's records: nothing is searched, and the conversation answers it.
+        if plan?.lookup == false {
+            return AskInput(text: "", eventIDs: [], scheduleIDs: [])
+        }
+        let rules = AskQuery(question, now: now, calendar: calendar)
+        let query = plan.map { AskQuery(plan: $0, rules: rules, now: now, calendar: calendar, question: question) } ?? rules
         let window = query.messages
-        let selection = AskSelection(question, query: query)
+        let selection = plan.map { AskSelection(plan: $0, query: query, question: question) } ?? AskSelection(question, query: query)
+        let communications = plan.map { !$0.places.intersection([.messages, .mail]).isEmpty } ?? true
         func resolve(_ events: [Event]) -> [Event] {
             contacts.map { resolveSenders(events, index: $0) } ?? events
         }
@@ -38,7 +44,7 @@ enum AskRetrieval {
             .contains(where: AskQuery.words(question).contains))
         // Page the window so a named person's recent records cannot be hidden by an older first page.
         var cursor: EventCursor?
-        while true {
+        while communications {
             let page = try await store.events(from: window.start, to: window.end, after: cursor, limit: 1000)
             for event in resolve(page) where selection.matches(event, senderIDs: senderIDs)
                 && ((person(event) && (!askIntent || BriefInputPolicy.asksOwner(event))) || selection.sender != nil || selection.overview)
@@ -56,7 +62,7 @@ enum AskRetrieval {
         }
         // A named person selects their messages; their name is not a search word (owner's test questions).
         let searchWords = selection.terms.filter { !mentionedNameWords.contains($0) }
-        if !searchWords.isEmpty {
+        if communications, !searchWords.isEmpty {
             func include(_ results: [Event]) {
                 for event in resolve(results) where selection.matches(event, senderIDs: senderIDs) && (!onlySender || person(event)) {
                     candidates[event.id] = event
@@ -96,25 +102,43 @@ enum AskRetrieval {
                 schedule: false
             )
         }
-        let schedules = (onlySender && !query.schedule) || selection.source != nil || selection
-            .direction != nil ? [] : try await scheduleLines(
-                query: query,
-                store: store,
-                calendar: calendar,
-                includeAll: selection.overview
-            )
+        let skipSchedule = plan.map { !$0.places.contains(.calendar) }
+            ?? ((onlySender && !query.schedule) || selection.source != nil || selection.direction != nil)
+        let schedules = skipSchedule ? [] : try await scheduleLines(
+            query: query,
+            store: store,
+            calendar: calendar,
+            includeAll: selection.overview
+        )
         lines = query.schedule ? schedules + lines : lines + schedules
         var input = try assemble(lines, question: selection.modelQuestion(question), now: now, calendar: calendar)
         input.prefersGrounded = selection.isReadRequest || onlySender || query.schedule
-        if selection.isReadRequest, input.isEmpty {
-            input.directAnswer = "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."
-        } else if namedPerson, input.isEmpty {
-            input.directAnswer = Ask.notFound
+        if input.isEmpty {
+            input.directAnswer = nothingFound(query: query, selection: selection, plan: plan, onlySender: onlySender, named: namedPerson)
         }
         return input
     }
 
-    /// Calendar occurrences and reminders for the question's calendar window: at most 10, soonest first.
+    /// What to say when nothing matched, or nil to let the conversation answer.
+    private static func nothingFound(
+        query: AskQuery, selection: AskSelection, plan: SearchPlan?, onlySender: Bool, named: Bool
+    ) -> String? {
+        // Only for a question purely about the schedule ("what have I got on"): one with a topic of its own goes on as before.
+        let calendarOnly = plan.map { $0.places == [.calendar] }
+            ?? (query.schedule && !onlySender && selection.source == nil && selection.terms.allSatisfy(AskQuery.scheduleWords.contains))
+        if calendarOnly {
+            // Said plainly rather than left to a general chat that might guess.
+            return plan.map { $0.when == nil } == true ? "I couldn't find that in your calendar or reminders."
+                : "There's nothing in your calendar or reminders for that time."
+        }
+        if selection.isReadRequest {
+            return "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."
+        }
+        return named ? Ask.notFound : nil
+    }
+
+    /// Calendar occurrences and reminders for the question's calendar window, soonest first: up to 30 for a question
+    /// about the schedule, 10 otherwise.
     private static func scheduleLines(
         query: AskQuery,
         store: any EventStore,
@@ -168,7 +192,8 @@ enum AskRetrieval {
                 )
             ))
         }
-        return Array(scheduleLines.sorted { $0.0 == $1.0 ? $0.1.id < $1.1.id : $0.0 < $1.0 }.prefix(10).map(\.1))
+        // A week of plans needs more than the ten a passing mention of the calendar gets.
+        return Array(scheduleLines.sorted { $0.0 == $1.0 ? $0.1.id < $1.1.id : $0.0 < $1.0 }.prefix(query.schedule ? 30 : 10).map(\.1))
     }
 
     /// One context line in plain words, so a small model can't mistake a question for a fact:

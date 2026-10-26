@@ -684,6 +684,7 @@ enum BriefPresentation {
         case "bad_question": "Try a shorter question."
         case "too_long": "That needs more than Aegis can read at once. Try narrowing it, for example to a person or a day."
         case "unreachable", "unavailable": "Aegis's background part isn't reachable right now."
+        case "store_unavailable": "I couldn't read my saved records just now. Please try again."
         case "timedOut", "timed_out", "cancelled": "That took too long. Try again."
         case "unknown_citation", "invalid_draft", "unsafe_text": "I couldn't verify that answer against the available sources."
         case "model_missing": "My local language model isn't installed. Open setup to download it."

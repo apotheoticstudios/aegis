@@ -134,7 +134,7 @@ final class PersonalRetrievalTests: XCTestCase {
             ("When did Alex email last Monday?", "2026-10-12T00:00:00Z"),
             ("When is the meeting next Monday?", "2026-10-26T00:00:00Z"),
         ] {
-            XCTAssertEqual(AskQuery(text, now: monday, calendar: calendar).messages.start, ContractTime.parse(expected), text)
+            XCTAssertEqual(AskQuery(text, now: monday, calendar: calendar).calendarWindow.start, ContractTime.parse(expected), text)
         }
         let wednesday = try XCTUnwrap(ContractTime.parse("2026-10-21T09:00:00Z"))
         XCTAssertEqual(

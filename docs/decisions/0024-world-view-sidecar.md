@@ -57,3 +57,12 @@ The owner moved the globe back inside the Aegis panel: God's Eye View's own inte
 ## Amendment (2026-10-20, #311)
 
 Owner's decision: Aegis may use every God's Eye View layer and action, including public CCTV (`control_cctv`, `cctv`) and licence-plate reader locations (`alpr-cameras`); the earlier rule that Aegis never turns them on is withdrawn. Aegis is also God's Eye View's voice: an injected page script sends presses of `#gev-voice-button` to Aegis (a `aegis` message handler accepting only "talk" from the main frame, only while the globe shows), so voice works through Aegis's local pipeline instead of God's Eye View's OpenAI realtime session; questions and answers are written into God's Eye View's voice card. The owner's own places are still never sent to God's Eye View's online place search.
+
+## Amendment (2026-10-26, #72)
+
+Air quality, eruptions and Australian weather warnings around home, in the brief and by asking ("how's the air?", "any volcano alerts?", "any weather warnings?"). God's Eye View has none of these for Australia. The ideas came from other globe projects the owner shared (Shadowbroker, ULTOR, WorldWideView); no code was copied (licences, and God's Eye View already covers the rest).
+
+- **Air:** Open-Meteo's air-quality model (free, no key), home rounded to 0.1° like the weather. US AQI bands; the brief line notes a worse band later today.
+- **Eruptions:** GDACS, the UN and EU's disaster alerts (free, no key). The month's significant eruptions worldwide are fetched and those within 5,000 km of home kept on the Mac: nothing about home is sent. The brief shows the week's.
+- **Warnings:** the Bureau of Meteorology's public FTP warning files (CAP). Its website and app API forbid automated use, and the FTP channel is under its default copyright terms (personal use). URLSession no longer speaks FTP, so macOS's `/usr/bin/curl` fetches them, restricted to FTP. Home's districts come from the Bureau's forecast-town and river-gauge tables (fetched once a month into `World/bureau/`): the nearest town's public and fire weather districts, and towns within 15 km, plus gauges within 25 km for flood warnings. The home state's warning files are fetched whole and matched on the Mac: nothing about home is sent. Warning text is shown and read only, never acted on.
+- **Commercial release** would need the Bureau's terms checked, as for Cesium.

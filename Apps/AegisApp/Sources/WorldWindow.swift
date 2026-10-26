@@ -120,6 +120,8 @@ final class WorldWindow {
             return await runAction(name, arguments, said: said)
         case let .retarget(place):
             return await retarget(place)
+        case let .alerts(kind):
+            return await WorldFeeds.answer(kind)
         }
     }
 
@@ -286,7 +288,7 @@ final class WorldWindow {
         return summary
     }
 
-    private static let noHome = "I don't know where home is yet. Say “set my home here” while you're at home."
+    nonisolated static let noHome = "I don't know where home is yet. Say “set my home here” while you're at home."
 
     private func opened() async -> Bool {
         show()

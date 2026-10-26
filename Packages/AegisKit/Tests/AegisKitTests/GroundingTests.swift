@@ -102,7 +102,7 @@ final class GroundingTests: XCTestCase {
             initial: BriefSchedule(openingHour: 7, openingMinute: 0, timeZone: .gmt),
             options: .init(modelName: "synthetic"), clock: { prepNow }
         )
-        _ = await core.handle(.ask(question: "What's up?"))
+        _ = await core.handle(.ask(question: "Catch me up on my day"))
         let user = try XCTUnwrap(model.lastJob?.user)
         XCTAssertTrue(user.contains(event.id))
         XCTAssertTrue(user.contains("Did Sam Sample accept the invitation?"))

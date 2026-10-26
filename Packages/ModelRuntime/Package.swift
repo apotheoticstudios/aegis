@@ -47,6 +47,11 @@ let package = Package(
             name: "model-smoke",
             dependencies: ["ModelRuntime", .product(name: "AegisKit", package: "AegisKit")]
         ),
+        // ADR-0032: the model's search plans for synthetic questions, scored; not part of Aegis.app.
+        .executableTarget(
+            name: "search-eval",
+            dependencies: ["ModelRuntime", .product(name: "AegisKit", package: "AegisKit")]
+        ),
         // #52: conversation turns from the cached prefix, synthetic only; not part of Aegis.app.
         .executableTarget(
             name: "chat-smoke",

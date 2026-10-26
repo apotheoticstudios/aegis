@@ -135,6 +135,9 @@ final class WorldHomeAndBriefTests: XCTestCase {
     func testWeatherAtHomeReadsTheForecast() throws {
         let url = try XCTUnwrap(WorldBrief.weatherURL(latitude: -27.4712, longitude: 153.0251))
         XCTAssertTrue(url.absoluteString.contains("latitude=-27.5&longitude=153.0"), "rounded before it leaves the Mac")
+        // Open-Meteo's own variable names: renamed ones are refused, and the brief lost its weather line.
+        XCTAssertTrue(url.absoluteString
+            .contains("daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&"))
         let json = #"{"timezone":"Australia/Brisbane","daily":{"temperature_2m_max":[27.4],"temperature_2m_min":[17.6],"#
             + #""precipitation_probability_max":[70],"weather_code":[61]},"hourly":{"time":["2026-10-19T13:00","2026-10-19T14:00","#
             + #""2026-10-19T15:00"],"precipitation_probability":[10,20,70]}}"#

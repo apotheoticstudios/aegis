@@ -11,6 +11,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
 | — | Real mornings and feedback on the new features | agent:human | — | Owner's reviews drive the next fixes |
+| #72 | World: air quality, eruptions and Australian weather warnings around home, in the brief and by asking (ADR-0024); fixes the brief's weather line | agent:claude | claude/world-alerts | Merged; not yet tried |
 | #8 | The Project: Aegis design system: five screens, tokens, fonts (ADR-0029) | agent:claude | claude/8-design-foundation | In review; next: settings windows, theme picker |
 | #8 | The design's motion: each screen builds itself as it shows (ADR-0029) | agent:claude | claude/8-design-motion | In review; waits for the owner's go-ahead |
 | #52 | Proper chatbot conversation: fuller answers, 20 turns for 30 min, follow-ups about the day (Codex), cached turns in ModelService (first word ≈ 1.3 s, was 3.2 s), natural wording | agent:claude | claude/52-chatbot-conversation | In review; the owner tries it live next |

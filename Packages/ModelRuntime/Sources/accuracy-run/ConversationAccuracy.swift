@@ -8,7 +8,7 @@ import ModelRuntime
 func conversationAccuracy(modelDirectory: String, output: String) async throws {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "Australia/Brisbane")!
-    let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 25, hour: 10))!
+    let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 27, hour: 9))!
     let today = calendar.startOfDay(for: now)
     let store = try GRDBEventStore(path: ":memory:")
     let parcel = Event(
@@ -39,16 +39,27 @@ func conversationAccuracy(modelDirectory: String, output: String) async throws {
         initial: .init(openingHour: 7, openingMinute: 0, timeZone: calendar.timeZone),
         options: .init(modelName: "synthetic-accuracy"), calendar: calendar, clock: { now }
     )
+    for fact in [
+        "Example Alex plays the violin", "Example Store ships bicycles", "my favourite colour is blue",
+        "Example Sam works at the library", "I prefer vegetarian food",
+    ] {
+        _ = await core.handle(.ask(question: "Remember that " + fact))
+    }
+    guard case let .memories(initialNotes) = await core.handle(.memories), initialNotes.count == 5 else {
+        throw CocoaError(.coderInvalidValue)
+    }
     var reports: [[String: Any]] = []
-    func check(_ name: String, _ question: String, accepts: (Answer) -> Bool) async throws {
+    func check(_ name: String, _ question: String, modelFree: Bool = false, accepts: (Answer) -> Bool) async throws {
         let start = Date()
+        let before = await model.jobs
         let response = await core.handle(.ask(question: question))
+        let modelCalls = await model.jobs - before
         let passed = if case let .answer(answer) = response {
-            accepts(answer)
+            accepts(answer) && (!modelFree || modelCalls == 0) && answer.validate().isEmpty
         } else {
             false
         }
-        var report: [String: Any] = ["case": name, "passed": passed, "elapsed_s": Date().timeIntervalSince(start)]
+        var report: [String: Any] = ["case": name, "passed": passed, "elapsed_s": Date().timeIntervalSince(start), "model_jobs": modelCalls]
         switch response {
         case let .answer(answer):
             report["events"] = answer.eventIDs.count
@@ -64,9 +75,28 @@ func conversationAccuracy(modelDirectory: String, output: String) async throws {
             .write(to: URL(fileURLWithPath: output), options: .atomic)
         print("Synthetic conversation case \(name): \(passed ? "pass" : "fail")")
     }
-    try await check("today-only", "What am I doing today?") {
+    for (index, question) in ["yo wassup mate", "Hey, how are you doing, buddy?", "Hello there"].enumerated() {
+        try await check("slang-greeting-\(index)", question) {
+            !["violin", "bicycles", "vegetarian", "library", "concert", "holiday", "parcel", "example alex", "example sam"]
+                .contains(where: $0.text.lowercased().contains)
+        }
+    }
+    try await check("today-only", "What am I doing today?", modelFree: true) {
         $0.scheduleIDs == [visit.id] && $0.text.lowercased().contains("library")
             && !$0.text.lowercased().contains("concert") && !$0.text.lowercased().contains("holiday")
+    }
+    for (index, question) in ["what have i got today", "Hey, what have I got on today?"].enumerated() {
+        try await check("short-agenda-\(index)", question, modelFree: true) {
+            $0.scheduleIDs == [visit.id] && $0.text.lowercased().contains("library")
+                && !$0.text.lowercased().contains("concert") && !$0.text.lowercased().contains("holiday")
+        }
+    }
+    for (name, question, item) in [
+        ("tomorrow", "What's on tomorrow?", holiday),
+        ("yesterday", "And yesterday?", concert),
+        ("today", "And today?", visit),
+    ] {
+        try await check("agenda-follow-up-" + name, question, modelFree: true) { $0.scheduleIDs == [item.id] }
     }
     for (name, question) in [("acknowledgement", "Sweet."), ("social", "How's it going?")] {
         try await check(name, question) {
@@ -102,7 +132,7 @@ func conversationAccuracy(modelDirectory: String, output: String) async throws {
     }
     try await check("reject-chatter-memory", "No, don't remember that.") { $0.model == "memory" }
     guard case let .memories(notes) = await core.handle(.memories) else { throw CocoaError(.coderInvalidValue) }
-    reports.append(["case": "no-accidental-facts", "passed": notes.isEmpty])
+    reports.append(["case": "no-accidental-facts", "passed": Set(notes.map(\.text)) == Set(initialNotes.map(\.text))])
     try JSONSerialization.data(withJSONObject: reports, options: [.sortedKeys, .prettyPrinted])
         .write(to: URL(fileURLWithPath: output), options: .atomic)
     print("Synthetic conversation passed \(reports.filter { $0["passed"] as? Bool == true }.count)/\(reports.count)")
@@ -110,11 +140,13 @@ func conversationAccuracy(modelDirectory: String, output: String) async throws {
 
 private actor ConversationModel: ModelClient {
     let client: MLXModelClient
+    private(set) var jobs = 0
     init(client: MLXModelClient) {
         self.client = client
     }
 
     func run(_ job: ModelJob) async throws -> ModelJobResult {
+        jobs += 1
         var request = job
         request.deadline = Date().addingTimeInterval(120)
         let result = try await client.run(request)

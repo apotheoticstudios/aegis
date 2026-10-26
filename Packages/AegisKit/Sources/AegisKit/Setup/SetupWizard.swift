@@ -1,13 +1,13 @@
 import Foundation
 
 /// The setup wizard's screens, in DESIGN.md's order: the Mac first (it decides what's offered), permissions before
-/// what they unlock, personality before voice, the tune-up last.
+/// what they unlock, personality before voice, addons before the tune-up (so it counts them), the tune-up last.
 public enum SetupStep: String, Codable, Sendable, CaseIterable {
-    case welcome, mac, storage, schedule, permissions, sources, home, control, privacy, personality, voice, interface,
-         silence, tuneUp, ready
+    case welcome, mac, storage, schedule, permissions, sources, home, control, addons, privacy, personality, voice,
+         interface, silence, tuneUp, ready
 
-    /// The screens the wizard shows. Home and Control stay hidden until their features exist (owner's choice, #24).
-    public static let offered = allCases.filter { ![.home, .control].contains($0) }
+    /// The screens the wizard shows: all sixteen of the design system's (owner's choice, #65).
+    public static let offered = allCases
 
     var rank: Int {
         Self.allCases.firstIndex(of: self) ?? 0
@@ -68,6 +68,18 @@ public struct SetupAnswers: Codable, Sendable, Hashable {
     public var briefMinutes: Int?
     /// Wake the Mac before the brief.
     public var wakeMacForBrief: Bool?
+    /// The design's other choices by key, for features that read them once built (#65); a missing key is recommended.
+    public var options: [String: String]?
+
+    /// One of the other choices; nil while it's the recommended one.
+    public subscript(option key: String) -> String? {
+        get { options?[key] }
+        set {
+            var all = options ?? [:]
+            all[key] = newValue
+            options = all.isEmpty ? nil : all
+        }
+    }
 
     public init() {}
 }
@@ -82,12 +94,14 @@ public struct SetupWizard: Codable, Sendable, Hashable {
 
     /// The saved screen; `current` is the one shown.
     public private(set) var step = SetupStep.welcome
+    /// The furthest screen reached, which the step rail can jump back to; nil before leaving the first.
+    public private(set) var reached: SetupStep?
     public private(set) var finished = false
     public var mac: MacProfile
     public var answers = SetupAnswers()
 
     private enum CodingKeys: String, CodingKey {
-        case step, finished, mac, answers
+        case step, reached, finished, mac, answers
     }
 
     public init(mac: MacProfile) {
@@ -107,12 +121,17 @@ public struct SetupWizard: Codable, Sendable, Hashable {
         position > 0
     }
 
+    /// The index of the furthest screen reached: the rail's screens up to it can be clicked.
+    public var reachedPosition: Int {
+        max(position, steps.lastIndex { $0.rank <= (reached ?? step).rank } ?? 0)
+    }
+
     /// The next screen; Next on the last screen (Ready) finishes setup.
     public mutating func next() {
         if position == steps.count - 1 {
             finished = true
         } else {
-            step = steps[position + 1]
+            go(to: position + 1)
         }
     }
 
@@ -120,9 +139,21 @@ public struct SetupWizard: Codable, Sendable, Hashable {
         step = steps[max(0, position - 1)]
     }
 
-    /// "Use recommended for the rest": the answers not yet changed are already the recommended ones.
+    /// Jumps to a screen already reached, or the next one; later screens stay locked.
+    public mutating func go(to index: Int) {
+        guard steps.indices.contains(index), index <= reachedPosition + 1 else { return }
+        step = steps[index]
+        if step.rank > (reached ?? .welcome).rank {
+            reached = step
+        }
+    }
+
+    /// "Use recommended for the rest": the answers not yet changed are already the recommended ones, so it goes
+    /// straight to the tune-up, which needs every answer (or the last screen, if there's no tune-up).
     public mutating func useRecommendedForRest() {
-        step = steps[steps.count - 1]
+        let tuneUp = steps.firstIndex(of: .tuneUp) ?? steps.count - 1
+        reached = steps[max(tuneUp, reachedPosition)]
+        step = steps[tuneUp]
     }
 
     /// Runs setup again from settings, keeping every answer. It still counts as finished, so a re-run left halfway

@@ -76,7 +76,8 @@ struct AskSelection {
             of: #"\b(?:did i|have i|i)\s+(?:send|sent|write|wrote|email|emailed|text|texted)\b"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
-        let received = words.contains { ["get", "got", "receive", "received", "inbox"].contains($0) }
+        let received = !(query.schedule && requested == nil) && words
+            .contains { ["get", "got", "receive", "received", "inbox"].contains($0) }
         // “What have I got on today?” asks for the calendar, not incoming communications.
         direction = query.schedule && requested == nil ? nil : (sent ? .outgoing : (received ? .incoming : nil))
         let pattern = #"\b(?:from|sent by|written by)\s+(.+?)(?=\s+(?:today|yesterday|tonight|this|last|next|on|about|regarding|"#
@@ -105,6 +106,25 @@ struct AskSelection {
         let translationWords = translating ? languages.union(["text", "translation", "into", "language"]) : []
         terms = query.keywords.filter { !filler.contains($0) && !senderWords.contains($0) && !translationWords.contains($0) }
         overview = terms.isEmpty && (source != nil || timed && (received || words.contains { ["happened", "missed", "new"].contains($0) }))
+    }
+
+    /// The model's plan (ADR-0032) as a selection: where to look, who from and which way.
+    init(plan: SearchPlan, query: AskQuery, question: String = "") {
+        let explicit = AskSelection(question, query: query)
+        let communication = plan.places.intersection([.messages, .mail])
+        let planned: Source? = communication == [.mail] ? .mail : communication == [.messages] ? .messages
+            : communication.isEmpty ? nil : .communications
+        source = explicit.source ?? planned
+        // People the plan names may be relations ("the plumber"), not contact names: who sent what is still resolved
+        // from the owner's own words against Contacts, never by filtering on the model's word.
+        sender = explicit.sender
+        direction = explicit.direction ?? plan.direction
+        translating = explicit.translating
+        singleTranslation = explicit.singleTranslation
+        chinese = explicit.chinese
+        let named = Set(plan.people.flatMap(AskQuery.words))
+        terms = explicit.terms.filter { !named.contains($0) }
+        overview = terms.isEmpty && !communication.isEmpty && !plan.places.contains(.calendar)
     }
 
     func matches(_ event: Event, senderIDs: Set<String> = []) -> Bool {

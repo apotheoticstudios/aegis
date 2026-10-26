@@ -11,6 +11,8 @@ extension CoreEngine {
         if now.timeIntervalSince(conversationAt) > Chat.memory {
             conversation = []
         }
+        let social = Chat.isSocial(question)
+        let includeNotes = includeNotes && !social
         let scorer = includeNotes ? await meaningScorer(for: question) : nil
         let day = includeNotes && Chat.wantsDayContext(question) ? await dayNotes(now: now) : []
         let notes = includeNotes ? await memory.notesForChat(question, now: now, calendar: calendar, meaning: scorer) + day
@@ -18,10 +20,14 @@ extension CoreEngine {
         let user = Chat.prepare(question, notes: notes, now: now, calendar: calendar)
         do {
             let job = try ModelJob(
-                id: "chat-" + UUID().uuidString.lowercased(), model: options.modelName, system: Chat.systemPrompt(personality),
-                user: user, maxTokens: min(Self.chatTokens, ModelJob.maxOutputTokens),
+                id: "chat-" + UUID().uuidString.lowercased(), model: options.modelName,
+                system: Chat.systemPrompt(personality) + (social
+                    ?
+                    "\nThis turn is only a greeting or acknowledgement. Reply briefly to it; do not invent or bring up personal events or records." :
+                    ""),
+                user: user, maxTokens: min(social ? 120 : Self.chatTokens, ModelJob.maxOutputTokens),
                 deadline: now.addingTimeInterval(120), inputRevision: SHA256.hex(Array(user.utf8)),
-                history: Chat.isSocial(question)
+                history: social
                     ? Array(conversation.reversed().prefix { Chat.isSocial($0.owner) }.reversed()).map {
                         ModelJob.Exchange(owner: $0.owner, aegis: $0.aegis)
                     } : chatHistory, style: .conversation
@@ -30,10 +36,12 @@ extension CoreEngine {
                 return .refused(code: "too_long")
             }
             replyJob = (job.id, question)
-            let result = try await runQuestionJob(job, turn: turn)
-            if replyJob?.id == job.id {
-                replyJob = nil
+            defer {
+                if replyJob?.id == job.id {
+                    replyJob = nil
+                }
             }
+            let result = try await runQuestionJob(job, turn: turn)
             guard result.status == .completed else {
                 return .refused(code: result.failure?.rawValue ?? result.status.rawValue)
             }

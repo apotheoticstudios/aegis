@@ -182,7 +182,7 @@ struct HUDBuildClock<Content: View>: View {
     @Environment(\.hudArrival) private var arrival
 
     var body: some View {
-        let frames = HUDPresence.shared.open
+        let frames = HUDPresence.shared.animating
             ? HUDMotion.frames(start: arrival.start, at: arrival.at, until: until, fps: fps, now: Date()) : []
         TimelineView(.explicit(frames)) { context in
             content(arrival.elapsed(context.date))
@@ -199,7 +199,7 @@ struct HUDLiveClock<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var still
 
     var body: some View {
-        if running, !still, HUDPresence.shared.open {
+        if running, !still, HUDPresence.shared.animating {
             let anchor = Date()
             TimelineView(.periodic(from: anchor, by: every)) { context in
                 content(context.date.timeIntervalSince(anchor))

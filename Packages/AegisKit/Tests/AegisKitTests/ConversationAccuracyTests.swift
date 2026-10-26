@@ -191,7 +191,7 @@ final class ConversationAccuracyTests: XCTestCase {
             XCTAssertFalse(social.history.contains { $0.owner == "What am I doing today?" })
             XCTAssertFalse(social.user.contains("Example appointment"))
         }
-        _ = await core.handle(.ask(question: "What's up?"))
+        _ = await core.handle(.ask(question: "Catch me up on my day"))
         let jobs = await model.jobs
         let overview = try XCTUnwrap(jobs.last)
         XCTAssertTrue(overview.user.contains("26 Oct 2026"), "Tomorrow's all-day event keeps its actual date")

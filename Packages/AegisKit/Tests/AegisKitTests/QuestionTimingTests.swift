@@ -87,6 +87,32 @@ final class QuestionTimingTests: XCTestCase {
         let history = await core.conversation
         XCTAssertTrue(history.isEmpty)
     }
+
+    func testAgendaDoesNotWaitForAnObsoleteModelJob() async throws {
+        let model = QuestionModel()
+        let store = MemoryStore()
+        let start = Calendar(identifier: .gregorian).startOfDay(for: prepNow).addingTimeInterval(14 * 3600)
+        let item = CalendarOccurrence(
+            itemID: "example-immediate-agenda", occurrenceDate: nil, calendarTitle: nil, title: "Example workshop",
+            start: start, end: start.addingTimeInterval(3600), isAllDay: false, timeZone: "GMT",
+            location: nil, status: .confirmed, captureTime: prepNow
+        )
+        try await store.ingest(.init(source: .calendar, status: .init(ok: true, code: .ok), occurrences: [item], checkpoint: nil))
+        let core = try engine(model, store: store)
+        let old = Task { await core.handle(.ask(question: "Explain gravity")) }
+        await model.waitForJobs(1)
+        guard case let .answer(answer) = await core.handle(.ask(question: "what have i got today")) else {
+            return XCTFail("Agenda must answer before the old model job completes")
+        }
+        XCTAssertEqual(answer.scheduleIDs, [item.id])
+        let partial = await core.handle(.partialReply)
+        XCTAssertEqual(partial, .partialReply(""), "An obsolete answer must not keep streaming into the new turn")
+        await model.finish(0, text: "Late obsolete reply.")
+        let obsolete = await old.value
+        XCTAssertEqual(obsolete, .refused(code: "cancelled"))
+        let questions = await core.conversation.map(\.owner)
+        XCTAssertEqual(questions, ["what have i got today"])
+    }
 }
 
 /// Controlled synthetic completions; tests can force a reply to arrive after cancellation.
@@ -104,6 +130,10 @@ private actor QuestionModel: ModelClient {
     }
 
     func run(_ job: ModelJob) async throws -> ModelJobResult {
+        // The search plan (ADR-0032) isn't what these tests time: no plan, so the phrase rules read the question.
+        if job.id.hasPrefix("plan-") {
+            return ModelJobResult(jobID: job.id, status: .completed, text: "")
+        }
         let index = jobs.count
         jobs.append(job)
         return await withCheckedContinuation { continuation in
@@ -140,6 +170,10 @@ private actor QuestionModel: ModelClient {
         if cancelEndsJob, let index = jobs.firstIndex(where: { $0.id == jobID }) {
             replies.removeValue(forKey: index)?.resume(returning: ModelJobResult(jobID: jobID, status: .cancelled))
         }
+    }
+
+    func partial(jobID: String) async -> String? {
+        jobs.contains { $0.id == jobID } ? "An obsolete answer. More old text." : nil
     }
 }
 

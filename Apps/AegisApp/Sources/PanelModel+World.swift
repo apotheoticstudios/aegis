@@ -77,6 +77,9 @@ extension PanelModel {
         {
             lines.append(weather)
         }
+        if let home = WorldHome.point {
+            lines += await WorldFeeds.briefLines(home)
+        }
         let now = Date()
         if case let .schedule(occurrences, _) = await service.handle(.schedule(
             from: now.addingTimeInterval(-6 * 3600),

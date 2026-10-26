@@ -342,6 +342,8 @@ Aegis remembers what the owner tells it to: "remember that my locker code is 431
 **Morning routine (#286, adapted from OpenJarvis's proactive agent).** When the panel first opens each day, a MORNING ROUTINE card offers up to eight numbered jobs, built only from the owner's own data: skills scheduled for now, reminders for remembered dates in the next three days, reminders for the owner's promises due soon, and VIP or mute suggestions. The owner answers on the card or in words ("yes to 1 and 3", "no to both", "always yes to the second one", "what's my morning routine?"). "Always yes" or "always no" is remembered for low and medium jobs, so those are done or skipped without asking from then on; nothing runs while the panel is closed. The routine also learns from every plain yes and no (#289): kinds the owner usually accepts are offered first, and a kind refused three times with no yes is not offered for 30 days. Learning only ever stops Aegis asking; it never approves anything.
 
 ### Claude and ChatGPT hand-off (#223, ADR-0017)
+**Understanding questions (ADR-0032, owner's request, 2026-10-26).** Before searching, the local model reads the owner's question and plans what to look up: whether the answer is in their records at all, where (calendar and reminders, messages, mail), which days, who and what about. "What have I got on for the next week?", "am I swamped over the coming seven days?" and "got much on Thursday arvo?" all read the calendar for the right days, however they're worded. The plan sees only the owner's own words and a table of dates, every field is checked, and fixed phrase rules remain only as the fallback.
+
 With the owner's API key saved, "Ask Claude…" or "Ask ChatGPT…" (and, if switched on, any complex general question the owner's data doesn't cover) goes to that model, and the answer appears in the conversation marked "via Claude" or "via ChatGPT", with its opening read aloud. AegisCore's gate keeps anything personal on the Mac: only the owner's own words go, never messages, mail, calendar, contacts or memory.
 
 ### Silence and the emergency exception
@@ -555,6 +557,8 @@ Aegis integrates [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view)
 
 - Built so far (#265, ADR-0024): `scripts/world-setup.sh` installs a pinned God's Eye View in Aegis's folder; **World view** in the menu starts its server (127.0.0.1, its own launchd job) and shows the globe in a window; closing it stops everything. Phase 2 (#265): the World view is now Aegis's own embed-mode globe (just the globe; God's Eye View's interface stays under "World view, full controls"), and the owner's typed or spoken World commands drive it through its local `/mcp` tools: "show flights over Brisbane", "military aircraft over Taiwan", "ships near Gladstone", "earthquakes near Japan", "bushfires near Toowoomba", "where's the ISS?", "satellites above London", "any cyclones?", "rain radar over Brisbane", "recent launches", "fly to Tokyo" (and "show me Paris" while it's open). Aegis says the result and shows its view on the globe without reloading it; camera and licence-plate layers are never turned on, and the owner's own places ("my house") aren't sent. Phase 3 (#265): the panel's WORLD button (or any World command while the panel is open) shows the globe inside the panel, which grows to fit; "show my trips" pins upcoming calendar events from EventKit's own coordinates (no online lookup) and "show my flight" follows a flight number from the calendar live; optional keys (Cesium ion for 3D cities, AISStream ships, NASA FIRMS fires, TomTom traffic) live in the Keychain under **World view keys…**. Phase 4 (#265): the World view sets itself up on first open (its own pinned Node and God's Eye View, checked by SHA-256; no Homebrew or script needed); "set my home here" saves where the Mac is (Core Location, once) so "show my home" and "flights / earthquakes / weather near home" work, with home sent out only rounded to about 10 km; the brief gains a WORLD line with today's weather at home and today's calendar flight status (public data, switchable under **World view settings…**). Seamless control (#272): God's Eye View's own controls by voice ("zoom in a bit", "show the whole world", "tilt down", "spin left", "orbit", "stop", "night vision", "thermal", "3D view", "satellite imagery", "turn on satellites", "hide the rain radar", "follow QF1", "stop following", "cockpit view", "clear the globe"); follow-ups keep the place ("what about Sydney?", "now ships there"); a caption over the globe shows the latest question and answer; and the server warms up when the panel opens if the World view was used in the last week. Since #311 (owner's decision) every layer is available to Aegis's commands, public CCTV and licence-plate cameras included, and Aegis is God's Eye View's voice: its voice button starts Aegis listening (no OpenAI key), the question and answer show in God's Eye View's own voice card, and the Aegis bar under the globe is gone. In the panel (#299, owner's choice, replacing #295's separate window): the World view opens inside the Aegis panel with God's Eye View's own interface (its settings kept on this Mac), the panel grows to fill the screen, and ◀ AEGIS, Escape or "close the world view" go back to the main screen; the Ask bar, mic and latest answer stay along the bottom, and the globe stays loaded until the panel closes. Aegis's views are applied through the page's own actions (God's Eye View takes posted views only in embed mode, so the globe-in-the-panel and embed mode are gone). Beyond the commands above, while the globe is open Aegis can do anything God's Eye View can: the local model picks from its catalogue of 29 actions (all but CCTV), Aegis checks the plan (none of the owner's own places) and runs each step through God's Eye View's runner, then says what God's Eye View reports.
 
+Air, eruptions and warnings (2026-10-26, ADR-0024): the brief adds the air at home (Open-Meteo, home rounded to about 10 km), any Bureau of Meteorology warnings covering home (its public warning files, matched to home's districts and nearby river gauges on the Mac) and any significant eruption within 5,000 km in the last week (GDACS); "how's the air?", "any volcano alerts?" and "any weather warnings?" answer the same, without the globe.
+
 ### Services and keys (as God's Eye View uses them)
 
 | Service | Needed for | Cost | Decision |
@@ -577,12 +581,12 @@ Sources: [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view) · [Goo
 
 ## Setup wizard
 
-Setup is 15 screens shown one at a time, each holding one category of options. Recommended answers are pre-selected, so pressing Next throughout still gives a great setup.
+Setup is 16 screens shown one at a time, in the design system's WizardShell (1360 × 860, a step rail on the left that jumps back to any screen already reached, the model download on every screen), each holding one category of options. Recommended answers are pre-selected, so pressing Next throughout still gives a great setup.
 
 ### Wizard rules
 
 - One category per screen; several options per screen are fine if they belong to that category.
-- Progress bar ("Step 4 of 15"), with Back and Next on every screen. Going back loses nothing.
+- Progress bar ("Step 4 of 16"), with Back and Next on every screen. Going back loses nothing.
 - "Use recommended for the rest" shortcut on every screen.
 - Models download in the background while the user goes through the steps.
 - Hardware is auto-detected and only confirmed, never typed in.
@@ -601,20 +605,22 @@ Setup is 15 screens shown one at a time, each holding one category of options. R
 | 6 | Sources | Detected apps and accounts with toggles; suggestions to enable Mac/web notifications for WhatsApp, Instagram and others; help adding email accounts to Apple Mail and keeping it running; World view (God's Eye View) on or off, with a free Cesium ion key for 3D cities |
 | 7 | Home | Detected homes, rooms, accessories and scenes; home control on or off; which devices need confirmation (secure devices pre-set to confirm) |
 | 8 | Control | Which apps Aegis may control (Automation permission per app); confirmation levels with safe defaults |
-| 9 | Privacy | Never-read apps; never-read chats or people; FileVault check |
-| 10 | Personality | Preset, name, form of address, sliders, live text preview |
-| 11 | Voice | On or off; voice choice; warmth, speed and sci-fi sliders; wake word; spoken preview (with a "hear the higher-band voice" sample) |
-| 12 | Interface | HUD hotkey, theme and colours, panel size and position, menu bar icon style; AegisShell activation (hotkey, voice phrase, optional auto-engage); desktop widgets |
-| 13 | Silence and alerts | Menu bar glow; break silence for emergencies (off by default); who can break it (defaults to detected VIPs); home warnings at night |
-| 14 | Tune-up | 30-second benchmark on the user's Mac picks the final model size and compression |
-| 15 | Ready | Summary (e.g. "40 GB assigned · Classic personality · 7 sources · 12 home devices · brief ready at 7:00am"), then the first panel opens and Aegis introduces itself |
+| 9 | Addons | The addons to download, each with its size, what it reads and what it can do; only the performance monitor is ticked; their share of the storage assignment |
+| 10 | Privacy | Never-read apps; never-read chats or people; FileVault check |
+| 11 | Personality | Preset, name, form of address, sliders, live text preview |
+| 12 | Voice | On or off; voice choice; warmth, speed and sci-fi sliders; wake word; spoken preview (with a "hear the higher-band voice" sample) |
+| 13 | Interface | HUD hotkey, theme and colours, panel size and position, menu bar icon style; AegisShell activation (hotkey, voice phrase, optional auto-engage); desktop widgets |
+| 14 | Silence and alerts | Menu bar glow; break silence for emergencies (off by default); who can break it (defaults to detected VIPs); home warnings at night |
+| 15 | Tune-up | 30-second benchmark on the user's Mac picks the final model size and compression |
+| 16 | Ready | Summary (e.g. "40 GB assigned · Classic personality · 7 sources · 12 home devices · brief ready at 7:00am"), then the first panel opens and Aegis introduces itself |
 
 ### Why this order
 
 - Hardware (2–3) first, because it decides which models and voices are offered.
 - Permissions before sources, home and control (5–8), because apps and devices can only be detected once access is granted.
-- Personality before voice (10–11), so the voice preview speaks in the chosen style.
-- Tune-up last (14), because it needs every choice and the finished downloads.
+- Addons (9) after control and before the tune-up, so the tune-up counts them.
+- Personality before voice (11–12), so the voice preview speaks in the chosen style.
+- Tune-up last (15), because it needs every choice and the finished downloads.
 
 ### What the inputs control
 
@@ -709,7 +715,7 @@ Aegis controls addons through a command interface and never needs to look at the
 
 Addons are separate downloads, not bundled. The owner chooses them in the setup wizard and can add or remove them later from an Addons library.
 
-- **In the wizard:** one Addons screen lists what is available, each with a short description, download size, the data it reads and the permissions it asks for. The user ticks what to download. The performance monitor is suggested; nothing else is pre-ticked. Where the screen sits in the 15-screen order is still to be decided.
+- **In the wizard:** one Addons screen lists what is available, each with a short description, download size, the data it reads and the permissions it asks for. The user ticks what to download. The performance monitor is suggested; nothing else is pre-ticked. It is screen 9 of 16, after Control and before Privacy (#65).
 - **Counts toward storage:** addon sizes show against the assigned storage before the user confirms.
 - **Addons library:** a section of the panel and settings to browse, install, update and remove addons at any time, with the same details shown in the wizard.
 - **Safe install:** each addon is signed and notarized, and its checksum is checked before it runs. Its permissions are approved once, at install.
@@ -926,7 +932,7 @@ AI agents do most of the building, so estimates in days or weeks aren't meaningf
 
 **Goal:** turn the developer's tool into an app anyone can install.
 
-- The 15-screen setup wizard, with automatic hardware detection and guided permissions.
+- The 16-screen setup wizard, with automatic hardware detection and guided permissions.
 - Storage assignment, model downloads, automatic data compression within budget.
 - Tune-up benchmark that picks the final model size.
 - Self-healing collectors, health checks, one-click fixes.
