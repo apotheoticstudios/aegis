@@ -6,18 +6,22 @@ import Synchronization
 /// generators. Every shape moves at 12 frames a second, a deliberately terminal-like rate, only while the panel shows.
 enum HUDAscii {
     static let ramp = Array(" .:-=+*#%@")
-    /// A character cell's width over its height in the art's type (Share Tech Mono, 0.04 em tracking, line height 1).
+    /// A banner cell's width over its height (Share Tech Mono, 0.04 em tracking, line height 1).
     static let cellAspect = 0.58
+    /// An art cell's width over its height: the 0.54 em advance less 0.04 em tracking, so two columns per row are square.
+    static let artAspect = 0.5
 
     /// The shapes the screens use, each with its meaning: radar scanning, an eye watching, a helix syncing, a wave
     /// for voice, and an anatomical heart beating for the system's health.
     enum Shape {
         case radar, eye, helix, wave, anatomy
+        /// Slow-winding spiral arms: quiet. A turning wireframe cube with a pulsing core: an addon module.
+        case galaxy, cube
     }
 
     /// The art as lines, `time` seconds in (0 is the still frame); `grit` breaks the shading up like hand-made art.
     static func art(_ shape: Shape, cols: Int, rows: Int, seed: Double = 1, grit: Double = 0.35, time: Double = 0) -> [String] {
-        let aspect = Double(cols) * cellAspect / Double(rows)
+        let aspect = Double(cols) * artAspect / Double(rows)
         let live = (time * 8).rounded(.down)
         let grid = Grid.cached(cols: cols, rows: rows, seed: seed, grit: grit)
         let heart = shape == .anatomy ? grid.heart : []
@@ -119,7 +123,19 @@ enum HUDAscii {
         case .helix: helix(across, down, time)
         case .wave: wave(across, down, time)
         case .anatomy: HUDAnatomy.density(across, down, time)
+        case .galaxy: galaxy(across, down, time)
+        // The cube keeps its proportions in a wide footprint, centred.
+        case .cube: HUDCube.density(aspect > 1 ? across * aspect : across, aspect > 1 ? down : down / aspect, time)
         }
+    }
+
+    /// The arms wind slowly.
+    private static func galaxy(_ across: Double, _ down: Double, _ time: Double) -> Double {
+        let radius = (across * across + down * down * 2.2).squareRoot()
+        guard radius <= 1.05 else { return 0 }
+        let angle = atan2(down * 1.5, across) - time * 0.35
+        let arms = 0.5 + 0.5 * cos(2 * angle - 6 * log(radius + 0.05))
+        return min(max(exp(-radius * 2.4) * (1.3 + 0.15 * sin(time * 2)) + arms * (1 - radius) * 0.7, 0), 1)
     }
 
     /// The sweep turns; blips flare as it passes them.
@@ -167,6 +183,118 @@ enum HUDAscii {
             return max(0, 0.3 - abs(distance) * 0.6) * (hash(across, down, 9 + (time * 6).rounded(.down)) > 0.7 ? 1 : 0)
         }
         return max(0, 1 - distance * 0.9)
+    }
+}
+
+/// An addon module: a wireframe cube turning with a little perspective, its near edges brighter, a core pulsing inside.
+private enum HUDCube {
+    static func density(_ across: Double, _ down: Double, _ time: Double) -> Double {
+        var best = 0.0
+        for edge in edges(time) {
+            let (start, end) = edge
+            let dx = end.across - start.across
+            let dy = end.down - start.down
+            let span = max(dx * dx + dy * dy, 1e-6)
+            let along = min(max(((across - start.across) * dx + (down - start.down) * dy) / span, 0), 1)
+            let distance = hypot(start.across + dx * along - across, start.down + dy * along - down)
+            let depth = (start.depth + (end.depth - start.depth) * along + 0.9) / 1.8
+            let width = 0.06 + 0.05 * depth
+            if distance < width {
+                best = max(best, (1 - distance / width) * (0.4 + 0.6 * depth) + 0.15)
+            }
+        }
+        let radius = hypot(across, down)
+        let core = 0.2 + 0.05 * sin(time * 3.2)
+        return radius < core ? max(best, 0.6 * (1 - radius / core) + 0.25) : best
+    }
+
+    private struct Point {
+        let across: Double, down: Double, depth: Double
+    }
+
+    /// The twelve edges at `time`, projected.
+    private static func edges(_ time: Double) -> [(Point, Point)] {
+        let turn = 0.62 + time * 0.55
+        let tilt = 0.5 + sin(time * 0.35) * 0.22
+        let corners = (0 ..< 8).map { corner -> Point in
+            let px = corner & 1 == 0 ? -0.5 : 0.5
+            let py = corner & 2 == 0 ? -0.5 : 0.5
+            let pz = corner & 4 == 0 ? -0.5 : 0.5
+            let turnedX = px * cos(turn) + pz * sin(turn)
+            let turnedZ = -px * sin(turn) + pz * cos(turn)
+            let tiltedY = py * cos(tilt) - turnedZ * sin(tilt)
+            let tiltedZ = py * sin(tilt) + turnedZ * cos(tilt)
+            let scale = 2.1 / (2.6 - tiltedZ)
+            return Point(across: turnedX * scale, down: tiltedY * scale, depth: tiltedZ)
+        }
+        var edges: [(Point, Point)] = []
+        for first in 0 ..< 8 {
+            for second in first + 1 ..< 8 where [1, 2, 4].contains(first ^ second) {
+                edges.append((corners[first], corners[second]))
+            }
+        }
+        return edges
+    }
+}
+
+/// The Aegis emblem in characters, from the logo kit (Resources/Brand, 80 and 112 characters wide): a scan band
+/// brightens it as it passes, a few characters flicker, and it resolves out of noise as it arrives.
+struct HUDEmblemArt: View {
+    /// Footprint cells across; the art is twice as many characters wide, as the design's emblem is.
+    var cols = 56
+    var tone = HUD.accent
+    var label: String?
+    @Environment(\.accessibilityReduceMotion) private var still
+    @Environment(\.hudArrival) private var arrival
+
+    var body: some View {
+        let lines = Self.art(wide: cols * 2 >= 96)
+        let width = lines.map(\.count).max() ?? 1
+        let size: CGFloat = 6
+        let moving = HUDPresence.shared.animating && !still
+        TimelineView(.animation(minimumInterval: 1.0 / 12, paused: !moving)) { context in
+            let time = moving ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600) : 0
+            let scanned = time > 0 ? Self.scan(lines, time) : lines
+            let shown = arrival.elapsed(context.date).map {
+                HUDMotion.resolve(scanned, HUDMotion.progress($0, 0, 1.1), tick: Int($0 * 12))
+            } ?? scanned
+            HUDAsciiText(lines: shown, cols: width, size: size, tone: tone, aspect: HUDAscii.artAspect)
+        }
+        .accessibilityElement()
+        .accessibilityHidden(label == nil)
+        .accessibilityLabel(label ?? "")
+        .accessibilityAddTraits(.isImage)
+    }
+
+    private static let wideArt = load("emblem-112")
+    private static let narrowArt = load("emblem-80")
+
+    static func art(wide: Bool) -> [String] {
+        wide ? wideArt : narrowArt
+    }
+
+    private static func load(_ name: String) -> [String] {
+        let url = Bundle.main.url(forResource: name, withExtension: "txt", subdirectory: "Brand")
+        let text = url.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+        return text.components(separatedBy: "\n").reversed().drop { $0.isEmpty }.reversed()
+    }
+
+    /// The band runs down the art every few seconds, lifting each character up the ramp; about one in thirty dims.
+    static func scan(_ lines: [String], _ time: Double) -> [String] {
+        let band = ((time * 0.45).truncatingRemainder(dividingBy: 1.4) - 0.2) * Double(lines.count)
+        let live = (time * 10).rounded(.down)
+        let ramp = HUDAscii.ramp
+        return lines.enumerated().map { row, line in
+            let lift = max(0, 1 - abs(Double(row) - band) / 2.2)
+            return String(line.enumerated().map { col, character in
+                guard var level = ramp.firstIndex(of: character), level > 0 else { return character }
+                level = min(ramp.count - 1, level + Int((lift * 3).rounded()))
+                if HUDAscii.hash(Double(col), Double(row), 1 + live) < 0.03 {
+                    level = max(1, level - 2 - Int(HUDAscii.hash(Double(row), Double(col), live) * 3))
+                }
+                return ramp[level]
+            })
+        }
     }
 }
 
@@ -250,8 +378,8 @@ struct HUDAsciiArt: View {
 
     var body: some View {
         let size = 12 / CGFloat(detail)
-        let moving = animate && HUDPresence.shared.open && !still
-        let arriving = arrival.start != nil && HUDPresence.shared.open
+        let moving = animate && HUDPresence.shared.animating && !still
+        let arriving = arrival.start != nil && HUDPresence.shared.animating
         TimelineView(.animation(minimumInterval: 1.0 / 12, paused: !moving && !arriving)) { context in
             let time = moving ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600) : 0
             let lines = HUDAscii.art(shape, cols: cols * detail, rows: rows * detail, seed: seed, grit: grit, time: time)
@@ -260,9 +388,10 @@ struct HUDAsciiArt: View {
             } ?? lines
             // Links plug into the whole drawing, not the part resolved so far.
             if hub {
-                HUDAsciiText(lines: shown, cols: cols * detail, size: size, tone: tone).hudHub(art: lines)
+                HUDAsciiText(lines: shown, cols: cols * detail, size: size, tone: tone, aspect: HUDAscii.artAspect)
+                    .hudHub(art: lines)
             } else {
-                HUDAsciiText(lines: shown, cols: cols * detail, size: size, tone: tone)
+                HUDAsciiText(lines: shown, cols: cols * detail, size: size, tone: tone, aspect: HUDAscii.artAspect)
             }
         }
         .accessibilityElement()
@@ -281,6 +410,8 @@ struct HUDAsciiText: View {
     var tone = HUD.accent
     /// Block characters (█▓▒░), which the design's fonts lack, are set in the system's monospaced face.
     var blocks = false
+    /// A cell's width over its height: banners' by default, `HUDAscii.artAspect` for art.
+    var aspect = HUDAscii.cellAspect
     @Environment(\.hudTheme) private var theme
 
     var body: some View {
@@ -294,7 +425,7 @@ struct HUDAsciiText: View {
                 context.draw(styled(line), at: CGPoint(x: 0, y: CGFloat(row) * size), anchor: .topLeading)
             }
         }
-        .frame(width: CGFloat(cols) * size * (blocks ? 0.6 : HUDAscii.cellAspect), height: CGFloat(lines.count) * size)
+        .frame(width: CGFloat(cols) * size * (blocks ? 0.6 : aspect), height: CGFloat(lines.count) * size)
         .shadow(color: theme.color(tone.token).opacity(0.55), radius: 3)
         .accessibilityHidden(true)
     }

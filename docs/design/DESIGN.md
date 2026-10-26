@@ -577,12 +577,12 @@ Sources: [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view) · [Goo
 
 ## Setup wizard
 
-Setup is 15 screens shown one at a time, each holding one category of options. Recommended answers are pre-selected, so pressing Next throughout still gives a great setup.
+Setup is 16 screens shown one at a time, in the design system's WizardShell (1360 × 860, a step rail on the left that jumps back to any screen already reached, the model download on every screen), each holding one category of options. Recommended answers are pre-selected, so pressing Next throughout still gives a great setup.
 
 ### Wizard rules
 
 - One category per screen; several options per screen are fine if they belong to that category.
-- Progress bar ("Step 4 of 15"), with Back and Next on every screen. Going back loses nothing.
+- Progress bar ("Step 4 of 16"), with Back and Next on every screen. Going back loses nothing.
 - "Use recommended for the rest" shortcut on every screen.
 - Models download in the background while the user goes through the steps.
 - Hardware is auto-detected and only confirmed, never typed in.
@@ -601,20 +601,22 @@ Setup is 15 screens shown one at a time, each holding one category of options. R
 | 6 | Sources | Detected apps and accounts with toggles; suggestions to enable Mac/web notifications for WhatsApp, Instagram and others; help adding email accounts to Apple Mail and keeping it running; World view (God's Eye View) on or off, with a free Cesium ion key for 3D cities |
 | 7 | Home | Detected homes, rooms, accessories and scenes; home control on or off; which devices need confirmation (secure devices pre-set to confirm) |
 | 8 | Control | Which apps Aegis may control (Automation permission per app); confirmation levels with safe defaults |
-| 9 | Privacy | Never-read apps; never-read chats or people; FileVault check |
-| 10 | Personality | Preset, name, form of address, sliders, live text preview |
-| 11 | Voice | On or off; voice choice; warmth, speed and sci-fi sliders; wake word; spoken preview (with a "hear the higher-band voice" sample) |
-| 12 | Interface | HUD hotkey, theme and colours, panel size and position, menu bar icon style; AegisShell activation (hotkey, voice phrase, optional auto-engage); desktop widgets |
-| 13 | Silence and alerts | Menu bar glow; break silence for emergencies (off by default); who can break it (defaults to detected VIPs); home warnings at night |
-| 14 | Tune-up | 30-second benchmark on the user's Mac picks the final model size and compression |
-| 15 | Ready | Summary (e.g. "40 GB assigned · Classic personality · 7 sources · 12 home devices · brief ready at 7:00am"), then the first panel opens and Aegis introduces itself |
+| 9 | Addons | The addons to download, each with its size, what it reads and what it can do; only the performance monitor is ticked; their share of the storage assignment |
+| 10 | Privacy | Never-read apps; never-read chats or people; FileVault check |
+| 11 | Personality | Preset, name, form of address, sliders, live text preview |
+| 12 | Voice | On or off; voice choice; warmth, speed and sci-fi sliders; wake word; spoken preview (with a "hear the higher-band voice" sample) |
+| 13 | Interface | HUD hotkey, theme and colours, panel size and position, menu bar icon style; AegisShell activation (hotkey, voice phrase, optional auto-engage); desktop widgets |
+| 14 | Silence and alerts | Menu bar glow; break silence for emergencies (off by default); who can break it (defaults to detected VIPs); home warnings at night |
+| 15 | Tune-up | 30-second benchmark on the user's Mac picks the final model size and compression |
+| 16 | Ready | Summary (e.g. "40 GB assigned · Classic personality · 7 sources · 12 home devices · brief ready at 7:00am"), then the first panel opens and Aegis introduces itself |
 
 ### Why this order
 
 - Hardware (2–3) first, because it decides which models and voices are offered.
 - Permissions before sources, home and control (5–8), because apps and devices can only be detected once access is granted.
-- Personality before voice (10–11), so the voice preview speaks in the chosen style.
-- Tune-up last (14), because it needs every choice and the finished downloads.
+- Addons (9) after control and before the tune-up, so the tune-up counts them.
+- Personality before voice (11–12), so the voice preview speaks in the chosen style.
+- Tune-up last (15), because it needs every choice and the finished downloads.
 
 ### What the inputs control
 
@@ -709,7 +711,7 @@ Aegis controls addons through a command interface and never needs to look at the
 
 Addons are separate downloads, not bundled. The owner chooses them in the setup wizard and can add or remove them later from an Addons library.
 
-- **In the wizard:** one Addons screen lists what is available, each with a short description, download size, the data it reads and the permissions it asks for. The user ticks what to download. The performance monitor is suggested; nothing else is pre-ticked. Where the screen sits in the 15-screen order is still to be decided.
+- **In the wizard:** one Addons screen lists what is available, each with a short description, download size, the data it reads and the permissions it asks for. The user ticks what to download. The performance monitor is suggested; nothing else is pre-ticked. It is screen 9 of 16, after Control and before Privacy (#65).
 - **Counts toward storage:** addon sizes show against the assigned storage before the user confirms.
 - **Addons library:** a section of the panel and settings to browse, install, update and remove addons at any time, with the same details shown in the wizard.
 - **Safe install:** each addon is signed and notarized, and its checksum is checked before it runs. Its permissions are approved once, at install.
@@ -926,7 +928,7 @@ AI agents do most of the building, so estimates in days or weeks aren't meaningf
 
 **Goal:** turn the developer's tool into an app anyone can install.
 
-- The 15-screen setup wizard, with automatic hardware detection and guided permissions.
+- The 16-screen setup wizard, with automatic hardware detection and guided permissions.
 - Storage assignment, model downloads, automatic data compression within budget.
 - Tune-up benchmark that picks the final model size.
 - Self-healing collectors, health checks, one-click fixes.

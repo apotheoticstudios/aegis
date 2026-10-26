@@ -36,6 +36,8 @@ struct HUDMeter: View {
     var display: String?
     var size = Size.medium
     var tone = HUD.primary
+    /// How many bars; each size has its own count unless given.
+    var segments: Int?
 
     var body: some View {
         let fraction = min(max(value, 0), 1)
@@ -51,7 +53,7 @@ struct HUDMeter: View {
                 }
                 .lineLimit(1)
             }
-            HUDSegments(value: fraction, count: size == .small ? 40 : size == .large ? 90 : 60, tone: tone)
+            HUDSegments(value: fraction, count: segments ?? (size == .small ? 40 : size == .large ? 90 : 60), tone: tone)
                 .frame(height: size == .small ? 6 : size == .large ? 22 : 10)
                 .padding(.vertical, size == .large ? 6 : 3)
                 .padding(.horizontal, size == .large ? 10 : 5)

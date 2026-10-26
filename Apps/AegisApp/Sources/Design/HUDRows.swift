@@ -172,7 +172,7 @@ struct HUDChatLine<Meta: View>: View {
             typed = min(typedFrom, count)
             // About 80 characters a second; long replies speed up so none takes much over three seconds.
             let step = max(1, count / 240)
-            while typed < count, !Task.isCancelled, HUDPresence.shared.open {
+            while typed < count, !Task.isCancelled, HUDPresence.shared.animating {
                 try? await Task.sleep(for: .milliseconds(12))
                 typed = min(count, typed + step)
             }

@@ -11,12 +11,39 @@ final class SetupWizardTests: XCTestCase {
         )
     }
 
-    func testOfferedScreensFollowTheDesignWithoutUnbuiltOnes() {
-        XCTAssertEqual(SetupStep.allCases.count, 15)
+    func testOfferedScreensAreTheDesignsSixteen() {
         XCTAssertEqual(SetupStep.offered, [
-            .welcome, .mac, .storage, .schedule, .permissions, .sources, .privacy, .personality, .voice, .interface,
-            .silence, .tuneUp, .ready,
+            .welcome, .mac, .storage, .schedule, .permissions, .sources, .home, .control, .addons, .privacy, .personality,
+            .voice, .interface, .silence, .tuneUp, .ready,
         ])
+    }
+
+    func testTheRailJumpsOnlyToScreensReached() {
+        var wizard = SetupWizard(mac: mac())
+        wizard.go(to: 5)
+        XCTAssertEqual(wizard.current, .welcome, "a screen not reached stays locked")
+        wizard.next()
+        wizard.next()
+        wizard.next()
+        XCTAssertEqual(wizard.reachedPosition, 3)
+        wizard.go(to: 1)
+        XCTAssertEqual(wizard.current, .mac)
+        XCTAssertEqual(wizard.reachedPosition, 3, "going back keeps what was reached")
+        wizard.go(to: 3)
+        XCTAssertEqual(wizard.current, .schedule)
+    }
+
+    func testRecommendedGoesToTheTuneUpAndOptionsKeepOnlyChanges() throws {
+        var wizard = SetupWizard(mac: mac())
+        wizard.useRecommendedForRest()
+        XCTAssertEqual(wizard.current, .tuneUp)
+        XCTAssertEqual(wizard.reachedPosition, wizard.steps.count - 2)
+        wizard.answers[option: "quiet"] = "hours"
+        wizard.answers[option: "keep"] = "6"
+        wizard.answers[option: "keep"] = nil
+        XCTAssertEqual(wizard.answers.options, ["quiet": "hours"])
+        let resumed = try JSONDecoder().decode(SetupWizard.self, from: JSONEncoder().encode(wizard))
+        XCTAssertEqual(resumed, wizard)
     }
 
     func testNextAndBackWalkTheScreensAndKeepAnswers() {
@@ -38,10 +65,12 @@ final class SetupWizardTests: XCTestCase {
         XCTAssertEqual(wizard.storageGB, 80)
     }
 
-    func testRecommendedForTheRestGoesToReadyAndNextFinishes() {
+    func testRecommendedForTheRestGoesToTheTuneUpAndNextFinishes() {
         var wizard = SetupWizard(mac: mac())
         wizard.next()
         wizard.useRecommendedForRest()
+        XCTAssertEqual(wizard.current, .tuneUp)
+        wizard.next()
         XCTAssertEqual(wizard.current, .ready)
         XCTAssertFalse(wizard.finished)
         wizard.next()
@@ -106,16 +135,23 @@ final class SetupWizardTests: XCTestCase {
 
     func testASavedScreenNoLongerShownResumesAtTheNextOne() throws {
         var wizard = SetupWizard(mac: mac())
-        wizard.steps = SetupStep.allCases
         for _ in 0 ..< 6 {
             wizard.next()
         }
         XCTAssertEqual(wizard.current, .home)
 
         var resumed = try JSONDecoder().decode(SetupWizard.self, from: JSONEncoder().encode(wizard))
-        XCTAssertEqual(resumed.steps, SetupStep.offered)
-        XCTAssertEqual(resumed.current, .privacy)
+        resumed.steps = SetupStep.offered.filter { $0 != .home }
+        XCTAssertEqual(resumed.current, .control)
         resumed.back()
         XCTAssertEqual(resumed.current, .sources)
+    }
+
+    func testAWizardSavedBeforeTheRailResumes() throws {
+        let saved = try XCTUnwrap(String(data: JSONEncoder().encode(mac()), encoding: .utf8))
+        let old = #"{"answers":{},"finished":false,"mac":\#(saved),"step":"storage"}"#
+        let wizard = try JSONDecoder().decode(SetupWizard.self, from: Data(old.utf8))
+        XCTAssertEqual(wizard.current, .storage)
+        XCTAssertEqual(wizard.reachedPosition, 2)
     }
 }

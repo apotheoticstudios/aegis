@@ -6,6 +6,13 @@ import SwiftUI
 final class HUDPresence {
     static let shared = HUDPresence()
     var open = false
+    /// The setup wizard is on screen: its HUD moves as the panel's does, without counting as the panel being open.
+    var setup = false
+
+    /// Whether the HUD's motion runs: while the panel or the wizard shows.
+    var animating: Bool {
+        open || setup
+    }
 }
 
 /// One frame for a whole screen (the design system's HudShell): a large glass plate with cut corners and long
@@ -21,7 +28,7 @@ struct HUDShell<Top: View, Content: View, Bottom: View>: View {
     @State private var build = HUDBuild()
 
     var body: some View {
-        let start = still ? nil : build.start(open: HUDPresence.shared.open, now: Date())
+        let start = still ? nil : build.start(open: HUDPresence.shared.animating, now: Date())
         VStack(spacing: 0) {
             HStack(spacing: HUD.space4) { top }
                 .padding(.vertical, HUD.space3)
@@ -54,8 +61,8 @@ struct HUDShell<Top: View, Content: View, Bottom: View>: View {
         .hudArrive(.open(0.7, traces: true))
         .environment(\.hudArrival.start, start)
         // The build plays each time this screen shows and runs its course only while the panel shows.
-        .task(id: HUDPresence.shared.open) {
-            guard HUDPresence.shared.open, !still else {
+        .task(id: HUDPresence.shared.animating) {
+            guard HUDPresence.shared.animating, !still else {
                 build.reset()
                 return
             }
@@ -259,7 +266,7 @@ private struct HUDLinks: View {
                 }
                 if wires {
                     // A glowing pulse travels each cable from the hub out to its section, only while the panel shows.
-                    TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !HUDPresence.shared.open || still)) { context in
+                    TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !HUDPresence.shared.animating || still)) { context in
                         let phase = context.date.timeIntervalSinceReferenceDate * 60
                         ForEach(layout.links.indices, id: \.self) { index in
                             layout.links[index].path

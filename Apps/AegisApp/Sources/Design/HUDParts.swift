@@ -237,15 +237,18 @@ struct HUDPlateStyle: ButtonStyle {
     }
 
     var kind = Kind.ghost
+    /// The smaller plate used inside rows and steps: 26 points high, 10-point type, a shorter rail.
+    var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
-        HUDPlate(configuration: configuration, kind: kind)
+        HUDPlate(configuration: configuration, kind: kind, compact: compact)
     }
 }
 
 private struct HUDPlate: View {
     let configuration: ButtonStyleConfiguration
     let kind: HUDPlateStyle.Kind
+    let compact: Bool
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @State private var hovering = false
@@ -262,17 +265,18 @@ private struct HUDPlate: View {
             }
         }
         .hudType(.label)
+        .font(compact ? HUDFace.caps(10) : HUDType.label.font)
         .lineLimit(1)
         .foregroundStyle(kind == .primary ? HUD.onPrimary : kind == .critical ? HUD.critical : HUD.ink)
-        .padding(.leading, HUD.space4)
-        .padding(.trailing, HUD.space4 + HUD.chamferSlant)
-        .frame(height: 36)
+        .padding(.leading, compact ? HUD.space3 : HUD.space4)
+        .padding(.trailing, (compact ? HUD.space3 : HUD.space4) + HUD.chamferSlant)
+        .frame(height: compact ? 26 : 36)
         .background(shape.fill(face))
         .overlay(shape.strokeBorder(edge, lineWidth: focused ? 2 : 1))
         .contentShape(shape)
         // Pressing slides the plate onto its rail.
         .offset(x: pressed ? 2 : 0, y: pressed ? 2 : 0)
-        .padding(.bottom, 7)
+        .padding(.bottom, compact ? 4 : 7)
         .background(alignment: .bottomTrailing) {
             HStack(alignment: .bottom, spacing: 2) {
                 Rectangle().fill(edge).opacity(0.7).frame(height: 2).padding(.bottom, 1)

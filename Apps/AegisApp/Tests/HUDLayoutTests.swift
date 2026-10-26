@@ -42,7 +42,7 @@ final class HUDLayoutTests: XCTestCase {
     /// Every shape draws inside its footprint, from the density ramp only, the same way every time.
     func testCharacterArtStaysOnItsGrid() {
         let ramp = Set(" .:-=+*#%@")
-        for shape in [HUDAscii.Shape.radar, .eye, .helix, .wave, .anatomy] {
+        for shape in [HUDAscii.Shape.radar, .eye, .helix, .wave, .anatomy, .galaxy, .cube] {
             let art = HUDAscii.art(shape, cols: 40, rows: 12, time: 1.5)
             XCTAssertEqual(art.count, 12, "\(shape)")
             XCTAssertTrue(art.allSatisfy { $0.count <= 40 && Set($0).isSubset(of: ramp) }, "\(shape)")
@@ -68,7 +68,7 @@ final class HUDLayoutTests: XCTestCase {
 
     /// The generator as first ported: every cell's place, grain and gaps worked out each frame.
     private static func referenceArt(_ shape: HUDAscii.Shape, cols: Int, rows: Int, seed: Double, grit: Double, time: Double) -> [String] {
-        let aspect = Double(cols) * HUDAscii.cellAspect / Double(rows)
+        let aspect = Double(cols) * HUDAscii.artAspect / Double(rows)
         let live = (time * 8).rounded(.down)
         return (0 ..< rows).map { row in
             String((0 ..< cols).map { col in
