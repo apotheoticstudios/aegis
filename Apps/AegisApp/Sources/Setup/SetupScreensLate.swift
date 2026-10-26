@@ -28,7 +28,7 @@ struct PersonalityScreen: View {
                     ) { chosen.style = style }
                 }
             }
-            HUDTermInput(prompt: "name >", text: $chosen.name, hint: "also the wake word").padding(.top, HUD.space2)
+            HUDTermInput(prompt: "name >", text: $chosen.name, hint: "also the wake word") { setup.typing = $0 }.padding(.top, HUD.space2)
             HUDSettingRow(label: "Calls you", compact: true) {
                 HUDSegmented(label: "Calls you", options: [
                     HUDOption(value: "name", label: "Your name", disabled: ownerName == nil),
@@ -45,8 +45,10 @@ struct PersonalityScreen: View {
                 slider("warmth", "Warmth", 5, ("Cool", "Warm"))
             }
             .padding(.top, HUD.space3)
-            HUDTermInput(prompt: "notes >", text: $chosen.notes, placeholder: "e.g. \"swear a bit\", \"roast me\"", hint: "optional")
-                .padding(.top, HUD.space2)
+            HUDTermInput(prompt: "notes >", text: $chosen.notes, placeholder: "e.g. \"swear a bit\", \"roast me\"", hint: "optional") {
+                setup.typing = $0
+            }
+            .padding(.top, HUD.space2)
             if chosen.cleaned == nil {
                 Text("The name needs letters only, up to 24; notes up to 600 characters.").font(HUDFace.text(11)).foregroundStyle(HUD.warn)
             }
@@ -632,11 +634,9 @@ enum SetupText {
     static let volumeName = (try? URL(fileURLWithPath: NSHomeDirectory(
     )).resourceValues(forKeys: [.volumeNameKey]).volumeName) ?? "This Mac"
 
-    /// The voice Aegis ships with, measured in the app.
-    static let voiceSize: String = {
-        let voice = Bundle.main.bundleURL.appendingPathComponent("Contents/XPCServices/AegisVoice.xpc")
-        return HUDFormat.bytes(Double(folderBytes(voice)))
-    }()
+    /// The voice Aegis ships with, measured in the app once.
+    static let voiceSize = HUDFormat.bytes(Double(voiceBytes))
+    private static let voiceBytes = folderBytes(Bundle.main.bundleURL.appendingPathComponent("Contents/XPCServices/AegisVoice.xpc"))
 
     /// What the storage assignment holds: the model files for this Mac, the voice and app in Aegis.app, the addons
     /// ticked, and the rest for the owner's data.
@@ -648,7 +648,7 @@ enum SetupText {
 
     static func budget(_ wizard: SetupWizard) -> [Part] {
         let model = Double(ModelChoice.forMemory(wizard.mac.memoryBytes).files.bytes + ModelFiles.meaning.bytes) / 1e9
-        let voice = Double(folderBytes(Bundle.main.bundleURL.appendingPathComponent("Contents/XPCServices/AegisVoice.xpc"))) / 1e9
+        let voice = Double(voiceBytes) / 1e9
         let app = max(0, Double(appBytes) / 1e9 - voice)
         let addons = addons.filter { wizard.answers[option: "addon." + $0.key].map { $0 == "on" } ?? ($0.key == "perf") }
             .map(\.gigabytes).reduce(0, +)

@@ -11,6 +11,8 @@ final class SetupModel {
 
     /// Laptop or desktop as this Mac reports it, before any correction: the Segmented marks it "detected".
     let detectedLaptop: Bool
+    /// A text field has the keyboard, so Return belongs to it rather than to Next.
+    var typing = false
     private let file: SetupFile?
 
     init(file: SetupFile? = SetupModel.standardFile, mac: MacProfile = .detect()) {
@@ -68,12 +70,11 @@ final class SetupModel {
 /// of it while the owner grants access.
 @MainActor
 enum SetupWindow {
-    private static var window: NSWindow?
+    private(set) static var window: NSWindow?
     static let size = CGSize(width: 1360, height: 860)
 
     /// Shows setup where it stopped, or from the start when `again` (from the menu); `done` runs when it finishes.
-    static func show(_ app: SetupApp, again: Bool, done: @escaping () -> Void) {
-        let setup = SetupModel()
+    static func show(_ app: SetupApp, again: Bool, setup: SetupModel = SetupModel(), done: @escaping () -> Void) {
         if again {
             setup.wizard.restart()
         }
@@ -155,8 +156,10 @@ struct SetupView: View {
         .foregroundStyle(HUD.ink)
         .environment(\.colorScheme, .dark)
         .environment(\.hudTheme, theme)
-        // Escape closes setup; it resumes on this step next time.
-        .onExitCommand(perform: later)
+        // Escape closes setup, whatever has the keyboard; it resumes on this step next time.
+        .background {
+            Button("Close setup", action: later).keyboardShortcut(.cancelAction).opacity(0).accessibilityHidden(true)
+        }
     }
 }
 
@@ -340,7 +343,7 @@ private struct SetupNav: View {
                 }
             }
             .buttonStyle(HUDPlateStyle(kind: .primary))
-            .keyboardShortcut(.defaultAction)
+            .keyboardShortcut(setup.typing ? nil : .defaultAction)
             .disabled(wizard.current == .tuneUp && tuning)
             .help(wizard.current == .tuneUp && tuning ? "Finishing the tune-up" : "")
         }

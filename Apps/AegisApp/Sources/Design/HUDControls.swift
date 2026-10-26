@@ -368,6 +368,10 @@ struct HUDTermInput: View {
     @Binding var text: String
     var placeholder = ""
     var hint: String?
+    /// Takes the keyboard as soon as it appears.
+    var autofocus = false
+    /// Told when typing starts and stops, for a window whose Return key does something else meanwhile.
+    var editing: ((Bool) -> Void)?
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -385,5 +389,12 @@ struct HUDTermInput: View {
         }
         .font(HUDFace.mono(12))
         .hudField(focused: focused)
+        .onChange(of: focused) { _, now in editing?(now) }
+        .task {
+            if autofocus {
+                focused = true
+            }
+        }
+        .onDisappear { editing?(false) }
     }
 }

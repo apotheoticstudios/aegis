@@ -66,6 +66,60 @@ final class SetupTests: XCTestCase {
         XCTAssertTrue(again)
     }
 
+    /// The design's extra choices keep only what the owner changed, and survive a restart of setup.
+    func testChoicesKeepOnlyChangesAndResume() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("setup-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let setup = SetupModel(file: SetupFile(url: url), mac: Self.sampleMac)
+        let quiet = setup.option("quiet", "focus")
+        let photos = setup.flag("source.photos", false)
+        let apps = setup.list("neverApps", ["1Password", "Banking apps"])
+        let formality = setup.number("tone.formality", 6)
+        XCTAssertEqual(quiet.wrappedValue, "focus")
+        XCTAssertFalse(photos.wrappedValue)
+        XCTAssertEqual(apps.wrappedValue, ["1Password", "Banking apps"])
+        XCTAssertEqual(formality.wrappedValue, 6)
+        XCTAssertNil(setup.wizard.answers.options, "nothing changed yet")
+
+        quiet.wrappedValue = "hours"
+        photos.wrappedValue = true
+        apps.wrappedValue.removeAll { $0 == "1Password" }
+        apps.wrappedValue.append("Notes")
+        formality.wrappedValue = 9
+        XCTAssertEqual(setup.wizard.answers.options, [
+            "quiet": "hours", "source.photos": "on", "neverApps": "Banking apps\nNotes", "tone.formality": "9",
+        ])
+
+        let resumed = SetupModel(file: SetupFile(url: url), mac: Self.sampleMac)
+        XCTAssertEqual(resumed.option("quiet", "focus").wrappedValue, "hours")
+        XCTAssertTrue(resumed.flag("source.photos", false).wrappedValue)
+        XCTAssertEqual(resumed.list("neverApps", ["1Password", "Banking apps"]).wrappedValue, ["Banking apps", "Notes"])
+        XCTAssertEqual(resumed.number("tone.formality", 6).wrappedValue, 9)
+
+        // Back to the recommended answer: the key goes, so a later change to the recommendation applies.
+        resumed.option("quiet", "focus").wrappedValue = "focus"
+        resumed.flag("source.photos", false).wrappedValue = false
+        resumed.list("neverApps", ["1Password", "Banking apps"]).wrappedValue = ["1Password", "Banking apps"]
+        resumed.number("tone.formality", 6).wrappedValue = 6
+        XCTAssertNil(resumed.wizard.answers.options)
+    }
+
+    func testShortcutLabelsSplitIntoKeysAndBandsFollowTheMac() {
+        XCTAssertEqual(SetupText.keys("⌥Space"), ["⌥", "Space"])
+        XCTAssertEqual(SetupText.keys("⌥⌘J"), ["⌥", "⌘", "J"])
+        XCTAssertEqual(SetupText.keys("----"), ["----"])
+        XCTAssertEqual(SetupText.parameters(.forMemory(24 << 30)), "9")
+        var wizard = SetupWizard(mac: Self.sampleMac)
+        XCTAssertEqual(SetupText.band(wizard), .standard)
+        wizard.storageGB = 60
+        XCTAssertEqual(SetupText.band(wizard), .standard, "Pro needs 32 GB of memory too")
+        wizard.mac.memoryBytes = 36 << 30
+        XCTAssertEqual(SetupText.band(wizard), .pro)
+        wizard.mac.memoryBytes = 16 << 30
+        XCTAssertEqual(SetupText.band(wizard), .lite)
+        XCTAssertEqual(SetupText.time(-15), SetupText.time(23 * 60 + 45), "times wrap round midnight")
+    }
+
     func testBriefTimeReadsInTheMacsFormat() {
         let shown = SetupText.time(6 * 60 + 30)
         XCTAssertTrue(shown.contains("6") && shown.contains("30"), shown)

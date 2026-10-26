@@ -1,8 +1,10 @@
+import AppKit
 import SwiftUI
 
 /// A slider drawn as a hairline track of fine ticks lit up to the value, a slanted thumb, labelled marks and an
 /// optional REC notch. Values above `warnFrom` sit in a hatched zone and turn the slider warn. `log` spreads small
-/// values out (20 GB to 745 GB). Drag it, click along it, or use the arrow keys and VoiceOver.
+/// values out (20 GB to 745 GB). As in the design, the Mac's own slider lies invisibly on top, so dragging, clicking
+/// along it, the arrow keys (once clicked) and VoiceOver all work as they do everywhere else.
 struct HUDRangeSlider<Display: View>: View {
     let label: String
     @Binding var value: Int
@@ -38,13 +40,16 @@ struct HUDRangeSlider<Display: View>: View {
             }
             GeometryReader { proxy in
                 track(width: proxy.size.width, tone: tone)
-                    .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
-                        guard !disabled else { return }
-                        value = amount(at: drag.location.x / max(proxy.size.width, 1))
-                    })
             }
             .frame(height: 26)
+            .overlay {
+                // Its knob overhangs each end by half its width, so the native values line up with the drawn ticks.
+                HUDNativeSlider(
+                    share: Binding(get: { share(value) }, set: { value = amount(at: $0) }), label: label, readout: "\(value)",
+                    enabled: !disabled
+                )
+                .padding(.horizontal, -HUDNativeSlider.knob / 2)
+            }
             if !marks.isEmpty {
                 GeometryReader { proxy in
                     ZStack(alignment: .topLeading) {
@@ -72,14 +77,6 @@ struct HUDRangeSlider<Display: View>: View {
             }
         }
         .opacity(disabled ? 0.45 : 1)
-        .focusable(!disabled)
-        .onMoveCommand { direction in
-            nudge(direction == .right || direction == .up ? 1 : direction == .left || direction == .down ? -1 : 0)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue("\(value)")
-        .accessibilityAdjustableAction { direction in nudge(direction == .increment ? 1 : -1) }
     }
 
     private func track(width: CGFloat, tone: HUDColor) -> some View {
@@ -129,12 +126,50 @@ struct HUDRangeSlider<Display: View>: View {
         let raw = log && low > 0 ? low * pow(high / low, fraction) : low + fraction * (high - low)
         return min(max(Int((raw / Double(step)).rounded()) * step, range.lowerBound), range.upperBound)
     }
+}
 
-    private func nudge(_ direction: Int) {
-        guard !disabled, direction != 0 else { return }
-        // On a log scale a key press moves about 2% along the track, as a step of 1 GB would barely show.
-        let next = log ? amount(at: share(value) + Double(direction) * 0.02) : value + direction * step
-        value = min(max(next == value ? value + direction * step : next, range.lowerBound), range.upperBound)
+/// The Mac's own slider, all but invisible over the drawn one: AppKit tracks the pointer and the arrow keys and tells
+/// VoiceOver the value, and the drawing shows where it stands.
+private struct HUDNativeSlider: NSViewRepresentable {
+    /// The knob's width, which overhangs the drawn track by half at each end.
+    @MainActor static let knob = NSSlider().knobThickness
+
+    @Binding var share: Double
+    let label: String
+    let readout: String
+    let enabled: Bool
+
+    func makeNSView(context: Context) -> NSSlider {
+        let slider = NSSlider(value: share, minValue: 0, maxValue: 1, target: context.coordinator, action: #selector(Coordinator.moved(_:)))
+        slider.isContinuous = true
+        slider.alphaValue = 0.011
+        return slider
+    }
+
+    func updateNSView(_ slider: NSSlider, context: Context) {
+        context.coordinator.share = $share
+        if abs(slider.doubleValue - share) > 0.002 {
+            slider.doubleValue = share
+        }
+        slider.isEnabled = enabled
+        slider.setAccessibilityLabel(label)
+        slider.setAccessibilityValueDescription(readout)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(share: $share)
+    }
+
+    @MainActor final class Coordinator: NSObject {
+        var share: Binding<Double>
+
+        init(share: Binding<Double>) {
+            self.share = share
+        }
+
+        @objc func moved(_ slider: NSSlider) {
+            share.wrappedValue = slider.doubleValue
+        }
     }
 }
 

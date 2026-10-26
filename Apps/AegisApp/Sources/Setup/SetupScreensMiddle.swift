@@ -30,7 +30,7 @@ struct SourcesScreen: View {
                     .buttonStyle(HUDPlateStyle(compact: true))
             }
             HUDSettingRow(label: "Messenger", meta: "install the Mac app", compact: true) {
-                Button("Show me") { SetupLink.open("macappstore://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?q=Messenger") }
+                Button("Show me") { SetupLink.open("macappstores://apps.apple.com/app/id1480068668") }
                     .buttonStyle(HUDPlateStyle(compact: true))
             }
         } side: {
@@ -303,15 +303,17 @@ struct PrivacyScreen: View {
             )
             SetupChips(items: people, empty: "None yet. Aegis won’t read or remember anything from a chat or person you add here.")
             if adding {
-                HUDTermInput(prompt: "who >", text: $person, placeholder: "a name or group chat", hint: "return to add")
-                    .onSubmit {
-                        let name = person.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !name.isEmpty, !people.wrappedValue.contains(name) {
-                            people.wrappedValue.append(name)
-                        }
-                        person = ""
-                        adding = false
+                HUDTermInput(prompt: "who >", text: $person, placeholder: "a name or group chat", hint: "return to add", autofocus: true) {
+                    setup.typing = $0
+                }
+                .onSubmit {
+                    let name = person.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty, !people.wrappedValue.contains(name) {
+                        people.wrappedValue.append(name)
                     }
+                    person = ""
+                    adding = false
+                }
             } else {
                 Button("Add chat or person") { adding = true }.buttonStyle(HUDPlateStyle(compact: true))
             }
