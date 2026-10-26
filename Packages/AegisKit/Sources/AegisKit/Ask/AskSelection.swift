@@ -50,7 +50,8 @@ struct AskSelection {
             of: #"\b(?:did i|have i|i)\s+(?:send|sent|write|wrote|email|emailed|text|texted)\b"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
-        let received = words.contains { ["get", "got", "receive", "received", "inbox"].contains($0) }
+        // "What have I got on" is the calendar, not what arrived.
+        let received = !query.schedule && words.contains { ["get", "got", "receive", "received", "inbox"].contains($0) }
         direction = sent ? .outgoing : (received ? .incoming : nil)
         let pattern = #"\b(?:from|sent by|written by)\s+(.+?)(?=\s+(?:today|yesterday|tonight|this|last|next|on|about|regarding|say|said|says|to|in|mention|mentions|mentioned)\b|[?!]|$)"#
         let raw = source == nil ? nil : question.range(of: pattern, options: [.regularExpression, .caseInsensitive]).map {

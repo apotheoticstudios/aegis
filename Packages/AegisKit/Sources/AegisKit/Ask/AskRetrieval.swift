@@ -105,7 +105,13 @@ enum AskRetrieval {
         lines = query.schedule ? schedules + lines : lines + schedules
         var input = try assemble(lines, question: question, now: now, calendar: calendar)
         input.prefersGrounded = selection.isReadRequest || onlySender
-        if selection.isReadRequest, input.isEmpty {
+        // Only for a question purely about the schedule ("what have I got on"): one with a topic of its own goes on as before.
+        if query.schedule, !onlySender, selection.source == nil, selection.terms.allSatisfy(AskQuery.scheduleWords.contains),
+           input.isEmpty
+        {
+            // Said plainly rather than left to a general chat that might guess.
+            input.directAnswer = "There's nothing in your calendar or reminders for that time."
+        } else if selection.isReadRequest, input.isEmpty {
             input.directAnswer = "I couldn't find matching " + (selection.source == .mail ? "email" : "records") + " for that time in what I have available."
         } else if namedPerson, input.isEmpty {
             input.directAnswer = Ask.notFound
@@ -113,7 +119,8 @@ enum AskRetrieval {
         return input
     }
 
-    /// Calendar occurrences and reminders for the question's calendar window: at most 10, soonest first.
+    /// Calendar occurrences and reminders for the question's calendar window, soonest first: up to 30 for a question
+    /// about the schedule, 10 otherwise.
     private static func scheduleLines(
         query: AskQuery,
         store: any EventStore,
@@ -165,7 +172,8 @@ enum AskRetrieval {
                 )
             ))
         }
-        return Array(scheduleLines.sorted { $0.0 == $1.0 ? $0.1.id < $1.1.id : $0.0 < $1.0 }.prefix(10).map(\.1))
+        // A week of plans needs more than the ten a passing mention of the calendar gets.
+        return Array(scheduleLines.sorted { $0.0 == $1.0 ? $0.1.id < $1.1.id : $0.0 < $1.0 }.prefix(query.schedule ? 30 : 10).map(\.1))
     }
 
     /// One context line in plain words, so a small model can't mistake a question for a fact:
