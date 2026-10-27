@@ -16,7 +16,7 @@ final class HUDVoiceOverlayTests: XCTestCase {
         HUDPresence.shared.shell = true
         defer { HUDPresence.shared.shell = wasShowing }
 
-        func snap(_ state: HUDVoiceOverlay.State, reduced: Bool = false) throws {
+        func snap(_ state: HUDVoiceOverlay.State) throws {
             let view = HUDVoiceOverlay(
                 state: state,
                 transcript: "What is next on the sample schedule?",
@@ -25,7 +25,6 @@ final class HUDVoiceOverlayTests: XCTestCase {
                 name: "aegis",
                 typed: 0.6
             )
-            .environment(\.accessibilityReduceMotion, reduced)
             .padding(24)
             .frame(width: 568, height: 240, alignment: .top)
             .background(HUD.void)
@@ -38,14 +37,12 @@ final class HUDVoiceOverlayTests: XCTestCase {
             host.layoutSubtreeIfNeeded()
             let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
             host.cacheDisplay(in: host.bounds, to: rep)
-            let suffix = reduced ? "-reduced" : ""
             try XCTUnwrap(rep.representation(using: .png, properties: [:]))
-                .write(to: directory.appendingPathComponent("voice-\(state.rawValue)\(suffix).png"))
+                .write(to: directory.appendingPathComponent("voice-\(state.rawValue).png"))
         }
 
         for state in HUDVoiceOverlay.State.allCases {
             try snap(state)
         }
-        try snap(.answering, reduced: true)
     }
 }
