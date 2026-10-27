@@ -46,9 +46,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         // ⌥Space first; other apps (the ChatGPT app, for one) may already own it, so fall back in order.
         for choice in GlobalHotKey.Choice.preferred {
-            // While AegisShell is engaged, ⌥Space opens its launcher instead (the design's Launcher).
+            // While AegisShell is engaged, ⌥Space opens its launcher instead (the design's Launcher), but an open panel
+            // still closes with it.
             if let registered = GlobalHotKey(choice, action: { [weak self] in
-                ShellController.shared.isOn ? ShellLauncher.shared.toggle() : self?.togglePanel()
+                guard let self else { return }
+                if ShellController.shared.isOn, !panel.isVisible {
+                    ShellLauncher.shared.toggle()
+                } else {
+                    togglePanel()
+                }
             }) {
                 hotKey = registered
                 hotKeyLabel = choice.label
