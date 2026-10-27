@@ -23,6 +23,40 @@ enum HUDAscii {
         case hourglass, fingerprint
         /// Bands that stretch to any shape: an equaliser (the brief, voice), a wireframe floor rolling toward you.
         case spectrum, horizon
+        /// A sphere with a light circling it.
+        case orb
+        /// A targeting reticle: spokes turn and the inner ring breathes.
+        case reticle
+        /// A heart beating with a double pulse every 1.2 s.
+        case heart
+        /// A globe spinning on its axis.
+        case globe
+        /// Flight down a ringed tunnel: rings rush outward, rails twist and the far end glows.
+        case tunnel
+        /// A banded planet with a ring passing behind and in front, and an orbiting moon.
+        case planet
+        /// A heavy cloud with slanting rain and a lightning strike every 4.5 s.
+        case storm
+        /// A bright sun disc with long and short rays turning slowly and breathing.
+        case sun
+        /// A crescent moon with craters, earthshine and twinkling stars.
+        case moon
+        /// A processor: package, pins, traces carrying pulses and cores lighting up on the die.
+        case chip
+        /// Falling code: each column has its own speed and length, with the head brightest.
+        case rain
+        /// A skyline at night: towers, windows going on and off, and a blinking mast.
+        case city
+        /// A black hole: shadow, photon ring and a turning accretion disc bent over the top.
+        case blackhole
+        /// Home in plan view: lit rooms, an open garage door with a pulsing alarm, and a locked front door.
+        case floorplan
+        /// A lit torus tilting back and forth while bands run round it, shaded by a fixed light.
+        case torus
+        /// A hypercube turning through the fourth dimension: inner and outer cubes trade places.
+        case tesseract
+        /// An atom: three orbits at 60°, electrons with short trails and a busy nucleus.
+        case atom
     }
 
     /// The art as lines, `time` seconds in (0 is the still frame); `grit` breaks the shading up like hand-made art.
@@ -35,7 +69,16 @@ enum HUDAscii {
         return (0 ..< rows).map { row in
             for col in 0 ..< cols {
                 let cell = row * cols + col
-                var level = heart.isEmpty ? density(shape, grid.across[col], grid.down[row], time, aspect)
+                var level = heart.isEmpty ? density(
+                    shape,
+                    grid.across[col],
+                    grid.down[row],
+                    time,
+                    aspect,
+                    column: col,
+                    row: row,
+                    rows: rows
+                )
                     : HUDAnatomy.density(heart[cell], time)
                 if level > 0 {
                     level += grid.grain[cell]
@@ -122,8 +165,14 @@ enum HUDAscii {
     }
 
     /// How dense the shape is at (across, down) in -1...1 (down runs down), 0 to 1.
-    static func density(_ shape: Shape, _ across: Double, _ down: Double, _ time: Double, _ aspect: Double) -> Double {
-        switch shape {
+    /// Exhaustive dispatch keeps each shape's coordinate convention visible here.
+    static func density( // swiftlint:disable:this cyclomatic_complexity
+        _ shape: Shape, _ across: Double, _ down: Double, _ time: Double, _ aspect: Double,
+        column: Int? = nil, row: Int = 0, rows: Int = 0
+    ) -> Double {
+        let fittedAcross = aspect > 1 ? across * aspect : across
+        let fittedDown = aspect > 1 ? down : down / aspect
+        return switch shape {
         case .radar: radar(across, down, time)
         case .eye: HUDEye.density(across, down, time, aspect)
         case .helix: helix(across, down, time)
@@ -138,11 +187,28 @@ enum HUDAscii {
         // Strips stretch to their band, as the design's do.
         case .spectrum: spectrum(across, down, time)
         case .horizon: horizon(across, down, time)
+        case .orb: orb(fittedAcross, fittedDown, time)
+        case .reticle: reticle(fittedAcross, fittedDown, time)
+        case .heart: heart(fittedAcross, fittedDown, time)
+        case .globe: globe(fittedAcross, fittedDown, time)
+        case .tunnel: tunnel(fittedAcross, fittedDown, time)
+        case .planet: planet(fittedAcross, fittedDown, time)
+        case .storm: storm(fittedAcross, fittedDown, time)
+        case .sun: sun(fittedAcross, fittedDown, time)
+        case .moon: moon(fittedAcross, fittedDown, time)
+        case .chip: chip(fittedAcross, fittedDown, time)
+        case .rain: rain(column: column, row: row, rows: rows, time: time)
+        case .city: city(across, down, time)
+        case .blackhole: blackhole(fittedAcross, fittedDown, time)
+        case .floorplan: floorplan(across, down, time, aspect)
+        case .torus: torus(fittedAcross, fittedDown, time)
+        case .tesseract: tesseract(fittedAcross, fittedDown, time)
+        case .atom: atom(fittedAcross, fittedDown, time)
         }
     }
 
     /// JavaScript's `%` made positive.
-    private static func wrap(_ value: Double) -> Double {
+    static func wrap(_ value: Double) -> Double {
         let rest = value.truncatingRemainder(dividingBy: 1)
         return rest < 0 ? rest + 1 : rest
     }
