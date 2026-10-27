@@ -224,6 +224,23 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(ShellWeather("Weather at home: 20 to 31°. Storms are possible (60%).").headline, "Storms")
     }
 
+    func testEachWorkspaceHasItsLine() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let readings = ShellController.Readings(
+            urgent: 2, events: [HUDScheduleArc.Event(
+                start: now.addingTimeInterval(3600),
+                end: now.addingTimeInterval(7200),
+                title: "Lunch"
+            )],
+            now: now
+        )
+        XCTAssertEqual(ShellDesktop.line(.work, readings: readings, hidden: true).lead, "Two things need you.")
+        XCTAssertEqual(ShellDesktop.line(.focus, readings: readings, hidden: true).lead, "Focus.")
+        XCTAssertEqual(ShellDesktop.line(.movie, readings: readings, hidden: false).rest, "2 urgent waiting in the panel.")
+        XCTAssertEqual(ShellWorkspace.focus.accent, .workspaceFocus)
+        XCTAssertEqual(ShellWorkspace.work.accent, .primary, "Work's accent is the theme's own signal")
+    }
+
     func testTheReadingsWording() {
         XCTAssertEqual(ShellReadings.toGo(25 * 60 - 10).value, "25")
         XCTAssertEqual(ShellReadings.toGo(25 * 60).unit, "min to go")
@@ -322,6 +339,11 @@ final class ShellTests: XCTestCase {
             CGSize(width: 2560, height: 1440),
             "desktop-27.png"
         )
+        for workspace in [ShellWorkspace.focus, .evening, .movie] {
+            shell.switchTo(workspace)
+            try snap(ShellDesktop(shell: shell, size: size, top: 37), size, "workspace-\(workspace.rawValue).png")
+        }
+        shell.switchTo(.work)
         try snap(ShellMenuExtra(shell: shell).background(Color(white: 0.08)), CGSize(width: 260, height: 24), "item-engaging.png")
         shell.itemComplete = true
         shell.panelKey = "⌥Space"

@@ -21,6 +21,8 @@ enum HUDToken: CaseIterable, Sendable {
     case ok, warn, critical
     /// Keyboard focus.
     case focus
+    /// AegisShell's workspace accents (Work's is `primary`): set per theme so they never clash with its signal or states.
+    case workspaceFocus, workspaceEvening, workspaceMovie
 }
 
 /// The five themes. They share every token, so switching theme changes colour and nothing else. Arc is the default.
@@ -56,6 +58,7 @@ enum HUDTheme: String, CaseIterable, Sendable {
             .frame: 0x3D8F_D6FF, .ink: 0xDCEF_FFFF, .inkMuted: 0x86B3_D9FF, .primary: 0x3FA9_FFFF,
             .primarySoft: 0x0D35_57FF, .onPrimary: 0x0212_20FF, .accent: 0xBFE6_FFFF, .accentSoft: 0x1232_4AFF,
             .onAccent: 0x0212_20FF, .ok: 0x5CF2_C4FF, .warn: 0xFFB5_47FF, .critical: 0xFF5C_72FF, .focus: 0xFFFF_FFFF,
+            .workspaceFocus: 0x8F9B_FFFF, .workspaceEvening: 0xD6A0_FFFF, .workspaceMovie: 0xFFCF_8AFF,
         ],
         .automaton: [
             .void: 0x0606_0CFF, .nebula: 0x6E24_57FF, .surface: 0x0B10_16FF, .surfaceGlass: 0x1D25_2966,
@@ -63,6 +66,7 @@ enum HUDTheme: String, CaseIterable, Sendable {
             .frame: 0x5FBF_B6FF, .ink: 0xEEF7_F6FF, .inkMuted: 0x9BB8_B6FF, .primary: 0x62E3_D3FF,
             .primarySoft: 0x0F39_36FF, .onPrimary: 0x0314_13FF, .accent: 0xFF45_61FF, .accentSoft: 0x3A0D_18FF,
             .onAccent: 0x1203_0AFF, .ok: 0x8FF0_A8FF, .warn: 0xFFC0_4DFF, .critical: 0xFF7A_8CFF, .focus: 0xFFFF_FFFF,
+            .workspaceFocus: 0x9CC2_FFFF, .workspaceEvening: 0xE2A8_FFFF, .workspaceMovie: 0xFFCF_9EFF,
         ],
         .phosphor: [
             .void: 0x0706_0DFF, .nebula: 0x2A1F_5CFF, .surface: 0x0D0B_1AFF, .surfaceGlass: 0x221F_2E66,
@@ -70,6 +74,7 @@ enum HUDTheme: String, CaseIterable, Sendable {
             .frame: 0x9D95_FFFF, .ink: 0xE4E0_FFFF, .inkMuted: 0xA69E_E6FF, .primary: 0xB3A8_FFFF,
             .primarySoft: 0x241E_52FF, .onPrimary: 0x0B08_20FF, .accent: 0xF3F0_FFFF, .accentSoft: 0x2B25_60FF,
             .onAccent: 0x0B08_20FF, .ok: 0x8FF5_C8FF, .warn: 0xFFC6_63FF, .critical: 0xFF7D_9AFF, .focus: 0xFFFF_FFFF,
+            .workspaceFocus: 0x8FD8_FFFF, .workspaceEvening: 0xFFB3_E0FF, .workspaceMovie: 0xFFE3_A3FF,
         ],
         .redline: [
             .void: 0x0505_05FF, .nebula: 0x3A0B_0BFF, .surface: 0x0D0D_0EFF, .surfaceGlass: 0x1F1F_2166,
@@ -77,6 +82,7 @@ enum HUDTheme: String, CaseIterable, Sendable {
             .frame: 0x8A8A_90FF, .ink: 0xF2F2_F2FF, .inkMuted: 0xA3A3_A8FF, .primary: 0xFF45_45FF,
             .primarySoft: 0x3D0E_0EFF, .onPrimary: 0x1400_00FF, .accent: 0xF5F5_F5FF, .accentSoft: 0x2A2A_2EFF,
             .onAccent: 0x0A0A_0AFF, .ok: 0x9FE3_FFFF, .warn: 0xFFD8_4AFF, .critical: 0xFF9A_3CFF, .focus: 0xFFFF_FFFF,
+            .workspaceFocus: 0xC9D3_DBFF, .workspaceEvening: 0xD8A8_FFFF, .workspaceMovie: 0xFFE7_B0FF,
         ],
         .matrix: [
             .void: 0x0107_03FF, .nebula: 0x0A3A_1CFF, .surface: 0x0310_0AFF, .surfaceGlass: 0x1626_1B66,
@@ -84,6 +90,7 @@ enum HUDTheme: String, CaseIterable, Sendable {
             .frame: 0x2EC4_5AFF, .ink: 0xD8FF_E2FF, .inkMuted: 0x78D0_8FFF, .primary: 0x00FF_41FF,
             .primarySoft: 0x0636_1AFF, .onPrimary: 0x0014_07FF, .accent: 0xEAFF_EEFF, .accentSoft: 0x1640_2AFF,
             .onAccent: 0x021A_0BFF, .ok: 0x8FE9_FFFF, .warn: 0xFFD4_47FF, .critical: 0xFF7A_45FF, .focus: 0xFFFF_FFFF,
+            .workspaceFocus: 0xB6FF_F0FF, .workspaceEvening: 0xF0B8_FFFF, .workspaceMovie: 0xFFF1_B8FF,
         ],
     ]
 }

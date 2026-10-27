@@ -11,6 +11,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
 | — | Real mornings and feedback on the new features | agent:human | — | Owner's reviews drive the next fixes |
+| — | AegisShell workspaces: Work, Focus, Evening, Movie (menu, ⌃1–4, voice), each with its accent, wash and scene | agent:claude | claude/shell-workspaces | Merged; the owner's first real run to come |
 | #83 | AegisShell stages 3–6: the stream (#78), world and home readings, the art shapes (#77), window layouts (#83); launcher fix (present while engaged) | agent:claude + agent:codex | merged | The owner's first real run to come |
 | — | AegisShell stage 5: the launcher (⌥Space while engaged; apps, files, settings, commands and Ask Aegis; through ActionPolicy) | agent:claude | claude/shell-launcher | Merged; the owner's first real run to come |
 | — | AegisShell stage 3: the readings round the core (status, next up, waiting orbit, system arcs, brief, ask line, ground), the still frame, Hide details (on by default) and Hold still in Aegis's menu (ADR-0033) | agent:claude | claude/shell-readings | Merged; the owner's first real run to come |

@@ -1,3 +1,4 @@
+import AegisKit
 import AppKit
 import SwiftUI
 
@@ -135,8 +136,8 @@ struct ShellMenuExtra: View {
             }
             if shell.itemComplete {
                 HStack(spacing: 5) {
-                    Rectangle().fill(theme.color(.primary)).frame(width: 6, height: 6)
-                    Text("Work")
+                    Rectangle().fill(theme.color(shell.workspace.accent)).frame(width: 6, height: 6)
+                    Text(shell.workspace.name)
                 }
                 HStack(spacing: 5) {
                     Rectangle().fill(theme.color(status.tone)).frame(width: 5, height: 5)
@@ -163,7 +164,7 @@ struct ShellMenuExtra: View {
         .padding(.horizontal, 7)
         .frame(height: 24)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Aegis: Work, \(status.word)" + (urgent > 0 ? ", \(urgent) urgent" : ""))
+        .accessibilityLabel("Aegis: \(shell.workspace.name), \(status.word)" + (urgent > 0 ? ", \(urgent) urgent" : ""))
     }
 }
 
@@ -256,6 +257,14 @@ struct ShellMenu: View {
                 .padding(.vertical, 8)
                 .overlay(alignment: .bottom) { Rectangle().fill(HUD.glassEdge).frame(height: 1) }
             }
+            Text("Workspace").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
+                .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
+            ForEach(Array(ShellWorkspace.allCases.enumerated()), id: \.offset) { index, workspace in
+                ShellWorkspaceRow(workspace: workspace, number: index + 1, chosen: workspace == shell.workspace) {
+                    close()
+                    shell.switchTo(workspace)
+                }
+            }
             Text("Aegis").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
             row("Launcher", keys: shell.panelKey) { ShellLauncher.shared.open() }
@@ -337,6 +346,50 @@ struct ShellMenu: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(ShellRowStyle())
+    }
+}
+
+/// A workspace in the menu: its accent pip, its name (ticked when it's the one showing) and ⌃1–4; the one showing
+/// carries an accent edge.
+private struct ShellWorkspaceRow: View {
+    let workspace: ShellWorkspace
+    let number: Int
+    let chosen: Bool
+    let choose: () -> Void
+    @Environment(\.hudTheme) private var theme
+
+    var body: some View {
+        let accent = theme.color(workspace.accent)
+        Button(action: choose) {
+            HStack(spacing: HUD.space2) {
+                Rectangle().fill(accent).frame(width: 6, height: 6)
+                Text(workspace.name).hudType(.body)
+                if chosen {
+                    Text("✓").font(HUDFace.mono(12)).foregroundStyle(HUD.ok)
+                }
+                Spacer()
+                HUDKeyCaps(keys: ["⌃", String(number)])
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 28)
+            .background {
+                if chosen {
+                    LinearGradient(
+                        stops: [.init(color: accent.opacity(0.16), location: 0), .init(color: .clear, location: 0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                }
+            }
+            .overlay(alignment: .leading) {
+                if chosen {
+                    Rectangle().fill(accent).frame(width: 2).shadow(color: accent, radius: 3)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ShellRowStyle())
+        .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 }
 

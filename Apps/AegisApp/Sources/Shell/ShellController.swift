@@ -65,6 +65,14 @@ final class ShellController {
         didSet { UserDefaults.aegis.set(hideDetails, forKey: "shellHideDetails") }
     }
 
+    /// The workspace showing: its accent, scene and art. Kept across launches.
+    var workspace = UserDefaults.aegis.string(forKey: "shellWorkspace").flatMap(ShellWorkspace.init(rawValue:)) ?? .work {
+        didSet { UserDefaults.aegis.set(workspace.rawValue, forKey: "shellWorkspace") }
+    }
+
+    /// When the workspace last changed, for the switch's crossfade.
+    private(set) var switchedAt: Date?
+
     /// The desktop held still by the owner's choice.
     var holdStill = UserDefaults.aegis.bool(forKey: "shellHoldStill") {
         didSet {
@@ -90,6 +98,7 @@ final class ShellController {
     @ObservationIgnored private var windows: [NSWindow] = []
     @ObservationIgnored private var items: ShellMenuBarItems?
     @ObservationIgnored private var hotKey: GlobalHotKey?
+    @ObservationIgnored private var workspaceKeys: [GlobalHotKey] = []
     @ObservationIgnored private var refresher: Task<Void, Never>?
     @ObservationIgnored private let dockQueue = ShellQueue()
     @ObservationIgnored private var screens: (any NSObjectProtocol)?
@@ -135,7 +144,22 @@ final class ShellController {
             guard phase != .off else { return "AegisShell isn't engaged." }
             disengage()
             return "Standing down."
+        case let .workspace(next):
+            if phase == .off {
+                workspace = next
+                await engage()
+            } else {
+                switchTo(next)
+            }
+            return "\(next.name)."
         }
+    }
+
+    /// The design's switch: the readings go, the wash crossfades to the new accent and the new scene draws in.
+    func switchTo(_ next: ShellWorkspace) {
+        guard next != workspace else { return }
+        workspace = next
+        switchedAt = Date()
     }
 
     func engage() async {
@@ -145,6 +169,13 @@ final class ShellController {
         itemComplete = false
         HUDPresence.shared.shell = true
         items = ShellMenuBarItems(shell: self)
+        // ⌃1–4 switch workspaces while engaged.
+        let keys = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4]
+        workspaceKeys = zip(ShellWorkspace.allCases, keys).enumerated().compactMap { index, pair in
+            GlobalHotKey(
+                .init(keyCode: UInt32(pair.1), modifiers: UInt32(controlKey), label: "⌃\(index + 1)"), number: UInt32(4 + index)
+            ) { [weak self] in self?.switchTo(pair.0) }
+        }
         openWindows()
         checkStill()
         // The Dock drops away first, as the design's engage begins.
@@ -228,6 +259,8 @@ final class ShellController {
         still = nil
         items?.remove()
         items = nil
+        workspaceKeys.forEach { $0.unregister() }
+        workspaceKeys = []
         ShellWindows.restore()
         HUDPresence.shared.shell = false
         if let screens {
@@ -363,6 +396,18 @@ final class ShellController {
                 }
                 self.openWindows()
             }
+        }
+    }
+}
+
+extension ShellWorkspace {
+    /// Its accent: Work's is the theme's own signal.
+    var accent: HUDToken {
+        switch self {
+        case .work: .primary
+        case .focus: .workspaceFocus
+        case .evening: .workspaceEvening
+        case .movie: .workspaceMovie
         }
     }
 }
