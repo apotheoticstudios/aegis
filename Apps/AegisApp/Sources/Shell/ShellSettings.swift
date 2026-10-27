@@ -96,3 +96,19 @@ struct SystemDock: ShellDock {
         return process.terminationStatus == 0
     }
 }
+
+/// Runs work one piece after another, in the order it was asked for, each waiting for the last to finish.
+@MainActor
+final class ShellQueue {
+    private var last: Task<Void, Never>?
+
+    func run(_ work: @escaping @MainActor () async -> Void) async {
+        let previous = last
+        let next = Task { @MainActor in
+            await previous?.value
+            await work()
+        }
+        last = next
+        await next.value
+    }
+}

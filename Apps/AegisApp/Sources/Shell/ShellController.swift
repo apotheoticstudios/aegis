@@ -76,6 +76,7 @@ final class ShellController {
     @ObservationIgnored private var items: ShellMenuBarItems?
     @ObservationIgnored private var hotKey: GlobalHotKey?
     @ObservationIgnored private var refresher: Task<Void, Never>?
+    @ObservationIgnored private let dockQueue = ShellQueue()
     @ObservationIgnored private var screens: (any NSObjectProtocol)?
     @ObservationIgnored private var occlusion: [any NSObjectProtocol] = []
 
@@ -131,8 +132,12 @@ final class ShellController {
         items = ShellMenuBarItems(shell: self)
         openWindows()
         checkStill()
+        // The Dock drops away first, as the design's engage begins.
+        await dock { $0.dockProblem = await !($0.settings.apply()) }
+        // Disengaged meanwhile: nothing more to start.
+        guard engaging(since: start) else { return }
         await refreshReadings()
-        dockProblem = await !(settings.apply())
+        guard engaging(since: start) else { return }
         refresher = Task { [weak self] in
             // Whether to hold still every 10 s; the NOW mark each minute; everything else every five.
             var tick = 0
@@ -167,8 +172,25 @@ final class ShellController {
         refresher?.cancel()
         Task {
             await settle(start, at: reduced ? 0 : ShellMotion.dockReturns) { _ in }
-            await settings.restore()
+            await dock { await $0.settings.restore() }
             await settle(start, at: reduced ? ShellMotion.reduced : ShellMotion.disengaged) { $0.finish() }
+        }
+    }
+
+    private func engaging(since start: Date) -> Bool {
+        if case let .engaging(began) = phase {
+            return began == start
+        }
+        return false
+    }
+
+    /// Dock changes run one after another, so a restore always follows any hide still under way: disengaging in the
+    /// middle of engaging can't leave the Dock hidden or lose the saved setting.
+    private func dock(_ work: @escaping @MainActor (ShellController) async -> Void) async {
+        await dockQueue.run { [weak self] in
+            if let self {
+                await work(self)
+            }
         }
     }
 
@@ -257,10 +279,11 @@ final class ShellController {
             let window = NSPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-            window.isOpaque = true
+            // See-through until the wall fades in, so engaging and leaving cross-fade with the wallpaper.
+            window.isOpaque = false
             window.hasShadow = false
             window.isReleasedWhenClosed = false
-            window.backgroundColor = .black
+            window.backgroundColor = .clear
             let top = screen.frame.maxY - screen.visibleFrame.maxY
             window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size, top: top))
             window.setFrame(screen.frame, display: false)

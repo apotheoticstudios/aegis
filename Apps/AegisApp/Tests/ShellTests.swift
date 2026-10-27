@@ -88,6 +88,44 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(unknown.changes, 0)
     }
 
+    /// Codex's review of #74: disengaging while the Dock is still being hidden must restore it after the hide.
+    func testARestoreWaitsForAHideUnderWay() async {
+        final class SlowDock: ShellDock {
+            var value: Bool? = false
+            var gate: CheckedContinuation<Void, Never>?
+            var waiting: CheckedContinuation<Void, Never>?
+
+            func autohide() -> Bool? {
+                value
+            }
+
+            func set(autohide: Bool) async -> Bool {
+                if autohide {
+                    // The hide is slow: it waits until the test lets it through.
+                    await withCheckedContinuation { gate = $0
+                        waiting?.resume()
+                    }
+                }
+                value = autohide
+                return true
+            }
+
+            func setNow(autohide: Bool) -> Bool {
+                value = autohide
+                return true
+            }
+        }
+        let dock = SlowDock(), settings = ShellSettings(dock: dock, file: file()), queue = ShellQueue()
+        let hiding = Task { await queue.run { _ = await settings.apply() } }
+        await withCheckedContinuation { dock.waiting = $0 }
+        let restoring = Task { await queue.run { await settings.restore() } }
+        dock.gate?.resume()
+        await hiding.value
+        await restoring.value
+        XCTAssertEqual(dock.value, false, "the Dock is back as it was")
+        XCTAssertNil(settings.saved, "nothing left to restore")
+    }
+
     /// The design's timing: ShellEngage's table.
     func testEngageAndDisengageKeepTheDesignsTiming() {
         let start = ShellMotion.engage(0, traceLength: 2000, reduced: false)

@@ -47,7 +47,6 @@ struct ShellDesktop: View {
             .opacity(frame.all)
         }
         .frame(width: size.width, height: size.height)
-        .background(theme.color(.void))
         .environment(\.hudTheme, theme)
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)
@@ -85,18 +84,22 @@ struct ShellDesktop: View {
 
     // MARK: - Layers
 
-    /// The ground: the nebula wash mixed with the workspace's accent (Work's is the theme's own signal).
+    /// The ground: the void with the nebula wash mixed with the workspace's accent (Work's is the theme's own signal). It
+    /// fades in over the wallpaper as engaging builds, and out with everything else when leaving.
     private var wall: some View {
         let nebula = theme.rgba(.nebula), accent = theme.rgba(.primary)
         func mix(_ shift: UInt32) -> Double {
             HUDTheme.channel(nebula, shift) * 0.78 + HUDTheme.channel(accent, shift) * 0.22
         }
         // An ellipse 42% of the width by 46% of the height, fading out at 70% of it.
-        return EllipticalGradient(
-            colors: [Color(.sRGB, red: mix(24), green: mix(16), blue: mix(8)), .clear],
-            center: UnitPoint(x: 0.5, y: 0.52), endRadiusFraction: 0.42 * 0.7
-        )
-        .scaleEffect(x: 1, y: 0.46 / 0.42, anchor: UnitPoint(x: 0.5, y: 0.52))
+        return ZStack {
+            Rectangle().fill(theme.color(.void))
+            EllipticalGradient(
+                colors: [Color(.sRGB, red: mix(24), green: mix(16), blue: mix(8)), .clear],
+                center: UnitPoint(x: 0.5, y: 0.52), endRadiusFraction: 0.42 * 0.7
+            )
+            .scaleEffect(x: 1, y: 0.46 / 0.42, anchor: UnitPoint(x: 0.5, y: 0.52))
+        }
         .frame(width: size.width, height: size.height)
     }
 
