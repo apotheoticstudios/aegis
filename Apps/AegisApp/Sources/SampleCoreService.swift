@@ -19,6 +19,8 @@ struct SampleCoreService: CoreService {
         case .sources:
             // The sample has no stored messages behind it.
             .events([])
+        case let .recentEvents(limit):
+            .events(Array(Self.recentEvents(now: Date()).prefix(min(max(limit, 1), 50))))
         case .schedule:
             .schedule(occurrences: [], reminders: [])
         case .filtered:
@@ -82,6 +84,29 @@ struct SampleCoreService: CoreService {
                 loadSeconds: 3.1, firstTokenSeconds: 0.4, generateSeconds: 7.2, generationTokens: 200, peakMemoryBytes: 6_400_000_000
             ))
         }
+    }
+
+    static func recentEvents(now: Date) -> [Event] {
+        func sample(source: Event.Source, sender: String, body: String, age: TimeInterval) -> Event {
+            let time = now.addingTimeInterval(-age)
+            let recordID = "sample-stream-" + source.rawValue
+            let route: Event.Observation.Route = switch source {
+            case .imessage, .sms: .chatDB
+            case .email: .mailStore
+            case .notification: .notificationDB
+            }
+            return Event(
+                source: source, sourceRecordID: recordID, appID: nil, sender: sender, threadID: nil,
+                eventTime: time, eventTimeSource: source == .notification ? .delivered : .sent,
+                captureTime: time, title: nil, body: body, content: .complete,
+                observations: [.init(route: route, sourceRecordID: recordID, captureTime: time)]
+            )
+        }
+        return [
+            sample(source: .imessage, sender: "Alex Example", body: "Can you call me about Saturday?", age: 300),
+            sample(source: .email, sender: "Jordan Sample", body: "The example plan is ready to review.", age: 600),
+            sample(source: .notification, sender: "Example Weather", body: "Rain expected this afternoon.", age: 900),
+        ]
     }
 
     /// A made-up day's rhythm, counts only: quiet overnight, busy through the working day.

@@ -106,6 +106,16 @@ final class IPCContractTests: XCTestCase {
         }
     }
 
+    func testRecentEventsMessagesRoundTripAndAdditiveJSONShape() throws {
+        for limit in [Int.min, 0, 1, 20, 50, Int.max] {
+            try roundTrip(CoreRequest.recentEvents(limit: limit))
+        }
+        let encoded = try IPCCoding.encode(CoreRequest.recentEvents(limit: 20))
+        XCTAssertEqual(String(data: encoded, encoding: .utf8), #"{"recentEvents":{"limit":20}}"#)
+        try roundTrip(CoreResponse.events([ownerRuleEvent("recent", at: now)]))
+        try roundTrip(CoreResponse.events([]))
+    }
+
     func testMeetingPrepMessagesRoundTrip() throws {
         try roundTrip(CoreRequest.prep(occurrenceID: prepOccurrence().id))
         try roundTrip(CoreResponse.answer(Answer(

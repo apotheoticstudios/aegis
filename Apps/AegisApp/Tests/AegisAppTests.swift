@@ -311,7 +311,7 @@ final class RecordingCore: CoreService, @unchecked Sendable {
         case .refreshBrief:
             lock.withLock { refreshed = true }
             return .accepted(jobID: "brief-1")
-        case .sources:
+        case .sources, .recentEvents:
             return .events([])
         case .schedule:
             return .schedule(occurrences: [], reminders: [])

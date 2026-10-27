@@ -62,6 +62,8 @@ extension CoreEngine {
             return prepareModel()
         case let .sources(ids):
             return await sourceEvents(ids)
+        case let .recentEvents(limit):
+            return await recentEvents(limit: limit)
         case let .schedule(start, end):
             return await scheduleItems(from: start, to: end)
         case .ask, .prep, .converse, .worldPlan, .commandPlan:
@@ -107,6 +109,18 @@ extension CoreEngine {
             return try await .schedule(
                 occurrences: store.occurrences(from: start, to: end), reminders: store.reminders(from: start, to: end)
             )
+        } catch {
+            return .refused(code: "store_unavailable")
+        }
+    }
+
+    private func recentEvents(limit: Int) async -> CoreResponse {
+        let now = clock()
+        let count = min(max(limit, 1), 50)
+        do {
+            let events = try await named(allEvents(from: now.addingTimeInterval(-86400), to: now))
+            let newest = rules.visible(events).sorted { ($0.eventTime, $0.id) > ($1.eventTime, $1.id) }
+            return .events(Array(newest.prefix(count)))
         } catch {
             return .refused(code: "store_unavailable")
         }

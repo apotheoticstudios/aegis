@@ -47,6 +47,9 @@ public enum CoreRequest: Codable, Sendable, Hashable {
     case prepareModel
     /// The events a brief item cites, to show and open them (at most `maxSourceIDs`).
     case sources(ids: [String])
+    /// The newest events of the last 24 hours, newest first, at most `limit` (clamped to 1...50),
+    /// leaving out what the owner's rules hide (#78, additive). Replies with `events`.
+    case recentEvents(limit: Int)
     /// Calendar occurrences and reminders in a window (at most `maxScheduleDays`), straight from EventKit.
     case schedule(from: Date, to: Date)
     /// A question typed in the panel (#163), answered only from the owner's own data on the Mac. Read-only:
