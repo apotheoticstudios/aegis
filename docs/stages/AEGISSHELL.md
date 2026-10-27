@@ -77,6 +77,7 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 
 - Window layouts by command ("Mail left, calendar right", "focus on Xcode"), saved layouts, and workspaces (Work, Focus, Evening, Movie) that switch layout, widgets and Focus mode (home scenes once Home control exists).
 - **Done when:** layouts apply and restore reliably across 3 common apps, and workspaces switch in under a second.
+- **Built (2026-10-27):** window layouts by command while engaged. "Mail left, calendar right", "Xcode on the left two thirds, Terminal on the right third", "focus on Xcode", "centre Notes", "split Safari and Mail" (#83, parsed in AegisKit by Codex). An app that isn't open is opened first. Each window moves with the Accessibility API, logged through ActionPolicy, and every moved window goes back on disengage. Words only count as a layout when every name is an app on this Mac. Still to come: the zones and gliding animation, saved layouts, and workspaces (Work, Focus, Evening, Movie).
 
 ## Stage 7 — Overlays and polish
 

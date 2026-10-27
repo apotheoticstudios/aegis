@@ -10,6 +10,12 @@ extension PanelModel {
             let text = await ShellController.shared.handle(shell)
             return Answer(text: text, eventIDs: [], scheduleIDs: [], model: "shell", generatedAt: Date())
         }
+        // "Mail left, calendar right" while AegisShell is engaged, for apps on this Mac (stage 6).
+        if ShellController.shared.isOn, let placements = WindowLayoutCommand.parse(question),
+           let text = await ShellWindows.apply(placements, model: self)
+        {
+            return Answer(text: text, eventIDs: [], scheduleIDs: [], model: "shell", generatedAt: Date())
+        }
         // Reminders and calendar events come first (#270).
         if let action = await actionAnswer(question) {
             return action

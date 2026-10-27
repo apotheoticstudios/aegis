@@ -91,6 +91,11 @@ public enum ActionPolicy {
         if payload.verb == .send {
             return ActionDecision(tier: .confirmTwice, reasonCodes: [.outwardFacing])
         }
+        // Arranging an app's windows (AegisShell's layouts, ADR-0033) moves only the windows, and they go back on
+        // disengage: at once. Moving files still asks.
+        if case .app = payload, payload.verb == .move {
+            return ActionDecision(tier: .auto, reasonCodes: [.reversible])
+        }
         // Opening, and quitting an app (which asks about unsaved work itself, #49), happen at once.
         return ActionDecision(tier: [.open, .close].contains(payload.verb) ? .auto : .confirm, reasonCodes: [.reversible])
     }

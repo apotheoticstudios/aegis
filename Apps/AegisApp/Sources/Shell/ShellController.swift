@@ -228,6 +228,7 @@ final class ShellController {
         still = nil
         items?.remove()
         items = nil
+        ShellWindows.restore()
         HUDPresence.shared.shell = false
         if let screens {
             NotificationCenter.default.removeObserver(screens)

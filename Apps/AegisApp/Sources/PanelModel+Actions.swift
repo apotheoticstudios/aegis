@@ -371,9 +371,12 @@ extension PanelModel {
     /// Logs one step; what the model picked asks at least once (ADR-0031).
     @discardableResult
     func log(_ request: ActionRequest, _ outcome: ActionOutcomeCode, guessed: Bool = false) async -> ActionDecision {
-        let automatic = !guessed && [ActionVerb.open, .run].contains(request.payload.verb)
+        let arranging = request.payload.domain == .app && request.payload.verb == .move
+        let automatic = !guessed && ([ActionVerb.open, .run].contains(request.payload.verb) || arranging)
+        // AegisShell engaged counts as the panel being open: it is Aegis's interface on screen (ADR-0033).
         let decision = ActionPolicy.decision(
-            for: request, settings: .init(panelIsOpen: HUDPresence.shared.open, minimumTier: automatic ? .auto : .confirm)
+            for: request,
+            settings: .init(panelIsOpen: HUDPresence.shared.open || HUDPresence.shared.shell, minimumTier: automatic ? .auto : .confirm)
         )
         try? await actions?.append(ActionLogEntry(time: Date(), request: request, decision: decision, outcomeCode: outcome))
         return decision

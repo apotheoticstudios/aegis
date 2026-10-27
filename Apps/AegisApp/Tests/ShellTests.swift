@@ -202,6 +202,16 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(lines.map(\.source), ["messages", "mail", "notice"])
     }
 
+    /// Words that only look like a layout ("turn left") aren't one unless every name is an app on this Mac.
+    func testALayoutNeedsRealApps() async throws {
+        let model = PanelModel(service: SampleCoreService(), actions: nil)
+        let turn = try XCTUnwrap(WindowLayoutCommand.parse("turn left"))
+        let refused = await ShellWindows.apply(turn, model: model)
+        XCTAssertNil(refused, "not a layout: the question goes on to Aegis")
+        XCTAssertEqual(ShellWindows.running("finder")?.bundleIdentifier, "com.apple.finder")
+        XCTAssertNil(ShellWindows.running("no such example app"))
+    }
+
     func testTheWeatherReading() {
         let rain = ShellWeather("Weather at home: 18 to 27°. Rain likely from 3 pm (70%).")
         XCTAssertTrue(rain.stormy)

@@ -89,8 +89,12 @@ final class ActionPolicyTests: XCTestCase {
     func testFileWritesAndAppSendingRequireConfirmation() {
         for verb in [ActionVerb.create, .edit, .move] {
             XCTAssertEqual(decide(.file(path: "/synthetic/note.txt", verb: verb)).tier, .confirm)
+        }
+        for verb in [ActionVerb.create, .edit] {
             XCTAssertEqual(decide(.app(bundleID: "com.example.editor", verb: verb)).tier, .confirm)
         }
+        // Arranging an app's windows (AegisShell's layouts, ADR-0033) is reversible and happens at once.
+        XCTAssertEqual(decide(.app(bundleID: "com.example.editor", verb: .move)).tier, .auto)
         XCTAssertEqual(decide(.app(bundleID: "com.example.sender", verb: .send)).tier, .confirmTwice)
         XCTAssertEqual(decide(.file(path: "/synthetic/note.txt", verb: .send)).tier, .never)
         XCTAssertEqual(
