@@ -23,10 +23,43 @@ final class ShellController {
     private(set) var dockProblem = false
 
     struct Readings: Equatable {
+        struct Waiting: Equatable {
+            let name: String
+            let since: Date
+        }
+
         var urgent = 0
+        /// The first urgent item: its line, and whether it came from a person.
+        var top: String?
+        var topFromPerson = false
+        var items = 0
         var events: [HUDScheduleArc.Event] = []
+        var waiting: [Waiting] = []
+        /// Sources that need a fix.
+        var problems: [SourceKind] = []
+        var diskUsed: UInt64 = 0
+        var diskTotal: UInt64 = 0
+        /// Aegis's own processes.
+        var memory: UInt64 = 0
         var now = Date()
     }
+
+    /// Counts and kinds instead of names and words. On by default until screen sharing can be detected; the owner
+    /// turns it off in Aegis's menu. Kept across launches.
+    var hideDetails = UserDefaults.aegis.object(forKey: "shellHideDetails") as? Bool ?? true {
+        didSet { UserDefaults.aegis.set(hideDetails, forKey: "shellHideDetails") }
+    }
+
+    /// The desktop held still by the owner's choice.
+    var holdStill = UserDefaults.aegis.bool(forKey: "shellHoldStill") {
+        didSet {
+            UserDefaults.aegis.set(holdStill, forKey: "shellHoldStill")
+            checkStill()
+        }
+    }
+
+    /// Why the desktop holds still, or nil while it's live.
+    var still: ShellStill?
 
     /// The app's panel model and actions, set at launch.
     @ObservationIgnored var model: PanelModel?
@@ -44,6 +77,7 @@ final class ShellController {
     @ObservationIgnored private var hotKey: GlobalHotKey?
     @ObservationIgnored private var refresher: Task<Void, Never>?
     @ObservationIgnored private var screens: (any NSObjectProtocol)?
+    @ObservationIgnored private var occlusion: [any NSObjectProtocol] = []
 
     /// Engaging, engaged or leaving: Aegis's own item replaces the everyday menu bar icon.
     var isOn: Bool {
@@ -96,18 +130,20 @@ final class ShellController {
         HUDPresence.shared.shell = true
         items = ShellMenuBarItems(shell: self)
         openWindows()
+        checkStill()
         await refreshReadings()
         dockProblem = await !(settings.apply())
         refresher = Task { [weak self] in
-            // The NOW mark moves each minute; the schedule and the brief are read again every five.
-            var minute = 0
+            // Whether to hold still every 10 s; the NOW mark each minute; everything else every five.
+            var tick = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                minute += 1
+                try? await Task.sleep(for: .seconds(10))
+                tick += 1
                 guard let self, !Task.isCancelled else { return }
-                if minute.isMultiple(of: 5) {
+                checkStill()
+                if tick.isMultiple(of: 30) {
                     await refreshReadings()
-                } else {
+                } else if tick.isMultiple(of: 6) {
                     readings.now = Date()
                 }
             }
@@ -149,6 +185,9 @@ final class ShellController {
         refresher?.cancel()
         windows.forEach { $0.orderOut(nil) }
         windows = []
+        occlusion.forEach(NotificationCenter.default.removeObserver)
+        occlusion = []
+        still = nil
         items?.remove()
         items = nil
         HUDPresence.shared.shell = false
@@ -174,13 +213,40 @@ final class ShellController {
         guard let model else { return }
         await model.checkForNewBrief()
         let now = Date(), day = Calendar.current.startOfDay(for: now)
-        var events: [HUDScheduleArc.Event] = []
+        var next = Readings(now: now)
         if case let .schedule(occurrences, _) = await model.service.handle(.schedule(from: day, to: day.addingTimeInterval(86400))) {
-            events = occurrences.filter { !$0.isAllDay }.sorted { $0.start < $1.start }
-                .map { HUDScheduleArc.Event(start: $0.start, end: $0.end, title: $0.title) }
+            next.events = occurrences.filter { !$0.isAllDay }.sorted { $0.start < $1.start }
+                .map { HUDScheduleArc.Event(start: $0.start, end: $0.end, title: $0.title, location: $0.location) }
         }
-        readings = Readings(
-            urgent: model.stored?.brief.items.count { $0.priority == .urgent } ?? 0, events: events, now: now
+        let items = model.stored?.brief.items ?? []
+        let urgent = items.filter { $0.priority == .urgent }
+        next.urgent = urgent.count
+        next.top = urgent.first?.text
+        next.topFromPerson = urgent.first?.person != nil
+        next.items = items.count
+        if case let .people(people) = await model.service.handle(.people) {
+            next.waiting = people.sorted { $0.waitingSince < $1.waitingSince }.map { .init(name: $0.person.name, since: $0.waitingSince) }
+        }
+        if case let .status(status) = await model.service.handle(.status) {
+            next.problems = SourceHealth.lines(status.sources, now: now).filter { $0.state != .healthy }.map(\.source)
+        }
+        let system = await Task.detached(priority: .utility) {
+            var reader = SystemReader()
+            return reader.read(processes: true)
+        }.value
+        (next.diskUsed, next.diskTotal) = (system.diskUsed, system.diskTotal)
+        next.memory = system.processes.filter(\.aegis).reduce(0) { $0 + $1.memory }
+        readings = next
+    }
+
+    /// Holds the desktop still on battery, when the Mac is hot, under Reduce Motion, by choice, or while every display's
+    /// desktop is covered.
+    func checkStill() {
+        guard isOn else { return }
+        let covered = !windows.isEmpty && windows.allSatisfy { !$0.occlusionState.contains(.visible) }
+        still = ShellStill.reason(
+            battery: ShellStill.onBattery, thermal: ProcessInfo.processInfo.thermalState,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, held: holdStill, covered: covered
         )
     }
 
@@ -198,7 +264,14 @@ final class ShellController {
             let top = screen.frame.maxY - screen.visibleFrame.maxY
             window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size, top: top))
             window.setFrame(screen.frame, display: false)
+            // Left out of screenshots and screen sharing where macOS honours it; hiding details covers the rest.
+            window.sharingType = .none
             window.orderFront(nil)
+            occlusion.append(NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.checkStill() }
+            })
             return window
         }
         // A display added, removed or rearranged: the desktop follows.
@@ -209,6 +282,8 @@ final class ShellController {
                 guard let self, self.isOn else { return }
                 self.windows.forEach { $0.orderOut(nil) }
                 self.windows = []
+                self.occlusion.forEach(NotificationCenter.default.removeObserver)
+                self.occlusion = []
                 if let screens = self.screens {
                     NotificationCenter.default.removeObserver(screens)
                 }

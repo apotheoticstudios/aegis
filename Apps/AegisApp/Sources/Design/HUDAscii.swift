@@ -19,6 +19,10 @@ enum HUDAscii {
         case galaxy, cube
         /// Aegis's shield, a hex-plated sphere rippling with impacts: AegisShell engaging.
         case shield
+        /// Sand running down to the next event; a fingerprint scanning while details are hidden.
+        case hourglass, fingerprint
+        /// Bands that stretch to any shape: an equaliser (the brief, voice), a wireframe floor rolling toward you.
+        case spectrum, horizon
     }
 
     /// The art as lines, `time` seconds in (0 is the still frame); `grit` breaks the shading up like hand-made art.
@@ -129,7 +133,100 @@ enum HUDAscii {
         // The cube keeps its proportions in a wide footprint, centred.
         case .cube: HUDCube.density(aspect > 1 ? across * aspect : across, aspect > 1 ? down : down / aspect, time)
         case .shield: shield(aspect > 1 ? across * aspect : across, aspect > 1 ? down : down / aspect, time)
+        case .hourglass: hourglass(aspect > 1 ? across * aspect : across, aspect > 1 ? down : down / aspect, time)
+        case .fingerprint: fingerprint(aspect > 1 ? across * aspect : across, aspect > 1 ? down : down / aspect, time)
+        // Strips stretch to their band, as the design's do.
+        case .spectrum: spectrum(across, down, time)
+        case .horizon: horizon(across, down, time)
         }
+    }
+
+    /// JavaScript's `%` made positive.
+    private static func wrap(_ value: Double) -> Double {
+        let rest = value.truncatingRemainder(dividingBy: 1)
+        return rest < 0 ? rest + 1 : rest
+    }
+
+    /// The top bulb empties, the pile grows, the stream falls; it turns over every 16 s.
+    private static func hourglass(_ across: Double, _ down: Double, _ time: Double) -> Double {
+        let filled = (time + 5.5).truncatingRemainder(dividingBy: 16) / 16, height = abs(down), side = abs(across)
+        if height > 0.92 {
+            return side < 0.62 && height < 1 ? 0.95 : 0
+        }
+        let post = abs(side - 0.66) < 0.035 ? 0.4 : 0
+        let wall = 0.06 + 0.5 * pow(height / 0.92, 1.15)
+        if abs(side - wall) < 0.03 {
+            return 0.85
+        }
+        guard side <= wall else { return post }
+        let grain = hash((across * 40).rounded(.down), (down * 40).rounded(.down), 3) * 0.2
+        if down < -0.04, down > -0.04 - 0.84 * (1 - filled).squareRoot() {
+            return 0.55 + grain
+        }
+        let pile = 0.9 - 0.8 * filled.squareRoot() + side * 0.55
+        if down > 0.04, down > pile {
+            return 0.6 + grain
+        }
+        if side < 0.025, down > -0.04, down < pile, filled < 0.985 {
+            return wrap(down * 14 - time * 10) < 0.6 ? 0.7 : 0.2
+        }
+        return 0.05
+    }
+
+    /// Whorled ridges in an oval; a scan line passes, lighting what it has read.
+    private static func fingerprint(_ across: Double, _ down: Double, _ time: Double) -> Double {
+        let ovalAcross = across / 0.74, ovalDown = (down + 0.02) / 0.98
+        guard ovalAcross * ovalAcross + ovalDown * ovalDown <= 1 else { return 0 }
+        let angle = atan2(down + 0.12, across)
+        let reach = (pow(across / 0.6, 2) + pow((down + 0.12) / 0.8, 2)).squareRoot() + 0.06 * sin(angle * 2 + 0.6)
+            + 0.03 * sin(across * 5 + down * 3)
+        let ridge = (reach * 6.5).truncatingRemainder(dividingBy: 1)
+        if hash((reach * 6.5).rounded(.down), ((angle + 4) * 2.2).rounded(.down), 7) < 0.1 {
+            return 0.05
+        }
+        guard ridge <= 0.45 else { return 0 }
+        let scan = time > 0 ? ((time * 0.32).truncatingRemainder(dividingBy: 1.3) - 0.15) * 2.2 - 1.1 : 2
+        let gap = down - scan
+        return abs(gap) < 0.04 ? 1 : gap < 0 ? 0.8 : 0.3
+    }
+
+    /// Bars rise and fall; peak caps hang and drop.
+    private static func spectrum(_ across: Double, _ down: Double, _ time: Double) -> Double {
+        let bars = 28.0, place = (across + 1) / 2 * bars, bar = place.rounded(.down), height = 1 - (down + 1) / 2
+        guard place - bar <= 0.72 else { return 0 }
+        let damping = 1 - abs(bar - bars * 0.38) / bars * 0.8
+        func level(_ at: Double) -> Double {
+            abs(sin(bar * 0.62 + at * 3.1) * sin(bar * 0.27 - at * 1.9 + 1.2))
+        }
+        let current = 0.12 + 0.82 * level(time) * damping, cap = 0.12 + 0.82 * max(level(time - 0.3), level(time)) * damping
+        if abs(height - cap - 0.04) < 0.025 {
+            return 0.9
+        }
+        return height < current ? 0.35 + 0.6 * (height / max(current, 0.01)) : 0
+    }
+
+    /// A wireframe floor rolling toward you, low mountains on the skyline and a striped setting sun.
+    private static func horizon(_ across: Double, _ down: Double, _ time: Double) -> Double {
+        let skyline = -0.3
+        if down > skyline {
+            let below = down - skyline, depth = 0.5 / (below + 0.01)
+            let along = wrap(depth * 1.6 - time * 1.4), lane = wrap(across * depth * 2.2)
+            let rung = min(0.45, 0.03 * 1.6 * 0.5 / ((below + 0.01) * (below + 0.01))), rail = min(0.4, 0.012 * 2.2 * depth)
+            if below < 0.025 {
+                return 0.9
+            }
+            return along < rung || abs(lane - 0.5) < rail ? 0.2 + 0.7 * min(1, below * 2.4) : 0
+        }
+        let ridge = skyline - 0.1 * abs(sin(across * 2.7 + 0.4)) - 0.07 * abs(sin(across * 6.3)) - 0.03 * abs(sin(across * 15))
+        if down > ridge {
+            return abs(down - ridge) < 0.03 ? 0.7 : 0.05
+        }
+        let sun = ((across * 1.5) * (across * 1.5) + (down - skyline + 0.02) * (down - skyline + 0.02)).squareRoot()
+        if sun < 0.5 {
+            let rise = (skyline - down) / 0.5, stripe = (rise * 9 + time * 0.4).truncatingRemainder(dividingBy: 1)
+            return rise > 0.45 || stripe < 1 - rise * 0.6 - 0.2 ? 0.45 + 0.5 * (1 - sun / 0.5) : 0
+        }
+        return hash((across * 60).rounded(.down), (down * 30).rounded(.down), 4) > 0.985 ? 0.3 : 0
     }
 
     /// The plates are a hex grid wrapped round the sphere; three impacts send ripples across them.

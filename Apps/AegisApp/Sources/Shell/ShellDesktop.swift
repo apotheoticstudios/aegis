@@ -36,8 +36,13 @@ struct ShellDesktop: View {
                         .opacity(frame.shield)
                         .position(x: size.width / 2, y: size.height / 2)
                 }
+                ShellReadings(shell: shell, geometry: ShellGeometry(size: size)).ground.opacity(frame.readings)
                 core.opacity(frame.core)
                 caption.opacity(frame.readings)
+                ShellReadings(shell: shell, geometry: ShellGeometry(size: size)).opacity(frame.readings)
+                if let still = shell.still, still != .covered {
+                    stillLine(still).opacity(frame.readings)
+                }
             }
             .opacity(frame.all)
         }
@@ -128,8 +133,8 @@ struct ShellDesktop: View {
 
     private var core: some View {
         ZStack {
-            HUDScheduleArc(events: shell.readings.events, now: shell.readings.now, size: arcSize, hidden: true)
-            ReactorView(mode: mode, size: big ? 360 : 250)
+            HUDScheduleArc(events: shell.readings.events, now: shell.readings.now, size: arcSize, hidden: shell.hideDetails)
+            ReactorView(mode: mode, size: big ? 360 : 250, still: shell.still != nil)
         }
         .frame(width: arcSize, height: arcSize)
         .position(centre)
@@ -143,13 +148,24 @@ struct ShellDesktop: View {
         return model.voice.speaking ? .speaking : model.voice.isListening ? .listening : .idle
     }
 
-    /// Aegis's line under the core. Counts and times only, never names: the desktop shows behind every window and
-    /// during screen sharing, and hiding details by choice comes with the readings.
+    /// The line along the bottom while the desktop holds still, saying why.
+    private func stillLine(_ still: ShellStill) -> some View {
+        HStack(spacing: 10) {
+            Text("Still frame").hudCaps(10, tracking: 0.18).foregroundStyle(HUD.ink)
+            Text(still.line).font(HUDFace.mono(11)).foregroundStyle(HUD.inkMuted)
+        }
+        .padding(.vertical, 4)
+        .overlay(alignment: .top) { Rectangle().fill(HUD.frame).frame(height: 1) }
+        .fixedSize()
+        .position(x: centre.x, y: size.height - 40 + 12)
+    }
+
+    /// Aegis's line under the core: with details hidden, counts and times only.
     private var caption: some View {
         VStack(spacing: 6) {
             Text(shell.model?.personality.name ?? "Aegis").hudCaps(10, tracking: 0.24).foregroundStyle(HUD.primary)
             (Text(Self.need(shell.readings.urgent) + " ").foregroundStyle(HUD.inkMuted)
-                + Text(Self.next(shell.readings.events, now: shell.readings.now)).foregroundStyle(HUD.ink))
+                + Text(Self.next(shell.readings.events, now: shell.readings.now, hidden: shell.hideDetails)).foregroundStyle(HUD.ink))
                 .hudType(.body)
                 .multilineTextAlignment(.center)
         }
@@ -167,8 +183,10 @@ struct ShellDesktop: View {
         }
     }
 
-    static func next(_ events: [HUDScheduleArc.Event], now: Date) -> String {
-        events.first { $0.start > now }.map { "Your next event is at \(HUDScheduleArc.clock($0.start))." } ?? "Nothing else today."
+    static func next(_ events: [HUDScheduleArc.Event], now: Date, hidden: Bool = true) -> String {
+        events.first { $0.start > now }.map {
+            hidden ? "Your next event is at \(HUDScheduleArc.clock($0.start))." : "\($0.title) at \(HUDScheduleArc.clock($0.start))."
+        } ?? "Nothing else today."
     }
 
     /// Character noise from the density ramp, weighted towards the empty end: the design's seeded generator.

@@ -9,6 +9,7 @@ struct HUDScheduleArc: View {
         let start: Date
         let end: Date
         let title: String
+        var location: String?
     }
 
     let events: [Event]

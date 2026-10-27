@@ -260,6 +260,10 @@ struct ShellMenu: View {
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
             row("Open the panel", keys: shell.panelKey) { shell.openPanel() }
             row("Talk to Aegis", keys: shell.talkKey) { shell.talk() }
+            Text("Privacy").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
+                .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
+            toggle("Hide details", on: Binding(get: { shell.hideDetails }, set: { shell.hideDetails = $0 }))
+            toggle("Hold the desktop still", on: Binding(get: { shell.holdStill }, set: { shell.holdStill = $0 }))
             HStack {
                 Button {
                     close()
@@ -297,6 +301,16 @@ struct ShellMenu: View {
         .environment(\.colorScheme, .dark)
         .task { banner = HUDBanner.lines(shell.model?.personality.name ?? "Aegis", rows: 10) }
         .onExitCommand(perform: close)
+    }
+
+    private func toggle(_ title: String, on: Binding<Bool>) -> some View {
+        HStack {
+            Text(title).hudType(.body)
+            Spacer()
+            HUDToggle(on: on, label: title, showState: false)
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 28)
     }
 
     /// "⌥⇧Space" as key caps: each modifier, then the key.
@@ -359,12 +373,14 @@ private struct VisualEffect: NSViewRepresentable {
 /// The small line icons AegisShell's controls use (the design system's ShellIcon): 16-point paths, 1.5 stroke,
 /// square caps, mitred joins, chamfers instead of curves.
 enum ShellIcon: String {
-    case power, alert
+    case power, alert, mic, hidden
 
     var commands: String {
         switch self {
         case .power: "M5 4.5 L3.5 6.5 V10 L6 13 H10 L12.5 10 V6.5 L11 4.5 M8 2 V8"
         case .alert: "M8 1.8 L15 14 H1 Z M8 6 V10 M8 11.5 V12.5"
+        case .mic: "M6 2 H10 V9 L9 10 H7 L6 9 Z M3.5 7.5 V9.5 L6 12 H10 L12.5 9.5 V7.5 M8 12 V14.5"
+        case .hidden: "M1.5 8 L4 5 L8 3.8 L12 5 L14.5 8 L12 11 L8 12.2 L4 11 Z M2.5 14 L13.5 2"
         }
     }
 

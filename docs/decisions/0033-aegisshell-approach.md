@@ -27,3 +27,9 @@ AegisShell makes the Mac feel like Aegis's own environment while it's engaged an
   - The still frame on battery or when busy (stage 3). The reactor already pauses when its window is fully covered.
   - Window frames: nothing moves windows until window layouts (stage 6), so nothing needs restoring yet.
   - Multiple displays per workspace.
+
+## Amendment (2026-10-27, stage 3)
+
+- **Hide details is on by default.** macOS offers no public way to know the screen is being shared, so the desktop shows counts and kinds ("Contact 1", "Event", "From a contact") until the owner turns details on in Aegis's menu. The setting is kept across launches. The desktop windows also set `sharingType = .none`, which keeps them out of capture where macOS honours it.
+- **Still frame:** the desktop holds still on battery (IOKit power sources), when the Mac is hot (thermal state serious or critical), under Reduce Motion, by the owner's choice, or while every display's desktop window is covered (window occlusion). It's checked every 10 seconds and on occlusion changes, and resumes by itself.
+- **Readings:** read from AegisCore every five minutes while engaged (the brief, the people waiting, source health, today's schedule). The system figures come from one process sample at the same moment. Nothing is read while disengaged.

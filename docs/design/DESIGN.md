@@ -538,7 +538,7 @@ Two kinds, both interactive:
 
 - **Activated on demand.** Not active all the time: it runs only after the user engages it, and is disengaged by default at login. With it disengaged, Aegis stays invisible and silent until the panel opens. A dedicated hub (e.g. a Mac mini) can opt to engage it automatically.
 - **No sounds by default.** Even in AegisShell, interface sounds are optional and nothing interrupts.
-- **Privacy on screen.** Each widget has a "hide details" option ("3 waiting" instead of names), and all widgets hide content during screen sharing and when the Mac is locked.
+- **Privacy on screen.** Each widget has a "hide details" option ("3 waiting" instead of names), and all widgets hide content during screen sharing and when the Mac is locked. Until screen sharing can be detected, details are hidden by default and the owner shows them from Aegis's menu (ADR-0033).
 - **Performance.** The live desktop freezes to a static frame when covered by windows, on battery, or when the Mac is busy; custom widgets pause when not visible.
 - **What stays macOS:** login screen, password and permission prompts, System Settings, App Store windows, and the inside of other apps' windows.
 - **Actions follow the same safety rules** as App control and Home control (confirmation tiers, action log, never-list).

@@ -133,6 +133,46 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(ShellMenu.caps("⌃⌥A"), ["⌃", "⌥", "A"])
     }
 
+    func testTheDesktopHoldsStillForTheRightReason() {
+        func reason(
+            battery: Bool = false,
+            thermal: ProcessInfo.ThermalState = .nominal,
+            motion: Bool = false,
+            held: Bool = false,
+            covered: Bool = false
+        )
+            -> ShellStill?
+        {
+            ShellStill.reason(battery: battery, thermal: thermal, reduceMotion: motion, held: held, covered: covered)
+        }
+        XCTAssertNil(reason(), "live")
+        XCTAssertNil(reason(thermal: .fair))
+        XCTAssertEqual(reason(battery: true, held: true, covered: true), .battery, "most pressing first")
+        XCTAssertEqual(reason(thermal: .serious), .busy)
+        XCTAssertEqual(reason(motion: true, held: true), .reduceMotion)
+        XCTAssertEqual(reason(held: true, covered: true), .held)
+        XCTAssertEqual(reason(covered: true), .covered)
+        XCTAssertTrue(ShellStill.battery.line.contains("plug in"))
+    }
+
+    func testTheReadingsWording() {
+        XCTAssertEqual(ShellReadings.toGo(25 * 60 - 10).value, "25")
+        XCTAssertEqual(ShellReadings.toGo(25 * 60).unit, "min to go")
+        XCTAssertEqual(ShellReadings.toGo(3 * 3600).value, "3")
+        XCTAssertEqual(ShellReadings.toGo(3 * 3600).unit, "h to go")
+        XCTAssertEqual(ShellReadings.since(26 * 3600), "26 h")
+        XCTAssertEqual(ShellReadings.since(52 * 60), "52 min")
+        XCTAssertEqual(ShellReadings.tone(26 * 3600), .critical)
+        XCTAssertEqual(ShellReadings.tone(9 * 3600), .warn)
+        XCTAssertEqual(ShellReadings.tone(3 * 3600), .ink)
+        XCTAssertEqual(ShellReadings.tone(20 * 60), .inkMuted)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let later = HUDScheduleArc.Event(start: now.addingTimeInterval(3600), end: now.addingTimeInterval(7200), title: "Lunch")
+        XCTAssertEqual(ShellReadings.left([later], now: now), "1 event left today")
+        XCTAssertEqual(ShellReadings.left([later], now: later.end), "Nothing else today")
+        XCTAssertEqual(ShellDesktop.next([later], now: now, hidden: false), "Lunch at \(HUDScheduleArc.clock(later.start)).")
+    }
+
     /// Renders the desktop at the MacBook's size through the transition and built, the menu bar item and its menu, to
     /// compare with the design's AegisShell cards. Opt-in: `TEST_RUNNER_AEGIS_RENDER_SHELL=<folder>`.
     func testRendersTheShell() throws {
@@ -147,16 +187,15 @@ final class ShellTests: XCTestCase {
                 start: day.addingTimeInterval(hour * 3600), end: day.addingTimeInterval(hour * 3600 + minutes * 60), title: title
             )
         }
+        let now = day.addingTimeInterval(11 * 3600 + 5 * 60)
         shell.readings = .init(
-            urgent: 2, events: [
-                at(9, 20, "Standup"),
-                at(11.5, 45, "Design review"),
-                at(13, 60, "Lunch"),
-                at(16, 30, "Call"),
-                at(19, 90, "Training")
-            ],
-            now: day.addingTimeInterval(11 * 3600 + 5 * 60)
+            urgent: 2, top: "Sam: can you call me about Saturday?", topFromPerson: true, items: 6,
+            events: [at(9, 20, "Standup"), at(11.5, 45, "Design review"), at(13, 60, "Lunch"), at(16, 30, "Call"), at(19, 90, "Training")],
+            waiting: [("Sam", 26.0), ("Alex", 9), ("Mum", 3), ("Priya", 0.9), ("Jake", 0.3)]
+                .map { .init(name: $0.0, since: now.addingTimeInterval(-$0.1 * 3600)) },
+            problems: [.mail], diskUsed: 31_000_000_000, diskTotal: 40_000_000_000, memory: 2_100_000_000, now: now
         )
+        shell.hideDetails = false
         HUDPresence.shared.shell = true
         defer { HUDPresence.shared.shell = false }
         func snap(_ view: some View, _ size: CGSize, _ name: String) throws {
@@ -178,6 +217,15 @@ final class ShellTests: XCTestCase {
         }
         shell.phase = .engaged
         try snap(ShellDesktop(shell: shell, size: size, top: 37), size, "desktop.png")
+        shell.hideDetails = true
+        shell.still = .battery
+        try snap(ShellDesktop(shell: shell, size: size, top: 37), size, "desktop-hidden-still.png")
+        shell.still = nil
+        try snap(
+            ShellDesktop(shell: shell, size: CGSize(width: 2560, height: 1440), top: 25),
+            CGSize(width: 2560, height: 1440),
+            "desktop-27.png"
+        )
         try snap(ShellMenuExtra(shell: shell).background(Color(white: 0.08)), CGSize(width: 260, height: 24), "item-engaging.png")
         shell.itemComplete = true
         shell.panelKey = "⌥Space"

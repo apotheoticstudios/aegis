@@ -12,6 +12,8 @@ struct ReactorView: NSViewRepresentable {
 
     let mode: Mode
     var size: CGFloat = 34
+    /// Held on its current frame: AegisShell's still frame.
+    var still = false
 
     func makeNSView(context _: Context) -> ReactorSceneView {
         ReactorSceneView(size: size)
@@ -19,6 +21,7 @@ struct ReactorView: NSViewRepresentable {
 
     func updateNSView(_ view: ReactorSceneView, context: Context) {
         view.reactor.mode = mode
+        view.held = still
         view.reactor.theme = context.environment.hudTheme
         view.setAccessibilityLabel(Self.label(mode))
     }
@@ -40,6 +43,14 @@ struct ReactorView: NSViewRepresentable {
 /// The SceneKit view, see-through so the HUD's ground shows behind it; it plays only while its window is visible.
 final class ReactorSceneView: SCNView {
     let reactor = ReactorScene()
+    /// Holds the frame even while visible.
+    var held = false {
+        didSet {
+            if held != oldValue {
+                occlusionChanged()
+            }
+        }
+    }
 
     init(size: CGFloat) {
         super.init(frame: CGRect(x: 0, y: 0, width: size, height: size), options: nil)
@@ -72,7 +83,7 @@ final class ReactorSceneView: SCNView {
     /// Nothing animates once the panel closes.
     @objc private func occlusionChanged() {
         let visible = window?.occlusionState.contains(.visible) ?? false
-        isPlaying = visible
-        rendersContinuously = visible
+        isPlaying = visible && !held
+        rendersContinuously = visible && !held
     }
 }

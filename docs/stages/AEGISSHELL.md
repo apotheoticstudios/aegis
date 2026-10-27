@@ -50,6 +50,12 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 - The desktop-level layer: reactor, event stream, today's schedule, home status (when Home control exists), in the active theme.
 - Freezes to a still frame when covered by windows, on battery, or when the Mac is busy; resumes when visible.
 - **Done when:** it renders under all windows on every Space, freezes as specified (measured), and window server load stays within 5 points of macOS's own wallpaper.
+- **Built (2026-10-27):** the readings drawn into the scene, as the design's ShellDesktop.
+  - **Status** is pinned to the core: the urgent count, the top item, Open in panel. **Next up** is pinned to its event on the arc, with a sand glass and the minutes to go.
+  - The people **waiting** sit on an orbit, coloured by how long they've waited. The **system** shows as disk and memory arcs, with a turning tick ring and a callout when a source needs a fix.
+  - The brief's **Play** and item count sit under the core, the **ask line** on the ground, and the **wireframe floor** under it all.
+  - **Still frame:** on battery, when the Mac is hot, under Reduce Motion, by choice, or while every display's desktop is covered. The reactor, the art, the rings and the pings stop, and a line says why.
+  - **Still to come:** the stream, the world globe and weather, the home floor plan (with Home control), Matrix's falling code, and measuring the cost on the owner's Mac.
 
 ## Stage 4 — Custom desktop widgets
 
@@ -57,6 +63,7 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 - Place, move, resize and remove; layouts saved per workspace.
 - "Hide details" per widget; content hidden during screen sharing and when locked.
 - **Done when:** every widget works with synthetic data in tests, privacy hiding is tested, and hidden widgets do no work.
+- **Started (2026-10-27):** in the new design the widgets are the readings drawn round the core (stage 3). **Hide details** (counts and kinds, never names or words) is on by default until screen sharing can be detected; the owner turns it off in Aegis's menu, beside **Hold the desktop still**. The desktop windows are also left out of screen capture where macOS honours it.
 
 ## Stage 5 — Launcher
 
