@@ -294,7 +294,11 @@ struct ShellReadings: View {
     private var briefActions: some View {
         HStack(spacing: 12) {
             HUDAsciiArt(shape: .spectrum, cols: 9, rows: 2, grit: 0.05, tone: HUD.primary, animate: !still)
-            link("Play brief") { shell.model?.readBrief() }
+            // AegisShell stays silent (AGENTS.md): the brief is read with the panel open, as everywhere else.
+            link("Play brief") {
+                shell.openPanel()
+                shell.model?.readBrief()
+            }
             Rectangle().fill(HUD.line).frame(width: 1, height: 12)
             link("\(readings.items) items", tone: .inkMuted) { shell.openPanel() }
         }
