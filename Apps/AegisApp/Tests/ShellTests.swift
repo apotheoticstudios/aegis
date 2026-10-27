@@ -211,6 +211,29 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(ShellDesktop.next([later], now: now, hidden: false), "Lunch at \(HUDScheduleArc.clock(later.start)).")
     }
 
+    func testTheLaunchersResults() throws {
+        let suggested = ShellLauncher.groups("", apps: [], files: [])
+        XCTAssertEqual(suggested.map(\.title), ["Suggested"])
+        XCTAssertTrue(suggested[0].rows.allSatisfy { $0.kind == .ask })
+        let app = URL(fileURLWithPath: "/Applications/Example Mail.app"), file = NSHomeDirectory() + "/Documents/Example plan.pages"
+        let typed = ShellLauncher.groups("example", apps: [app], files: [file])
+        XCTAssertEqual(typed.map(\.title), ["Apps", "Files", "Ask Aegis"])
+        XCTAssertEqual(typed[0].rows.first?.title, "Example Mail")
+        XCTAssertEqual(typed[1].rows.first?.meta, "~/Documents")
+        XCTAssertEqual(typed.last?.rows.first?.kind, .ask, "asking Aegis is always there")
+        XCTAssertEqual(ShellLauncher.groups("wi-fi", apps: [], files: []).first?.rows.first?.title, "Wi-Fi")
+        XCTAssertTrue(ShellLauncher.groups("open the example folder", apps: [], files: []).contains { $0.title == "Commands" })
+        // Apps by name: those starting with it first, shortest first, then those containing it.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("apps-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        for name in ["Example Notes.app", "Notes.app", "Notebook.app", "Not an app.txt"] {
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent(name), withIntermediateDirectories: true)
+        }
+        let found = ShellLauncher.apps(matching: "note", in: [folder.path]).map { $0.deletingPathExtension().lastPathComponent }
+        XCTAssertEqual(found, ["Notes", "Notebook", "Example Notes"])
+        XCTAssertEqual(ShellLauncher.apps(matching: "", in: [folder.path]), [])
+    }
+
     /// Renders the desktop at the MacBook's size through the transition and built, the menu bar item and its menu, to
     /// compare with the design's AegisShell cards. Opt-in: `TEST_RUNNER_AEGIS_RENDER_SHELL=<folder>`.
     func testRendersTheShell() throws {
@@ -268,6 +291,9 @@ final class ShellTests: XCTestCase {
         shell.itemComplete = true
         shell.panelKey = "⌥Space"
         try snap(ShellMenuExtra(shell: shell).background(Color(white: 0.08)), CGSize(width: 260, height: 24), "item.png")
-        try snap(ShellMenu(shell: shell) {}.background(Color.black), CGSize(width: 320, height: 260), "menu.png")
+        try snap(ShellMenu(shell: shell) {}.background(Color.black), CGSize(width: 320, height: 380), "menu.png")
+        let launcher = ShellLauncher()
+        launcher.query = "example"
+        try snap(LauncherView(launcher: launcher).background(Color.black), CGSize(width: 680, height: 480), "launcher.png")
     }
 }

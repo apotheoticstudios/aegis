@@ -329,6 +329,16 @@ extension PanelModel {
         return said
     }
 
+    /// AegisShell's launcher: an app, a file or a settings page the owner chose, through the safety system like any
+    /// command they typed.
+    func launch(_ command: ActionCommand) async {
+        if case let .openApp(name) = command, let app = Self.application(named: name) {
+            _ = await openApp(app, name: name, origin: .ownerTyped)
+        } else {
+            _ = await ability(command, origin: .ownerTyped)
+        }
+    }
+
     /// "Open X": an app; else one of the owner's shortcuts by its exact name ("run Work", ADR-0031); else a file or
     /// folder in the home folder ("open Downloads", "open Budget.xlsx", #43). Nil when it's none of them.
     private func named(_ name: String, words: String, origin: ActionOrigin) async -> Answer? {

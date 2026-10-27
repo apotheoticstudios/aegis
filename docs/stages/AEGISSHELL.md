@@ -69,6 +69,7 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 
 - In AegisShell, ⌥Space opens the launcher style of the panel: one bar to open apps, files and settings, ask, and run commands (reusing the general command system, ADR-0031).
 - **Done when:** the top results match what Spotlight would open for app and file names, and every action goes through ActionPolicy.
+- **Built (2026-10-27):** the design's Launcher over a dimmed desktop, a third of the way down: apps by name, files by name (Spotlight, names only), System Settings pages, a command row when the words read as one, and Ask Aegis; suggestions when nothing is typed; no results offers to ask instead. ↑↓, ⏎ (⌘⏎ asks), esc. Apps, files and settings open through ActionPolicy (`PanelModel.launch`); commands and questions go to the panel. ⌥Space opens it while engaged, as do the ask line on the desktop and Aegis's menu. Still to come: the listening state inside the launcher and the ConfirmCard in place of results.
 
 ## Stage 6 — Window management and workspaces
 

@@ -170,6 +170,7 @@ final class ShellController {
         let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         phase = .leaving(start)
         refresher?.cancel()
+        ShellLauncher.shared.close(returning: false)
         Task {
             await settle(start, at: reduced ? 0 : ShellMotion.dockReturns) { _ in }
             await dock { await $0.settings.restore() }

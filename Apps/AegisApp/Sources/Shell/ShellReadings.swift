@@ -268,7 +268,7 @@ struct ShellReadings: View {
     // MARK: - The ask line on the ground
 
     private var ask: some View {
-        Button { shell.openPanel() } label: {
+        Button { ShellLauncher.shared.open() } label: {
             HStack(spacing: 10) {
                 Text("aegis ›").font(HUDFace.mono(12)).foregroundStyle(HUD.primary)
                 Text(hidden ? "Ask or command" : "Ask or command · try “what's on today?”")

@@ -258,7 +258,8 @@ struct ShellMenu: View {
             }
             Text("Aegis").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
-            row("Open the panel", keys: shell.panelKey) { shell.openPanel() }
+            row("Launcher", keys: shell.panelKey) { ShellLauncher.shared.open() }
+            row("Open the panel", keys: nil) { shell.openPanel() }
             row("Talk to Aegis", keys: shell.talkKey) { shell.talk() }
             Text("Privacy").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
