@@ -1,23 +1,20 @@
 import AegisKit
 import SwiftUI
 
-/// AegisShell's live desktop on one display (the design system's ShellDesktop): the wash in the workspace's colour,
-/// a frame traced round the screen and, at the centre, the ReactorCore in today's ScheduleArc with Aegis's one line
-/// under it. Engaging builds it (the shield forms and breaks into it, ramp noise flickers and clears); disengaging
-/// fades it. The readings drawn round the core come in later stages (docs/stages/AEGISSHELL.md).
+/// AegisShell's live desktop on one display (the design system's ShellDesktop): the wash in the workspace's colour and,
+/// at the centre, the ReactorCore in today's ScheduleArc with Aegis's one line under it and the readings round it.
+/// Engaging builds it (the shield forms and breaks into it, ramp noise flickers and clears); disengaging fades it. The
+/// design's frame traced round the screen, with corner brackets, is left out (owner's choice, 2026-10-27).
 struct ShellDesktop: View {
     let shell: ShellController
     let size: CGSize
-    /// The menu bar's height on this display.
-    let top: CGFloat
     private let noise: [String]
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
     @Environment(\.accessibilityReduceMotion) private var reduced
 
-    init(shell: ShellController, size: CGSize, top: CGFloat) {
+    init(shell: ShellController, size: CGSize) {
         self.shell = shell
         self.size = size
-        self.top = top
         noise = Self.noise(cols: Int(size.width / 6) + 1, rows: Int(size.height / 12) + 1)
     }
 
@@ -26,7 +23,6 @@ struct ShellDesktop: View {
             let frame = frame(at: context.date)
             ZStack(alignment: .topLeading) {
                 wall.opacity(frame.wall)
-                trace(frame)
                 if frame.noise > 0 {
                     HUDAsciiText(lines: noise, cols: noise.first?.count ?? 0, size: 12, tone: HUD.primary, aspect: HUDAscii.artAspect)
                         .opacity(frame.noise)
@@ -75,7 +71,7 @@ struct ShellDesktop: View {
 
     private func frame(at date: Date) -> ShellMotion.Frame {
         switch shell.phase {
-        case let .engaging(start): ShellMotion.engage(date.timeIntervalSince(start), traceLength: traceLength, reduced: reduced)
+        case let .engaging(start): ShellMotion.engage(date.timeIntervalSince(start), reduced: reduced)
         case let .leaving(start): ShellMotion.disengage(date.timeIntervalSince(start), reduced: reduced)
         case .off, .engaged: ShellMotion.Frame()
         }
@@ -119,37 +115,6 @@ struct ShellDesktop: View {
         }
         .animation(.easeInOut(duration: reduced ? 0.2 : 0.48), value: shell.workspace)
         .frame(width: size.width, height: size.height)
-    }
-
-    private var traceLength: Double {
-        Double(size.width - 16 + size.height - top - 16)
-    }
-
-    /// The frame: from the top centre out along both sides to the bottom, with corner brackets.
-    private func trace(_ frame: ShellMotion.Frame) -> some View {
-        let top = top + 8, bottom = size.height - 8, left = 8.0, right = size.width - 8, middle = size.width / 2, long = 28.0
-        let sides = Path { path in
-            for edge in [left, right] {
-                path.move(to: CGPoint(x: middle, y: top))
-                path.addLine(to: CGPoint(x: edge, y: top))
-                path.addLine(to: CGPoint(x: edge, y: bottom))
-                path.addLine(to: CGPoint(x: middle, y: bottom))
-            }
-        }
-        let brackets = Path { path in
-            let corners = [(left, top, 1.0, 1.0), (right, top, -1.0, 1.0), (left, bottom, 1.0, -1.0), (right, bottom, -1.0, -1.0)]
-            for (edge, level, across, down) in corners {
-                path.move(to: CGPoint(x: edge, y: level + down * long))
-                path.addLine(to: CGPoint(x: edge, y: level))
-                path.addLine(to: CGPoint(x: edge + across * long, y: level))
-            }
-        }
-        return ZStack {
-            sides.trim(from: 0, to: frame.trace).stroke(HUD.frame, lineWidth: 1).opacity(0.38)
-            brackets.stroke(HUD.frame, style: StrokeStyle(lineWidth: 2, lineCap: .square)).opacity(0.8 * frame.brackets)
-        }
-        .opacity(frame.traceFade)
-        .allowsHitTesting(false)
     }
 
     private var core: some View {

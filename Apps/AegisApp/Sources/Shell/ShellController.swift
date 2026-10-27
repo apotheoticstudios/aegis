@@ -345,13 +345,13 @@ final class ShellController {
         return .init(time: event.eventTime, source: source, text: String(text.prefix(140)), hidden: hidden, urgent: urgent)
     }
 
-    /// Holds the desktop still on battery, when the Mac is hot, under Reduce Motion, by choice, or while every display's
+    /// Holds the desktop still when the Mac is hot, under Reduce Motion, by choice, or while every display's
     /// desktop is covered.
     func checkStill() {
         guard isOn else { return }
         let covered = !windows.isEmpty && windows.allSatisfy { !$0.occlusionState.contains(.visible) }
         still = ShellStill.reason(
-            battery: ShellStill.onBattery, thermal: ProcessInfo.processInfo.thermalState,
+            thermal: ProcessInfo.processInfo.thermalState,
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, held: holdStill, covered: covered
         )
     }
@@ -361,15 +361,15 @@ final class ShellController {
     private func openWindows() {
         windows = NSScreen.screens.map { screen in
             let window = NSPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+            // Just under every app's windows: above Finder's icons and macOS's desktop widgets, which it covers.
+            window.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
             // See-through until the wall fades in, so engaging and leaving cross-fade with the wallpaper.
             window.isOpaque = false
             window.hasShadow = false
             window.isReleasedWhenClosed = false
             window.backgroundColor = .clear
-            let top = screen.frame.maxY - screen.visibleFrame.maxY
-            window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size, top: top))
+            window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size))
             window.setFrame(screen.frame, display: false)
             // Left out of screenshots and screen sharing where macOS honours it; hiding details covers the rest.
             window.sharingType = .none

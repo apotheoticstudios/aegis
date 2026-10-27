@@ -38,3 +38,9 @@ AegisShell makes the Mac feel like Aegis's own environment while it's engaged an
 
 - **AegisShell counts as the panel being open** for the action safety system. The policy only lets actions run while the owner is present, and while engaged the shell is Aegis's interface on screen: the launcher's apps, files and settings, and window layouts, come from the owner's own typing or voice there. Everything else about the tiers, the never-list and the action log is unchanged.
 - **Arranging an app's windows runs at once** (`ActionPayload.app(…, verb: .move)` is `auto`). It moves only windows, which AegisShell puts back on disengage. Moving files still asks. Window moves are logged one per app (`ShellWindows`), and need the Accessibility permission, which macOS asks for the first time.
+
+## Amendment (2026-10-27, the owner's choices after trying it)
+
+- **The desktop covers macOS's desktop widgets:** its windows sit just under every app's windows (`NSWindow.Level.normal - 1`), above Finder's icons and the widgets. Before this they sat at the desktop-icon level, and the widgets showed through.
+- **No frame:** the design's frame traced round the screen, and its corner brackets, are left out.
+- **It keeps moving on battery:** the still frame is for a hot Mac, Reduce Motion, Hold still and being covered.

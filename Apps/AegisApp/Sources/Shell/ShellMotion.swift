@@ -9,11 +9,6 @@ enum ShellMotion {
         var all = 1.0
         /// The wash.
         var wall = 1.0
-        /// The share of the frame's line drawn, and its opacity.
-        var trace = 1.0
-        var traceFade = 1.0
-        /// The frame's corner brackets.
-        var brackets = 1.0
         /// Character noise from the density ramp over the screen.
         var noise = 0.0
         /// The shield forming over the screen, and its scale.
@@ -35,15 +30,12 @@ enum ShellMotion {
     /// The Aegis menu bar item shows the workspace, the status and Exit at 900 ms.
     static let itemShows = 0.9
 
-    /// `time` seconds into engaging. `traceLength` is the frame's line in points: the design draws it as a 6000-point
-    /// dash, so a shorter line finishes early in the 700 ms.
-    static func engage(_ time: Double, traceLength: Double, reduced: Bool) -> Frame {
+    /// `time` seconds into engaging. The design's frame traced round the screen is left out (owner's choice).
+    static func engage(_ time: Double, reduced: Bool) -> Frame {
         guard !reduced else { return Frame(all: span(time, 0, Self.reduced)) }
         let shield = span(time, 0.25, 1.5)
         return Frame(
             wall: HUDMotion.enter(span(time, 0.5, 0.8)),
-            trace: min(1, 6000 * HUDMotion.standard(span(time, 0.2, 0.7)) / max(traceLength, 1)),
-            brackets: steps(span(time, 0.76, 0.2), 2),
             noise: keyframes(span(time, 0.42, 0.9), [(0, 0), (0.2, 0.55), (0.6, 0.35), (1, 0)]) { steps($0, 9) },
             shield: keyframes(shield, [(0, 0), (0.35, 0.9), (0.7, 0.6), (1, 0)], HUDMotion.standard.callAsFunction),
             shieldScale: keyframes(shield, [(0, 0.6), (0.7, 1.04), (1, 1.12)], HUDMotion.standard.callAsFunction),
@@ -52,12 +44,11 @@ enum ShellMotion {
         )
     }
 
-    /// `time` seconds into disengaging: the readings go together, then the desktop and the frame.
+    /// `time` seconds into disengaging: the readings go together, then the desktop.
     static func disengage(_ time: Double, reduced: Bool) -> Frame {
         guard !reduced else { return Frame(all: 1 - span(time, 0, Self.reduced)) }
         return Frame(
             all: 1 - HUDMotion.exit(span(time, 0, 0.8)),
-            traceFade: 1 - HUDMotion.ease(span(time, 0.45, 0.3)),
             readings: 1 - HUDMotion.exit(span(time, 0, 0.3))
         )
     }

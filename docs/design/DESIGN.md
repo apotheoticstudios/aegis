@@ -539,7 +539,7 @@ Two kinds, both interactive:
 - **Activated on demand.** Not active all the time: it runs only after the user engages it, and is disengaged by default at login. With it disengaged, Aegis stays invisible and silent until the panel opens. A dedicated hub (e.g. a Mac mini) can opt to engage it automatically.
 - **No sounds by default.** Even in AegisShell, interface sounds are optional and nothing interrupts.
 - **Privacy on screen.** Each widget has a "hide details" option ("3 waiting" instead of names), and all widgets hide content during screen sharing and when the Mac is locked. Until screen sharing can be detected, details are hidden by default and the owner shows them from Aegis's menu (ADR-0033).
-- **Performance.** The live desktop freezes to a static frame when covered by windows, on battery, or when the Mac is busy; custom widgets pause when not visible.
+- **Performance.** The live desktop freezes to a static frame when covered by windows or when the Mac is busy; custom widgets pause when not visible. It keeps moving on battery (owner's choice, 2026-10-27).
 - **What stays macOS:** login screen, password and permission prompts, System Settings, App Store windows, and the inside of other apps' windows.
 - **Actions follow the same safety rules** as App control and Home control (confirmation tiers, action log, never-list).
 - **Distribution:** signed and notarized for direct download; a shell like this cannot ship on the Mac App Store.
@@ -750,7 +750,7 @@ The Mac running Aegis becomes a store of the user's whole personal life, so secu
 | Wrong or harmful action | Confirmation tiers, plans shown before running, action log, undo, a never-allowed list (payments, deletion, passwords) |
 | UI automation breaks when apps update | Prefer frameworks, AppleScript and Shortcuts; screen-level control only as fallback |
 | AegisShell breaks with macOS updates (desktop layer, hidden Dock) | Shell kept optional and separate from the core app; falls back to normal macOS |
-| Live desktop and custom widgets cost GPU and battery | Freeze when covered, on battery or under load; native widgets as the light default |
+| Live desktop and custom widgets cost GPU and battery | Freeze when covered or under load (it keeps moving on battery, owner's choice); native widgets as the light default |
 | Widgets expose personal details on screen | Hide-details option; content hidden during screen sharing and when locked |
 | Total silence could hide a real emergency | Optional "break silence for emergencies" |
 | Voice and model licences may forbid redistribution | Choose commercially licensed models if released to others |
@@ -963,7 +963,7 @@ AI agents do most of the building, so estimates in days or weeks aren't meaningf
 - Aegis top bar; Dock and menu bar hiding with saved and restored settings; watchdog restore from Aegis Core.
 - Launcher, window management, workspaces.
 - Custom interactive desktop widgets.
-- Performance guards: freeze when covered, on battery or under load.
+- Performance guards: freeze when covered or under load.
 
 **Done when:** AegisShell engages and disengages cleanly every time, restores the Mac exactly as it was (including after a forced crash), and uses no resources while disengaged.
 

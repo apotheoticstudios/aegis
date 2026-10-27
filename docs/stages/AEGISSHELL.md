@@ -13,7 +13,7 @@ Status: stage 1 built (engage and disengage, Aegis's menu bar item, the desktop'
 - **Silent.** No sounds unless the owner turns interface sounds on.
 - **Privacy on screen.** Widgets hide names and content during screen sharing, while the Mac is locked, and when "hide details" is on.
 - **Actions follow the safety system.** Anything a widget or the launcher does goes through ActionPolicy (tiers, never-list, action log), exactly like commands in the panel.
-- **Performance.** The live desktop freezes to a still frame when covered, on battery or when the Mac is busy; widgets pause when hidden. Animated glows are flattened into one layer (the window server lesson from the SYSTEM screen).
+- **Performance.** The live desktop freezes to a still frame when covered or when the Mac is busy (it keeps moving on battery, owner's choice); widgets pause when hidden. Animated glows are flattened into one layer (the window server lesson from the SYSTEM screen).
 
 ## Stage 0 — Feasibility spike (answered in ADR-0033)
 
@@ -48,13 +48,13 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 ## Stage 3 — Live HUD desktop
 
 - The desktop-level layer: reactor, event stream, today's schedule, home status (when Home control exists), in the active theme.
-- Freezes to a still frame when covered by windows, on battery, or when the Mac is busy; resumes when visible.
+- Freezes to a still frame when covered by windows or when the Mac is busy (not on battery, owner's choice); resumes when visible.
 - **Done when:** it renders under all windows on every Space, freezes as specified (measured), and window server load stays within 5 points of macOS's own wallpaper.
 - **Built (2026-10-27):** the readings drawn into the scene, as the design's ShellDesktop.
   - **Status** is pinned to the core: the urgent count, the top item, Open in panel. **Next up** is pinned to its event on the arc, with a sand glass and the minutes to go.
   - The people **waiting** sit on an orbit, coloured by how long they've waited. The **system** shows as disk and memory arcs, with a turning tick ring and a callout when a source needs a fix.
   - The brief's **Play** and item count sit under the core, the **ask line** on the ground, and the **wireframe floor** under it all.
-  - **Still frame:** on battery, when the Mac is hot, under Reduce Motion, by choice, or while every display's desktop is covered. The reactor, the art, the rings and the pings stop, and a line says why.
+  - **Still frame:** when the Mac is hot, under Reduce Motion, by choice, or while every display's desktop is covered. The reactor, the art, the rings and the pings stop, and a line says why.
   - **The stream** (2026-10-27, with #78's recent events): one line per event at the top left, fading downwards, the urgent one marked; kinds only with details hidden.
   - **The world** rises out of the corner (the globe, home pinned when set), with today's weather at home above it (storm or sun art; the brief's forecast, home rounded to about 10 km, only with the World lines switched on). **Home** shows the floor plan marked "not set up" until Home control exists. Matrix's ground is falling code (#77's shapes, ported by Codex).
   - **Still to come:** the tracked flight on the globe, Home control's real states, and measuring the cost on the owner's Mac.
@@ -94,7 +94,7 @@ Stage 0 decides feasibility and goes first. Stages 1–2 are the minimum usable 
 | Risk | Mitigation |
 | --- | --- |
 | macOS changes how Dock/menu bar hiding or desktop-level windows behave | Spike first; keep every change behind save-and-restore; the exit hotkey works even if the shell fails |
-| Window server load from a full-screen animated desktop | Flatten glows, freeze when covered or on battery, measure every stage |
+| Window server load from a full-screen animated desktop | Flatten glows, freeze when covered or busy, measure every stage |
 | Accessibility permission feels heavy | Window management is optional; everything else works without it |
 | Leaving the Mac changed after a crash | State file restored at next launch; tested |
 | Distribution | A shell like this can't ship on the Mac App Store; direct download, signed and notarized (already the plan) |

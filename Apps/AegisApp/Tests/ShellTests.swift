@@ -128,21 +128,18 @@ final class ShellTests: XCTestCase {
 
     /// The design's timing: ShellEngage's table.
     func testEngageAndDisengageKeepTheDesignsTiming() {
-        let start = ShellMotion.engage(0, traceLength: 2000, reduced: false)
+        let start = ShellMotion.engage(0, reduced: false)
         XCTAssertEqual(start.wall, 0)
         XCTAssertEqual(start.core, 0)
         XCTAssertEqual(start.readings, 0)
         XCTAssertEqual(start.shield, 0)
         XCTAssertEqual(start.shieldScale, 0.6, accuracy: 1e-9)
-        XCTAssertEqual(start.trace, 0)
-        XCTAssertGreaterThan(ShellMotion.engage(0.6, traceLength: 2000, reduced: false).noise, 0.3, "noise flickers from 420 ms")
-        XCTAssertEqual(ShellMotion.engage(0.9, traceLength: 2000, reduced: false).brackets, 0.5, "brackets flicker on in two steps")
-        let shield = ShellMotion.engage(0.25 + 0.35 * 1.5, traceLength: 2000, reduced: false)
+        XCTAssertGreaterThan(ShellMotion.engage(0.6, reduced: false).noise, 0.3, "noise flickers from 420 ms")
+        let shield = ShellMotion.engage(0.25 + 0.35 * 1.5, reduced: false)
         XCTAssertEqual(shield.shield, 0.9, accuracy: 1e-9)
-        XCTAssertEqual(ShellMotion.engage(0.9, traceLength: 2000, reduced: false).core, 1.0 / 3, accuracy: 1e-9, "the core steps on")
-        let built = ShellMotion.engage(ShellMotion.engaged, traceLength: 2000, reduced: false)
+        XCTAssertEqual(ShellMotion.engage(0.9, reduced: false).core, 1.0 / 3, accuracy: 1e-9, "the core steps on")
+        let built = ShellMotion.engage(ShellMotion.engaged, reduced: false)
         XCTAssertEqual(built.wall, 1, accuracy: 0.01)
-        XCTAssertEqual(built.trace, 1)
         XCTAssertEqual(built.core, 1)
         XCTAssertEqual(built.readings, 1, accuracy: 0.01)
         XCTAssertEqual(built.noise, 0)
@@ -151,7 +148,7 @@ final class ShellTests: XCTestCase {
         XCTAssertGreaterThan(ShellMotion.disengage(0.3, reduced: false).all, 0)
         XCTAssertEqual(ShellMotion.disengage(0.8, reduced: false).all, 0)
         // Reduce Motion: one 300 ms crossfade, no shield, no noise.
-        let reduced = ShellMotion.engage(0.15, traceLength: 2000, reduced: true)
+        let reduced = ShellMotion.engage(0.15, reduced: true)
         XCTAssertEqual(reduced.all, 0.5, accuracy: 1e-9)
         XCTAssertEqual(reduced.shield, 0)
         XCTAssertEqual(reduced.noise, 0)
@@ -173,7 +170,6 @@ final class ShellTests: XCTestCase {
 
     func testTheDesktopHoldsStillForTheRightReason() {
         func reason(
-            battery: Bool = false,
             thermal: ProcessInfo.ThermalState = .nominal,
             motion: Bool = false,
             held: Bool = false,
@@ -181,16 +177,15 @@ final class ShellTests: XCTestCase {
         )
             -> ShellStill?
         {
-            ShellStill.reason(battery: battery, thermal: thermal, reduceMotion: motion, held: held, covered: covered)
+            ShellStill.reason(thermal: thermal, reduceMotion: motion, held: held, covered: covered)
         }
         XCTAssertNil(reason(), "live")
         XCTAssertNil(reason(thermal: .fair))
-        XCTAssertEqual(reason(battery: true, held: true, covered: true), .battery, "most pressing first")
-        XCTAssertEqual(reason(thermal: .serious), .busy)
+        XCTAssertEqual(reason(thermal: .serious, held: true, covered: true), .busy, "most pressing first")
         XCTAssertEqual(reason(motion: true, held: true), .reduceMotion)
         XCTAssertEqual(reason(held: true, covered: true), .held)
         XCTAssertEqual(reason(covered: true), .covered)
-        XCTAssertTrue(ShellStill.battery.line.contains("plug in"))
+        XCTAssertTrue(ShellStill.busy.line.contains("cools down"))
     }
 
     func testAStreamLineSaysWhoAndWhatOrOnlyTheKind() {
@@ -326,22 +321,22 @@ final class ShellTests: XCTestCase {
         let size = CGSize(width: 1470, height: 956)
         for moment in [0.5, 0.9, 1.3] {
             shell.phase = .engaging(Date().addingTimeInterval(-moment + 0.3))
-            try snap(ShellDesktop(shell: shell, size: size, top: 37), size, "engage-\(Int(moment * 1000)).png")
+            try snap(ShellDesktop(shell: shell, size: size), size, "engage-\(Int(moment * 1000)).png")
         }
         shell.phase = .engaged
-        try snap(ShellDesktop(shell: shell, size: size, top: 37), size, "desktop.png")
+        try snap(ShellDesktop(shell: shell, size: size), size, "desktop.png")
         shell.hideDetails = true
-        shell.still = .battery
-        try snap(ShellDesktop(shell: shell, size: size, top: 37), size, "desktop-hidden-still.png")
+        shell.still = .held
+        try snap(ShellDesktop(shell: shell, size: size), size, "desktop-hidden-still.png")
         shell.still = nil
         try snap(
-            ShellDesktop(shell: shell, size: CGSize(width: 2560, height: 1440), top: 25),
+            ShellDesktop(shell: shell, size: CGSize(width: 2560, height: 1440)),
             CGSize(width: 2560, height: 1440),
             "desktop-27.png"
         )
         for workspace in [ShellWorkspace.focus, .evening, .movie] {
             shell.switchTo(workspace)
-            try snap(ShellDesktop(shell: shell, size: size, top: 37), size, "workspace-\(workspace.rawValue).png")
+            try snap(ShellDesktop(shell: shell, size: size), size, "workspace-\(workspace.rawValue).png")
         }
         shell.switchTo(.work)
         try snap(ShellMenuExtra(shell: shell).background(Color(white: 0.08)), CGSize(width: 260, height: 24), "item-engaging.png")
