@@ -28,7 +28,19 @@ final class ShellController {
             let since: Date
         }
 
+        /// One line of the stream: when, from where, what, and what it says with details hidden.
+        struct Line: Equatable {
+            let time: Date
+            let source: String
+            let text: String
+            let hidden: String
+            var urgent = false
+        }
+
         var urgent = 0
+        var stream: [Line] = []
+        /// Events collected since midnight.
+        var today = 0
         /// The first urgent item: its line, and whether it came from a person.
         var top: String?
         var topFromPerson = false
@@ -247,6 +259,16 @@ final class ShellController {
         next.top = urgent.first?.text
         next.topFromPerson = urgent.first?.person != nil
         next.items = items.count
+        let urgentEvents = Set(urgent.flatMap(\.eventIDs))
+        if case let .events(recent) = await model.service.handle(.recentEvents(limit: 14)) {
+            next.stream = recent.map { Self.line($0, urgent: urgentEvents.contains($0.id)) }
+        }
+        if case let .activity(activity) = await model.service.handle(.activity(hours: 24)) {
+            next.today = activity.counts.values.reduce(0) { sum, hours in
+                sum + hours.enumerated().filter { activity.start.addingTimeInterval(Double($0.offset) * 3600) >= day }
+                    .reduce(0) { $0 + $1.element }
+            }
+        }
         if case let .people(people) = await model.service.handle(.people) {
             next.waiting = people.sorted { $0.waitingSince < $1.waitingSince }.map { .init(name: $0.person.name, since: $0.waitingSince) }
         }
@@ -260,6 +282,18 @@ final class ShellController {
         (next.diskUsed, next.diskTotal) = (system.diskUsed, system.diskTotal)
         next.memory = system.processes.filter(\.aegis).reduce(0) { $0 + $1.memory }
         readings = next
+    }
+
+    /// A stream line from an event: the sender and the first line of what it says, or its kind with details hidden.
+    static func line(_ event: Event, urgent: Bool) -> Readings.Line {
+        let (source, hidden) = switch event.source {
+        case .imessage, .sms: ("messages", "Message from a contact")
+        case .email: ("mail", "Mail from a sender")
+        case .notification: ("notice", "A notification")
+        }
+        let said = (event.title.map { $0 + " · " } ?? "") + (event.body.split(whereSeparator: \.isNewline).first.map(String.init) ?? "")
+        let text = event.sender.map { $0 + ": " + said } ?? said
+        return .init(time: event.eventTime, source: source, text: String(text.prefix(140)), hidden: hidden, urgent: urgent)
     }
 
     /// Holds the desktop still on battery, when the Mac is hot, under Reduce Motion, by choice, or while every display's

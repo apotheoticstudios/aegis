@@ -55,7 +55,8 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
   - The people **waiting** sit on an orbit, coloured by how long they've waited. The **system** shows as disk and memory arcs, with a turning tick ring and a callout when a source needs a fix.
   - The brief's **Play** and item count sit under the core, the **ask line** on the ground, and the **wireframe floor** under it all.
   - **Still frame:** on battery, when the Mac is hot, under Reduce Motion, by choice, or while every display's desktop is covered. The reactor, the art, the rings and the pings stop, and a line says why.
-  - **Still to come:** the stream, the world globe and weather, the home floor plan (with Home control), Matrix's falling code, and measuring the cost on the owner's Mac.
+  - **The stream** (2026-10-27, with #78's recent events): one line per event at the top left, fading downwards, the urgent one marked; kinds only with details hidden.
+  - **Still to come:** the world globe and weather, the home floor plan (with Home control), Matrix's falling code, and measuring the cost on the owner's Mac.
 
 ## Stage 4 — Custom desktop widgets
 

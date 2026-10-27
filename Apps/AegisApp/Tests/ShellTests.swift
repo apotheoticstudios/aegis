@@ -193,6 +193,15 @@ final class ShellTests: XCTestCase {
         XCTAssertTrue(ShellStill.battery.line.contains("plug in"))
     }
 
+    func testAStreamLineSaysWhoAndWhatOrOnlyTheKind() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let lines = SampleCoreService.recentEvents(now: now).map { ShellController.line($0, urgent: false) }
+        XCTAssertEqual(lines.first?.source, "messages")
+        XCTAssertEqual(lines.first?.text, "Alex Example: Can you call me about Saturday?")
+        XCTAssertEqual(lines.first?.hidden, "Message from a contact", "no name, no words")
+        XCTAssertEqual(lines.map(\.source), ["messages", "mail", "notice"])
+    }
+
     func testTheReadingsWording() {
         XCTAssertEqual(ShellReadings.toGo(25 * 60 - 10).value, "25")
         XCTAssertEqual(ShellReadings.toGo(25 * 60).unit, "min to go")
@@ -256,6 +265,9 @@ final class ShellTests: XCTestCase {
                 .map { .init(name: $0.0, since: now.addingTimeInterval(-$0.1 * 3600)) },
             problems: [.mail], diskUsed: 31_000_000_000, diskTotal: 40_000_000_000, memory: 2_100_000_000, now: now
         )
+        shell.readings.today = 142
+        shell.readings.stream = SampleCoreService.recentEvents(now: now).map { ShellController.line($0, urgent: false) }
+        shell.readings.stream[0].urgent = true
         shell.hideDetails = false
         HUDPresence.shared.shell = true
         defer { HUDPresence.shared.shell = false }

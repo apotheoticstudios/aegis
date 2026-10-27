@@ -75,6 +75,7 @@ struct ShellReadings: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
+            stream
             system
             waiting
             status
@@ -99,6 +100,48 @@ struct ShellReadings: View {
         ))
         .position(x: geometry.centre.x, y: geometry.size.height - 104 * scale + CGFloat(Int(17 * scale)) * 12 / 2)
         .allowsHitTesting(false)
+    }
+
+    // MARK: - The stream, top left, fading downwards
+
+    private var stream: some View {
+        let rows = geometry.big ? 14 : 8
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Stream").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
+                Spacer()
+                Text(hidden ? "live · details hidden" : "live · \(readings.today) today").font(HUDFace.mono(10))
+                    .foregroundStyle(HUD.inkMuted)
+            }
+            .padding(.bottom, 6)
+            ForEach(Array(readings.stream.prefix(rows).enumerated()), id: \.offset) { _, line in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(HUDScheduleArc.clock(line.time)).frame(width: 40, alignment: .leading)
+                    Text(line.source.uppercased()).font(HUDFace.mono(10)).tracking(0.6).frame(width: 74, alignment: .leading)
+                        .foregroundStyle(line.urgent ? HUD.critical : HUD.inkMuted)
+                    Text(hidden ? line.hidden : line.text).font(.custom(HUDType.body.fontName, size: 11)).foregroundStyle(HUD.ink)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+                .font(HUDFace.mono(11))
+                .foregroundStyle(HUD.inkMuted)
+                .padding(.vertical, 3)
+                .padding(.leading, line.urgent ? 6 : 0)
+                .overlay(alignment: .leading) {
+                    if line.urgent {
+                        Rectangle().fill(HUD.critical).frame(width: 2)
+                    }
+                }
+                .overlay(alignment: .bottom) { Rectangle().fill(HUD.glassEdge.opacity(0.6)).frame(height: 1) }
+            }
+        }
+        .frame(width: geometry.big ? 520 : 360, alignment: .leading)
+        .mask(LinearGradient(
+            stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
+            startPoint: .top,
+            endPoint: .bottom
+        ))
+        .frame(width: 0, height: 0, alignment: .topLeading)
+        .position(x: geometry.big ? 56 : 40, y: 70)
     }
 
     // MARK: - Status, pinned to the core
