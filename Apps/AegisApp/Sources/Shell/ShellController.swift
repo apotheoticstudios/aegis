@@ -39,6 +39,9 @@ final class ShellController {
 
         var urgent = 0
         var stream: [Line] = []
+        /// Today's weather at home, as the brief words it ("Weather at home: 18 to 27°. Rain likely from 3 pm."); nil
+        /// without a home or with the World view's lines switched off.
+        var weather: String?
         /// Events collected since midnight.
         var today = 0
         /// The first urgent item: its line, and whether it came from a person.
@@ -275,6 +278,7 @@ final class ShellController {
         if case let .status(status) = await model.service.handle(.status) {
             next.problems = SourceHealth.lines(status.sources, now: now).filter { $0.state != .healthy }.map(\.source)
         }
+        next.weather = await Self.weather()
         let system = await Task.detached(priority: .utility) {
             var reader = SystemReader()
             return reader.read(processes: true)
@@ -282,6 +286,17 @@ final class ShellController {
         (next.diskUsed, next.diskTotal) = (system.diskUsed, system.diskTotal)
         next.memory = system.processes.filter(\.aegis).reduce(0) { $0 + $1.memory }
         readings = next
+    }
+
+    /// Today's forecast for home, home rounded to about 10 km (ADR-0024), when the owner allows the World lines.
+    private static func weather() async -> String? {
+        guard WorldPresence.briefEnabled, let home = WorldHome.point,
+              let url = WorldBrief.weatherURL(latitude: home.latitude, longitude: home.longitude)
+        else { return nil }
+        let session = URLSession(configuration: .ephemeral) // privacy-guard: allow-network rounded home forecast, ADR-0024
+        guard let (data, response) = try? await session.data(from: url),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return WorldBrief.weather(data, now: Date())
     }
 
     /// A stream line from an event: the sender and the first line of what it says, or its kind with details hidden.

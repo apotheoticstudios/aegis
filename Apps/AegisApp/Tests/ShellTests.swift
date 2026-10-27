@@ -202,6 +202,18 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(lines.map(\.source), ["messages", "mail", "notice"])
     }
 
+    func testTheWeatherReading() {
+        let rain = ShellWeather("Weather at home: 18 to 27°. Rain likely from 3 pm (70%).")
+        XCTAssertTrue(rain.stormy)
+        XCTAssertEqual(rain.headline, "Rain")
+        XCTAssertEqual(rain.detail, "18 to 27° · Rain likely from 3 pm (70%)")
+        XCTAssertEqual(rain.temperature, "18 to 27°")
+        let clear = ShellWeather("Weather at home: 15 to 25°. No rain expected.")
+        XCTAssertFalse(clear.stormy)
+        XCTAssertEqual(clear.headline, "Clear")
+        XCTAssertEqual(ShellWeather("Weather at home: 20 to 31°. Storms are possible (60%).").headline, "Storms")
+    }
+
     func testTheReadingsWording() {
         XCTAssertEqual(ShellReadings.toGo(25 * 60 - 10).value, "25")
         XCTAssertEqual(ShellReadings.toGo(25 * 60).unit, "min to go")
@@ -268,6 +280,7 @@ final class ShellTests: XCTestCase {
         shell.readings.today = 142
         shell.readings.stream = SampleCoreService.recentEvents(now: now).map { ShellController.line($0, urgent: false) }
         shell.readings.stream[0].urgent = true
+        shell.readings.weather = "Weather at home: 18 to 27°. Rain likely from 3 pm (70%)."
         shell.hideDetails = false
         HUDPresence.shared.shell = true
         defer { HUDPresence.shared.shell = false }

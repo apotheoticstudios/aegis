@@ -56,7 +56,8 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
   - The brief's **Play** and item count sit under the core, the **ask line** on the ground, and the **wireframe floor** under it all.
   - **Still frame:** on battery, when the Mac is hot, under Reduce Motion, by choice, or while every display's desktop is covered. The reactor, the art, the rings and the pings stop, and a line says why.
   - **The stream** (2026-10-27, with #78's recent events): one line per event at the top left, fading downwards, the urgent one marked; kinds only with details hidden.
-  - **Still to come:** the world globe and weather, the home floor plan (with Home control), Matrix's falling code, and measuring the cost on the owner's Mac.
+  - **The world** rises out of the corner (the globe, home pinned when set), with today's weather at home above it (storm or sun art; the brief's forecast, home rounded to about 10 km, only with the World lines switched on). **Home** shows the floor plan marked "not set up" until Home control exists. Matrix's ground is falling code (#77's shapes, ported by Codex).
+  - **Still to come:** the tracked flight on the globe, Home control's real states, and measuring the cost on the owner's Mac.
 
 ## Stage 4 — Custom desktop widgets
 
