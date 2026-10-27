@@ -54,10 +54,18 @@ final class ContactIdentityTests: XCTestCase {
             .match(.init(id: example.id, name: example.displayName))
         )
         duplicate.id = "example-2"
+        duplicate.displayName = " alex  EXAMPLE"
         XCTAssertEqual(
-            ContactIndex([example, duplicate]).resolve(handle: "0400000001"),
-            .ambiguous(count: 2),
-            "equal names do not establish that two cards are the same person"
+            ContactIndex([duplicate, example]).resolve(handle: "0400000001"),
+            .match(.init(id: example.id, name: example.displayName)),
+            "the same person saved twice is one person, under the first card's ID"
+        )
+        var nameless = example
+        nameless.id = "example-3"
+        nameless.displayName = ""
+        XCTAssertEqual(
+            ContactIndex([example, nameless]).resolve(handle: "0400000001"),
+            .match(.init(id: example.id, name: example.displayName))
         )
         duplicate.displayName = "Sam Example"
         XCTAssertEqual(

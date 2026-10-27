@@ -34,7 +34,7 @@ public enum Resolution: Sendable, Equatable {
 }
 
 /// An immutable index built in O(total handles), with expected O(1) dictionary lookups after normalization.
-/// Repeated handles or snapshots with the same contact ID do not create ambiguity.
+/// Repeated handles, snapshots with the same contact ID, or duplicate cards with the same name do not create ambiguity.
 public struct ContactIndex: Sendable {
     private var contactsByHandle: [String: [String: Event.ContactRef]] = [:]
     /// The owner's own handles (#218): from the Me card and the addresses their sent mail comes from.
@@ -69,8 +69,10 @@ public struct ContactIndex: Sendable {
     /// Normalization costs O(handle length); the index lookup and ambiguity count are expected O(1).
     public func resolve(handle: String) -> Resolution {
         guard let key = key(for: handle), let matches = contactsByHandle[key] else { return .none }
-        // Equal names do not prove that different contact IDs belong to one person.
-        if matches.count > 1 {
+        // Cards with the same number and the same name are one person saved twice (owner's request, ADR-0021); the
+        // first ID keeps rules and history together. Different names sharing a number are never guessed.
+        let names = Set(matches.values.map { MemoryText.normalise($0.name) }.filter { !$0.isEmpty })
+        if matches.count > 1, names.count != 1 {
             return .ambiguous(count: matches.count)
         }
         guard var contact = matches.values.sorted(by: { $0.id < $1.id })

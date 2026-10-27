@@ -111,6 +111,8 @@ final class ShellController {
 
     /// ⌃⌥A, the design's shortcut; nil when another app holds it.
     private(set) var hotKeyLabel: String?
+    /// Each workspace's shortcut while engaged, for the menu; missing when another app holds both choices.
+    private(set) var workspaceKeyLabels: [ShellWorkspace: String] = [:]
 
     /// At launch: the shortcut, and macOS put back if Aegis quit while engaged (a crash).
     func start() {
@@ -169,12 +171,18 @@ final class ShellController {
         itemComplete = false
         HUDPresence.shared.shell = true
         items = ShellMenuBarItems(shell: self)
-        // ⌃1–4 switch workspaces while engaged.
+        // ⌃1–4 switch workspaces while engaged; ⌃⌥ and the number where another app holds ⌃ and the number.
         let keys = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4]
-        workspaceKeys = zip(ShellWorkspace.allCases, keys).enumerated().compactMap { index, pair in
-            GlobalHotKey(
-                .init(keyCode: UInt32(pair.1), modifiers: UInt32(controlKey), label: "⌃\(index + 1)"), number: UInt32(4 + index)
-            ) { [weak self] in self?.switchTo(pair.0) }
+        workspaceKeyLabels = [:]
+        for (index, (workspace, key)) in zip(ShellWorkspace.allCases, keys).enumerated() {
+            for (modifiers, prefix) in [(controlKey, "⌃"), (controlKey | optionKey, "⌃⌥")] {
+                let choice = GlobalHotKey.Choice(keyCode: UInt32(key), modifiers: UInt32(modifiers), label: "\(prefix)\(index + 1)")
+                if let registered = GlobalHotKey(choice, number: UInt32(4 + index), action: { [weak self] in self?.switchTo(workspace) }) {
+                    workspaceKeys.append(registered)
+                    workspaceKeyLabels[workspace] = choice.label
+                    break
+                }
+            }
         }
         openWindows()
         checkStill()

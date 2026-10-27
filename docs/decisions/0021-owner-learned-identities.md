@@ -19,3 +19,7 @@ Acknowledge a new fact or correction only after an atomic memory save succeeds; 
 ## Consequences
 
 Facts and identity corrections survive app restarts and ending a conversation. Automatic fact recognition is deterministic, so ambiguous language may still need a clearer statement or an explicit “remember that…”. Existing non-identity facts are not inferred into contact mappings. This adds work only on owner requests or existing source processing, not an always-running model.
+
+## Amendment (2026-10-27): the same person saved twice
+
+A number on several Contacts cards that all carry the same name (ignoring case and spacing), or no name, is one person saved twice: it resolves to the first card's ID, so rules and history stay together. Cards with different names sharing a number stay ambiguous and are never guessed; the owner names them once ("+61… is Name").

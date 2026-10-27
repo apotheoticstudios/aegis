@@ -240,7 +240,8 @@ struct ShellMenu: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: HUD.space2) {
                 HUDEmblem(size: 20)
-                HUDAsciiText(lines: banner, cols: banner.map(\.count).max() ?? 0, size: 2.4, tone: HUD.primary)
+                let cols = banner.map(\.count).max() ?? 0
+                HUDAsciiText(lines: banner, cols: cols, size: Self.bannerSize(cols: cols), tone: HUD.primary)
                 Spacer(minLength: 0)
                 HUDTag(word: status.word, tone: HUDColor(token: status.live ? .primary : status.tone)).fixedSize()
             }
@@ -259,8 +260,8 @@ struct ShellMenu: View {
             }
             Text("Workspace").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
-            ForEach(Array(ShellWorkspace.allCases.enumerated()), id: \.offset) { index, workspace in
-                ShellWorkspaceRow(workspace: workspace, number: index + 1, chosen: workspace == shell.workspace) {
+            ForEach(ShellWorkspace.allCases, id: \.self) { workspace in
+                ShellWorkspaceRow(workspace: workspace, keys: shell.workspaceKeyLabels[workspace], chosen: workspace == shell.workspace) {
                     close()
                     shell.switchTo(workspace)
                 }
@@ -269,7 +270,7 @@ struct ShellMenu: View {
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
             row("Launcher", keys: shell.panelKey) { ShellLauncher.shared.open() }
             row("Open the panel", keys: nil) { shell.openPanel() }
-            row("Talk to Aegis", keys: shell.talkKey) { shell.talk() }
+            row("Talk to \(shell.model?.personality.name ?? "Aegis")", keys: shell.talkKey) { shell.talk() }
             Text("Privacy").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
             toggle("Hide details", on: Binding(get: { shell.hideDetails }, set: { shell.hideDetails = $0 }))
@@ -292,7 +293,8 @@ struct ShellMenu: View {
             .padding(.top, 8)
         }
         .padding(.top, 6)
-        .frame(width: 320)
+        // Leading, so a row that's ever too wide is cut at the right instead of shifting the whole menu.
+        .frame(width: 320, alignment: .leading)
         .background {
             ZStack {
                 VisualEffect().clipShape(shape)
@@ -323,6 +325,12 @@ struct ShellMenu: View {
         .frame(minHeight: 28)
     }
 
+    /// The name banner's character size: as designed, but small enough that a long name leaves the status tag room in
+    /// the 320-point menu.
+    static func bannerSize(cols: Int, width: CGFloat = 150) -> CGFloat {
+        cols == 0 ? 2.4 : min(2.4, width / (CGFloat(cols) * HUDAscii.cellAspect))
+    }
+
     /// "⌥⇧Space" as key caps: each modifier, then the key.
     static func caps(_ label: String) -> [String] {
         let modifiers = label.prefix { "⌃⌥⇧⌘".contains($0) }
@@ -349,11 +357,11 @@ struct ShellMenu: View {
     }
 }
 
-/// A workspace in the menu: its accent pip, its name (ticked when it's the one showing) and ⌃1–4; the one showing
+/// A workspace in the menu: its accent pip, its name (ticked when it's the one showing) and its shortcut; the one showing
 /// carries an accent edge.
 private struct ShellWorkspaceRow: View {
     let workspace: ShellWorkspace
-    let number: Int
+    let keys: String?
     let chosen: Bool
     let choose: () -> Void
     @Environment(\.hudTheme) private var theme
@@ -368,7 +376,9 @@ private struct ShellWorkspaceRow: View {
                     Text("✓").font(HUDFace.mono(12)).foregroundStyle(HUD.ok)
                 }
                 Spacer()
-                HUDKeyCaps(keys: ["⌃", String(number)])
+                if let keys {
+                    HUDKeyCaps(keys: ShellMenu.caps(keys))
+                }
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 28)

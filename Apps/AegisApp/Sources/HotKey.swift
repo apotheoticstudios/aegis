@@ -2,8 +2,8 @@ import Carbon.HIToolbox
 import Foundation
 
 /// A system-wide shortcut through Carbon's public `RegisterEventHotKey`, which needs no Accessibility
-/// permission. Registration fails when another app already holds the combination, so callers try the
-/// next choice.
+/// permission. Registered exclusively, so it fails when another app already holds the combination
+/// exclusively (which would otherwise take every press unseen), and callers try the next choice.
 @MainActor
 final class GlobalHotKey {
     /// A key with modifiers, as Carbon wants them.
@@ -52,7 +52,8 @@ final class GlobalHotKey {
         }, 1, &pressed, context, &handler)
         guard installed == noErr else { return nil }
         let identifier = EventHotKeyID(signature: OSType(0x4A52_5653), id: number) // 'JRVS'
-        guard RegisterEventHotKey(choice.keyCode, choice.modifiers, identifier, GetApplicationEventTarget(), 0, &hotKey) == noErr
+        let exclusive = OptionBits(kEventHotKeyExclusive)
+        guard RegisterEventHotKey(choice.keyCode, choice.modifiers, identifier, GetApplicationEventTarget(), exclusive, &hotKey) == noErr
         else {
             RemoveEventHandler(handler)
             return nil

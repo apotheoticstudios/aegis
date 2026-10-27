@@ -166,6 +166,11 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(ShellDesktop.next([lunch], now: lunch.end), "Nothing else today.")
         XCTAssertEqual(ShellMenu.caps("⌥⇧Space"), ["⌥", "⇧", "Space"])
         XCTAssertEqual(ShellMenu.caps("⌃⌥A"), ["⌃", "⌥", "A"])
+        // A long assistant name still leaves the status tag room in the menu's head.
+        for name in ["Aegis", "Jarvis", "Friday Example"] {
+            let cols = HUDBanner.lines(name, rows: 10).map(\.count).max() ?? 0
+            XCTAssertLessThanOrEqual(CGFloat(cols) * ShellMenu.bannerSize(cols: cols) * HUDAscii.cellAspect, 150.5, name)
+        }
     }
 
     func testTheDesktopHoldsStillForTheRightReason() {
@@ -343,7 +348,7 @@ final class ShellTests: XCTestCase {
         shell.itemComplete = true
         shell.panelKey = "⌥Space"
         try snap(ShellMenuExtra(shell: shell).background(Color(white: 0.08)), CGSize(width: 260, height: 24), "item.png")
-        try snap(ShellMenu(shell: shell) {}.background(Color.black), CGSize(width: 320, height: 380), "menu.png")
+        try snap(ShellMenu(shell: shell) {}.background(Color.black), CGSize(width: 320, height: 520), "menu.png")
         let launcher = ShellLauncher()
         launcher.query = "example"
         try snap(LauncherView(launcher: launcher).background(Color.black), CGSize(width: 680, height: 480), "launcher.png")
