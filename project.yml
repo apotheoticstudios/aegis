@@ -101,7 +101,7 @@ targets:
         INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: "Aegis shows today's reminders in your brief. Nothing leaves this Mac."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Aegis listens only after you click the mic in its panel. Nothing is recorded or leaves this Mac."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Aegis turns what you say into a question, on this Mac only."
-        INFOPLIST_KEY_NSAppleEventsUsageDescription: "When you ask, Aegis plays or pauses Music, makes a note in Notes, opens a Safari tab, or sends a text or email you confirmed twice."
+        INFOPLIST_KEY_NSAppleEventsUsageDescription: "When you ask, Aegis plays or pauses Music, makes a note in Notes, opens a Safari tab, or sends a text or email you confirmed twice. While AegisShell is engaged it hides the Dock, and puts it back when you leave."
         INFOPLIST_KEY_NSLocationUsageDescription: "When you say “set my home here”, Aegis notes where this Mac is, once, to show home on the World view. It stays on this Mac."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "When you say “set my home here”, Aegis notes where this Mac is, once, to show home on the World view. It stays on this Mac."
         CODE_SIGN_STYLE: Automatic

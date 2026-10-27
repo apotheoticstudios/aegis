@@ -8,10 +8,12 @@ final class HUDPresence {
     var open = false
     /// The setup wizard is on screen: its HUD moves as the panel's does, without counting as the panel being open.
     var setup = false
+    /// AegisShell's desktop is on screen (ADR-0033).
+    var shell = false
 
-    /// Whether the HUD's motion runs: while the panel or the wizard shows.
+    /// Whether the HUD's motion runs: while the panel, the wizard or AegisShell shows.
     var animating: Bool {
-        open || setup
+        open || setup || shell
     }
 }
 

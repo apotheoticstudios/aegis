@@ -11,6 +11,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
 | — | Real mornings and feedback on the new features | agent:human | — | Owner's reviews drive the next fixes |
+| — | AegisShell stages 1–2: engage and disengage (⌃⌥A, menu, Exit, "engage" / "stand down"), the Dock saved and restored, the design's transition, Aegis's menu bar item and menu, the desktop's frame and core (ADR-0033) | agent:claude | claude/shell-engage | Merged; the owner's first real run to come |
 | #72 | World: air quality, eruptions and Australian weather warnings around home, in the brief and by asking (ADR-0024); fixes the brief's weather line | agent:claude | claude/world-alerts | Merged; not yet tried |
 | #8 | The Project: Aegis design system: five screens, tokens, fonts (ADR-0029) | agent:claude | claude/8-design-foundation | In review; next: settings windows, theme picker |
 | #8 | The design's motion: each screen builds itself as it shows (ADR-0029) | agent:claude | claude/8-design-motion | In review; waits for the owner's go-ahead |

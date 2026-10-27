@@ -45,6 +45,10 @@ enum HUDMotion {
     /// Symmetric in-out for loops.
     static let ambient = Curve(0.45, 0, 0.55, 1)
     static let linear = Curve(0, 0, 1, 1)
+    /// Departures, at about 70% of the arrival's duration.
+    static let exit = Curve(0.3, 0, 0.8, 0.15)
+    /// CSS's own `ease`.
+    static let ease = Curve(0.25, 0.1, 0.25, 1)
 
     /// When each inset section arrives: 620 ms, then 110 ms apart down its column, so the side columns arrive in
     /// pairs, top to bottom.

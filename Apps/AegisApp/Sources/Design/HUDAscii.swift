@@ -17,6 +17,8 @@ enum HUDAscii {
         case radar, eye, helix, wave, anatomy
         /// Slow-winding spiral arms: quiet. A turning wireframe cube with a pulsing core: an addon module.
         case galaxy, cube
+        /// Aegis's shield, a hex-plated sphere rippling with impacts: AegisShell engaging.
+        case shield
     }
 
     /// The art as lines, `time` seconds in (0 is the still frame); `grit` breaks the shading up like hand-made art.
@@ -126,7 +128,44 @@ enum HUDAscii {
         case .galaxy: galaxy(across, down, time)
         // The cube keeps its proportions in a wide footprint, centred.
         case .cube: HUDCube.density(aspect > 1 ? across * aspect : across, aspect > 1 ? down : down / aspect, time)
+        case .shield: shield(aspect > 1 ? across * aspect : across, aspect > 1 ? down : down / aspect, time)
         }
+    }
+
+    /// The plates are a hex grid wrapped round the sphere; three impacts send ripples across them.
+    private static func shield(_ across: Double, _ down: Double, _ time: Double) -> Double {
+        let squared = across * across + down * down
+        guard squared <= 1 else { return 0 }
+        let depth = (1 - squared).squareRoot(), lens = 1 / (depth + 0.55), root3 = 3.0.squareRoot()
+        let px = across * lens * 3.1, py = down * lens * 3.1 + time * 0.12
+        // Cube-rounding to the nearest hex, rounding halves up as the design's JavaScript does.
+        let qx = px * 2 / root3, qy = py - px / root3
+        var rx = (qx + 0.5).rounded(.down), ry = (qy + 0.5).rounded(.down)
+        let rz = (-qx - qy + 0.5).rounded(.down)
+        let dx = abs(rx - qx), dy = abs(ry - qy), dz = abs(rz + qx + qy)
+        if dx > dy, dx > dz {
+            rx = -ry - rz
+        } else if dy > dz {
+            ry = -rx - rz
+        }
+        let hx = abs(px - rx * root3 / 2), hy = abs(py - (ry + rx / 2))
+        let edge = max(hx * 0.866 + hy * 0.5, hy) > 0.42
+        var level = edge ? 0.3 + 0.45 * depth : 0.04 + 0.08 * depth
+        var ripple = 0.0
+        for (hitAcross, hitDown, phase) in [(0.35, -0.3, 0.0), (-0.45, 0.25, 1.1), (0.1, 0.5, 2.2)] where time > 0 {
+            let age = (time + phase).truncatingRemainder(dividingBy: 3.3), reach = age * 0.75
+            let distance = ((across - hitAcross) * (across - hitAcross) + (down - hitDown) * (down - hitDown)).squareRoot()
+            if abs(distance - reach) < 0.08 {
+                ripple = max(ripple, 1 - age / 3.3)
+            }
+            if age < 0.25, distance < 0.08 {
+                ripple = 1
+            }
+        }
+        if ripple > 0 {
+            level = min(1, level + ripple * (edge ? 0.55 : 0.3))
+        }
+        return squared.squareRoot() > 0.94 ? max(level, 0.85) : level
     }
 
     /// The arms wind slowly.

@@ -486,14 +486,14 @@ AegisShell turns the Mac into a Aegis operating environment: a shell over macOS 
 
 | Way in | Example |
 | --- | --- |
-| Hotkey | A dedicated shortcut (separate from the ⌥ Space panel hotkey) |
+| Hotkey | ⌃⌥A (separate from the ⌥ Space panel hotkey) |
 | Voice | "Aegis, engage" (only when the wake word is enabled) |
-| Menu bar | "Engage AegisShell" from the hex icon |
+| Menu bar | "Engage AegisShell" from Aegis's menu bar icon; Exit beside Aegis's item while engaged |
 | Panel | An Engage button in the HUD |
 | Optional schedule or workspace | e.g. engage automatically on the Mac mini hub, or when the "Work" workspace starts; off by default |
 
-- **On engage:** a short transition; the Dock and menu bar hide, the live HUD desktop, Aegis top bar and custom widgets appear, and the current window positions are saved.
-- **On disengage** (same hotkey, "Aegis, stand down", or the top bar's exit control): everything AegisShell added is removed, the Dock and menu bar return, and windows go back where they were.
+- **On engage:** a short transition (about 1.9 s: the shield forms over the screen and breaks into the live desktop); the Dock hides, macOS's own menu bar stays with Aegis's item in it (hexagon, workspace, status, Exit), and the live HUD desktop and custom widgets appear.
+- **On disengage** (same hotkey, "Aegis, stand down", Exit or Disengage in Aegis's menu): everything AegisShell added is removed, the Dock returns, and anything AegisShell moved goes back. How it sits on macOS: ADR-0033.
 - **Resources:** the live desktop, top bar and custom widgets use no RAM or GPU while AegisShell is not engaged.
 - **Always available exit:** if AegisShell ever misbehaves, the disengage hotkey and the menu bar icon still restore normal macOS.
 
@@ -508,7 +508,7 @@ AegisShell turns the Mac into a Aegis operating environment: a shell over macOS 
 | Feature | What it does |
 | --- | --- |
 | Live HUD desktop | Aegis draws on the desktop layer beneath windows: reactor, event stream, schedule and home status become a living wallpaper |
-| Aegis top bar | The Dock and menu bar auto-hide; a minimal angular Aegis bar shows time, status, the hex icon and quick toggles |
+| Aegis menu bar item | The Dock auto-hides; macOS's menu bar stays, and Aegis's item in it shows the hexagon, workspace, status, urgent count and Exit, with its own menu (owner's choice, 2026-10-27) |
 | Launcher | ⌥ Space replaces Spotlight and Launchpad: open apps, files and settings, ask questions and run commands from one bar |
 | Window management | Arrange windows by command ("Mail left, calendar right"), saved workspace layouts, focus layouts per activity |
 | Workspaces | One-tap modes such as Work, Focus, Evening and Movie, each changing layouts, widgets, Focus mode and home scenes |
@@ -749,7 +749,7 @@ The Mac running Aegis becomes a store of the user's whole personal life, so secu
 | Prompt injection now that Aegis can act | Actions only from the user's own commands; read content never triggers actions |
 | Wrong or harmful action | Confirmation tiers, plans shown before running, action log, undo, a never-allowed list (payments, deletion, passwords) |
 | UI automation breaks when apps update | Prefer frameworks, AppleScript and Shortcuts; screen-level control only as fallback |
-| AegisShell breaks with macOS updates (desktop layer, hidden Dock and menu bar) | Shell kept optional and separate from the core app; falls back to normal macOS |
+| AegisShell breaks with macOS updates (desktop layer, hidden Dock) | Shell kept optional and separate from the core app; falls back to normal macOS |
 | Live desktop and custom widgets cost GPU and battery | Freeze when covered, on battery or under load; native widgets as the light default |
 | Widgets expose personal details on screen | Hide-details option; content hidden during screen sharing and when locked |
 | Total silence could hide a real emergency | Optional "break silence for emergencies" |

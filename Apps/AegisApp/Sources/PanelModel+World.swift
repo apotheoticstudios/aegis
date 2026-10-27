@@ -5,6 +5,11 @@ import Foundation
 extension PanelModel {
     /// The answer to a World command, or nil when the question isn't one.
     func worldAnswer(_ question: String) async -> Answer? {
+        // "Aegis, engage" and "stand down" (ADR-0033).
+        if let shell = ShellCommand.parse(question) {
+            let text = await ShellController.shared.handle(shell)
+            return Answer(text: text, eventIDs: [], scheduleIDs: [], model: "shell", generatedAt: Date())
+        }
         // Reminders and calendar events come first (#270).
         if let action = await actionAnswer(question) {
             return action

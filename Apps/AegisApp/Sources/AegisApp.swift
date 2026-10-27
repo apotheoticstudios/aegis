@@ -9,7 +9,8 @@ struct AegisApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        MenuBarExtra {
+        // While AegisShell is on, its own item (ShellMenuBarItems) stands in for this one.
+        MenuBarExtra(isInserted: Binding(get: { !ShellController.shared.isOn }, set: { _ in })) {
             MenuContent(delegate: delegate)
         } label: {
             if case .unavailable = delegate.model.phase {
@@ -74,6 +75,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         panel.visibilityChanged = { [weak self] open in self?.wake.panelChanged(open: open) }
         WorldWindow.shared.openPanel = { [weak self] in self?.panel.show() }
+        let shell = ShellController.shared
+        shell.model = model
+        shell.openPanel = { [weak self] in self?.panel.show() }
+        shell.talk = { [weak self] in self?.talk() }
+        shell.panelKey = hotKeyLabel
+        shell.talkKey = talkKeyLabel
+        shell.start()
         WorldWindow.shared.talk = { [weak self] in Task { await self?.model.talk() } }
         model.questionFinished = { [weak self] in self?.wake.answerFinished() }
         wake.isAnswering = { [weak self] in
@@ -127,6 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func applicationWillTerminate(_: Notification) {
+        ShellController.shared.shutDown()
         WorldWindow.shared.shutDown()
         DiagnosticLog.shared.stopSession()
     }
@@ -155,6 +164,9 @@ struct MenuContent: View {
     var body: some View {
         Button("Open your Aegis" + (delegate.hotKeyLabel.map { "   \($0)" } ?? "")) { delegate.togglePanel() }
         Button("Talk to your Aegis" + (delegate.talkKeyLabel.map { "   \($0)" } ?? "")) { delegate.talk() }
+        Button("Engage AegisShell" + (ShellController.shared.hotKeyLabel.map { "   \($0)" } ?? "")) {
+            Task { await ShellController.shared.engage() }
+        }
         Button("Refresh brief") { Task { await delegate.model.refresh() } }
         Button(delegate.model.writing ? "Writing a brief…" : "Write a brief now") {
             Task { await delegate.model.writeNow() }

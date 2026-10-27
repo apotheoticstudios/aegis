@@ -2,7 +2,7 @@
 
 What it is: [`DESIGN.md` › AegisShell](../design/DESIGN.md#aegisshell-os-style-shell). A shell over macOS that makes the Mac feel like Aegis's own operating environment while it's engaged, and leaves no trace when it isn't. Visuals: [`docs/design/aegisshell-brief.md`](../design/aegisshell-brief.md).
 
-Status: planned, nothing built. Each stage below is one issue and one PR (or a few small ones), merged only when its acceptance checks pass.
+Status: stage 1 built (engage and disengage, Aegis's menu bar item, the desktop's frame and core; ADR-0033). The design system's AegisShell cards are the exact design. Each stage below is one issue and one PR (or a few small ones), merged only when its acceptance checks pass.
 
 ## Ground rules (from AGENTS.md and the spec)
 
@@ -15,7 +15,9 @@ Status: planned, nothing built. Each stage below is one issue and one PR (or a f
 - **Actions follow the safety system.** Anything a widget or the launcher does goes through ActionPolicy (tiers, never-list, action log), exactly like commands in the panel.
 - **Performance.** The live desktop freezes to a still frame when covered, on battery or when the Mac is busy; widgets pause when hidden. Animated glows are flattened into one layer (the window server lesson from the SYSTEM screen).
 
-## Stage 0 — Feasibility spike (before anything is designed in detail)
+## Stage 0 — Feasibility spike (answered in ADR-0033)
+
+The design keeps macOS's own menu bar (owner's choice, 2026-10-27), so the menu bar questions fall away. The Dock hides through its own auto-hide setting, saved and restored. The desktop is a panel at Finder's icon level plus one on every Space. Window frames wait for window layouts. Cost on the owner's Mac is still to measure (stage 3).
 
 A throwaway prototype in `Prototype/` that answers, on the owner's Mac (macOS 26, notched display):
 
@@ -36,12 +38,12 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 - Save state on engage (Dock and menu bar settings, wallpaper, window frames) to a file in Aegis's folder; restore on disengage, on quit, and on the next launch after a crash.
 - The engage/disengage transition from the design brief.
 - **Done when:** engaging and disengaging 20 times in a row leaves macOS exactly as before (checked automatically: settings and window frames compared), crash recovery restores state, and nothing AegisShell added runs while disengaged.
+- **Built (2026-10-27):** ⌃⌥A, the menu, Exit and "engage" / "stand down"; the Dock's auto-hide saved, restored on disengage, quit and after a crash (20 cycles and a crash tested with a fake Dock); the design's 1.9 s engage and 1.0 s disengage (ShellMotion, tested), Reduce Motion's crossfade; the desktop's wash, traced frame and the ReactorCore in today's ScheduleArc with Aegis's line (counts and times only). Panel button and the owner's first real run to come.
 
-## Stage 2 — Aegis top bar
+## Stage 2 — Aegis's menu bar item (replaces the top bar)
 
-- Replaces the hidden menu bar: emblem, assistant name, clock, status word, quick toggles (Do Not Disturb/Focus, volume, Wi-Fi status, battery), the exit control.
-- Works with the notch and multiple displays.
-- **Done when:** the bar shows on each display, the macOS menu bar still appears on hover, and the bar costs under 1% CPU at rest.
+- The design's ShellMenuExtra in macOS's own menu bar: the hexagon (filled and glowing), the workspace, the status word, an urgent count and Exit; and ShellMenu, its glass menu.
+- **Built (2026-10-27):** the item, Exit and the menu with the panel, talk and Disengage. Workspaces, the launcher, arranging, window layouts and the privacy switches join the menu with their stages.
 
 ## Stage 3 — Live HUD desktop
 

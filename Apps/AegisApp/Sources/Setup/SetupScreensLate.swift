@@ -255,7 +255,7 @@ struct InterfaceScreen: View {
         } side: {
             HUDSubhead(title: "AegisShell", meta: "a shell over macOS, on demand", first: true)
             SetupParagraph(
-                "Hides the Dock and menu bar and turns the desktop into a live HUD. Dismiss it and normal macOS comes straight back."
+                "Hides the Dock, adds Aegis to the menu bar and turns the desktop into a live HUD. Dismiss it and normal macOS comes straight back."
             )
             .padding(.bottom, HUD.space2)
             HUDSettingRow(label: "Engage with") { HUDKeyCaps(keys: ["⌃", "⌥", "A"]) }
