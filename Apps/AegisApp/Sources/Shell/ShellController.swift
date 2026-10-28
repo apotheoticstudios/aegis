@@ -84,6 +84,15 @@ final class ShellController {
     /// Why the desktop holds still, or nil while it's live.
     var still: ShellStill?
 
+    /// The urgent item the owner set aside with Later: its line stays off the desktop until another one is first.
+    var setAside: String?
+
+    /// The design's urgent line under the ask line: while an urgent item is new since the panel was last opened (the
+    /// menu bar's glow) and not set aside.
+    var showsUrgentLine: Bool {
+        readings.urgent > 0 && model?.glow == true && readings.top != setAside
+    }
+
     /// The app's panel model and actions, set at launch.
     @ObservationIgnored var model: PanelModel?
     @ObservationIgnored var openPanel: () -> Void = {}
@@ -164,6 +173,20 @@ final class ShellController {
         switchedAt = Date()
     }
 
+    private func registerWorkspaceKeys(modifiers: Int, prefix: String) {
+        workspaceKeys.forEach { $0.unregister() }
+        workspaceKeys = []
+        workspaceKeyLabels = [:]
+        let keys = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4]
+        for (index, (workspace, key)) in zip(ShellWorkspace.allCases, keys).enumerated() {
+            let choice = GlobalHotKey.Choice(keyCode: UInt32(key), modifiers: UInt32(modifiers), label: "\(prefix)\(index + 1)")
+            if let registered = GlobalHotKey(choice, number: UInt32(4 + index), action: { [weak self] in self?.switchTo(workspace) }) {
+                workspaceKeys.append(registered)
+                workspaceKeyLabels[workspace] = choice.label
+            }
+        }
+    }
+
     func engage() async {
         guard phase == .off, !WorldSidecar.isTestHost else { return }
         let start = Date()
@@ -171,18 +194,10 @@ final class ShellController {
         itemComplete = false
         HUDPresence.shared.shell = true
         items = ShellMenuBarItems(shell: self)
-        // ⌃1–4 switch workspaces while engaged; ⌃⌥ and the number where another app holds ⌃ and the number.
-        let keys = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4]
-        workspaceKeyLabels = [:]
-        for (index, (workspace, key)) in zip(ShellWorkspace.allCases, keys).enumerated() {
-            for (modifiers, prefix) in [(controlKey, "⌃"), (controlKey | optionKey, "⌃⌥")] {
-                let choice = GlobalHotKey.Choice(keyCode: UInt32(key), modifiers: UInt32(modifiers), label: "\(prefix)\(index + 1)")
-                if let registered = GlobalHotKey(choice, number: UInt32(4 + index), action: { [weak self] in self?.switchTo(workspace) }) {
-                    workspaceKeys.append(registered)
-                    workspaceKeyLabels[workspace] = choice.label
-                    break
-                }
-            }
+        // ⌃1–4 switch workspaces while engaged; ⌃⌥1–4 as a set when another app holds any of them, so they match.
+        registerWorkspaceKeys(modifiers: controlKey, prefix: "⌃")
+        if workspaceKeys.count < ShellWorkspace.allCases.count {
+            registerWorkspaceKeys(modifiers: controlKey | optionKey, prefix: "⌃⌥")
         }
         openWindows()
         checkStill()

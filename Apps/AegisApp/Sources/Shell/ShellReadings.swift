@@ -92,6 +92,9 @@ struct ShellReadings: View {
                 briefActions
                 ask
             }
+            if workspace == .work, shell.showsUrgentLine {
+                urgentLine
+            }
         }
         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
     }
@@ -167,7 +170,12 @@ struct ShellReadings: View {
                             }
                         }
                     },
-                    actions: { link("Open in panel") { shell.openPanel() } }
+                    actions: {
+                        link("Open in panel") { shell.openPanel() }
+                        if shell.showsUrgentLine {
+                            link("Later", tone: .inkMuted) { shell.setAside = readings.top }
+                        }
+                    }
                 )
             }
         }
@@ -341,6 +349,31 @@ struct ShellReadings: View {
         }
         .position(x: geometry.centre.x, y: geometry.askY + 17)
         .accessibilityLabel("Ask Aegis")
+    }
+
+    // MARK: - Something urgent: one line under the ask line, between critical hairlines (ShellDesktopUrgent)
+
+    private var urgentLine: some View {
+        let critical = theme.color(.critical)
+        let top = readings.top.map { $0.count > 72 ? $0.prefix(71) + "…" : $0 } ?? "Something urgent"
+        return HStack(spacing: 14) {
+            HStack(spacing: 6) {
+                ShellIconView(icon: .alert, size: 12)
+                Text("Urgent").hudCaps(10, tracking: 0.18)
+            }
+            .foregroundStyle(critical)
+            Text(hidden ? (readings.topFromPerson ? "Message from a contact" : "Something urgent") : top)
+                .font(.custom(HUDType.body.fontName, size: 12)).foregroundStyle(HUD.ink)
+            link("Open", tone: .critical) { shell.openPanel() }
+            link("Later", tone: .inkMuted) { shell.setAside = readings.top }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .background(LinearGradient(colors: [.clear, critical.opacity(0.1), .clear], startPoint: .leading, endPoint: .trailing))
+        .overlay(alignment: .top) { Rectangle().fill(critical).frame(height: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(critical.opacity(0.4)).frame(height: 1) }
+        .fixedSize()
+        .position(x: geometry.centre.x, y: geometry.askY + 50 * geometry.scale + 16)
     }
 
     private func link(_ title: String, tone: HUDToken = .primary, action: @escaping () -> Void) -> some View {

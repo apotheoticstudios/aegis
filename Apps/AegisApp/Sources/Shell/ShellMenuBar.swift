@@ -146,6 +146,9 @@ struct ShellMenuExtra: View {
                 }
                 .opacity(0.86)
             }
+            if shell.hideDetails {
+                ShellIconView(icon: .hidden, size: 13).opacity(0.86)
+            }
             if urgent > 0 {
                 HStack(spacing: 4) {
                     ShellIconView(icon: .alert, size: 11)
@@ -164,7 +167,10 @@ struct ShellMenuExtra: View {
         .padding(.horizontal, 7)
         .frame(height: 24)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Aegis: \(shell.workspace.name), \(status.word)" + (urgent > 0 ? ", \(urgent) urgent" : ""))
+        .accessibilityLabel(
+            "Aegis: \(shell.workspace.name), \(status.word)" + (shell.hideDetails ? ", details hidden" : "")
+                + (urgent > 0 ? ", \(urgent) urgent" : "")
+        )
     }
 }
 
@@ -251,7 +257,8 @@ struct ShellMenu: View {
                 HStack(spacing: HUD.space2) {
                     ShellIconView(icon: .alert, size: 12)
                     Text("\(shell.readings.urgent) urgent").hudCaps(10, tracking: 0.16)
-                    Text("Open the panel to see").hudType(.body).foregroundStyle(HUD.ink).lineLimit(1)
+                    Text(shell.hideDetails ? "Open the panel to see" : shell.readings.top ?? "Open the panel to see")
+                        .hudType(.body).foregroundStyle(HUD.ink).lineLimit(1)
                 }
                 .foregroundStyle(HUD.critical)
                 .padding(.horizontal, 12)
