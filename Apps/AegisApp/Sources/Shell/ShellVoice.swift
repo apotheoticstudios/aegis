@@ -49,6 +49,10 @@ final class ShellVoice {
 
     func talk() {
         guard let model else { return }
+        // The launcher's own listening state is still to come: the overlay takes over from it.
+        if ShellLauncher.shared.isOpen {
+            ShellLauncher.shared.close()
+        }
         before = model.askState
         if window == nil {
             show(model)
@@ -114,6 +118,8 @@ final class ShellVoice {
 
     private func watch(_ model: PanelModel) {
         watcher?.cancel()
+        // Only what this turn brings counts: a confirmation already waiting in the panel doesn't send every turn there.
+        let task = model.pendingTask, action = ActionPresence.shared.pending?.request.id
         watcher = Task { [weak self] in
             var started = false, quiet = 0.0
             while !Task.isCancelled {
@@ -134,11 +140,15 @@ final class ShellVoice {
                 } else {
                     false
                 }
-                if model.pendingTask != nil || ActionPresence.shared.pending != nil || unusable {
+                let confirm = model.pendingTask.map { $0 != task } ?? false
+                    || ActionPresence.shared.pending.map { $0.request.id != action } ?? false
+                // Listening that hasn't begun after 5 s (macOS asking for the microphone, say) goes on in the panel,
+                // so whatever follows is never heard without Aegis showing.
+                if confirm || unusable || (!started && quiet >= 5) {
                     return handOver()
                 }
-                // 3 s after the answer; soon when nothing was asked; and never left up if listening didn't start.
-                if quiet >= (started ? (model.askState == before ? 0.5 : 3) : 5) {
+                // 3 s after the answer; soon when nothing was asked.
+                if started, quiet >= (model.askState == before ? 0.5 : 3) {
                     return hide()
                 }
             }
