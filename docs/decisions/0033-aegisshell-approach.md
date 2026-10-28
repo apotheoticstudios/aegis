@@ -44,3 +44,7 @@ AegisShell makes the Mac feel like Aegis's own environment while it's engaged an
 - **The desktop covers macOS's desktop widgets:** its windows sit just under every app's windows (`NSWindow.Level.normal - 1`), above Finder's icons and the widgets. Before this they sat at the desktop-icon level, and the widgets showed through.
 - **No frame:** the design's frame traced round the screen, and its corner brackets, are left out.
 - **It keeps moving on battery:** the still frame is for a hot Mac, Reduce Motion, Hold still and being covered.
+
+## Amendment (2026-10-28): voice over any app
+
+While AegisShell is engaged with details showing, Talk to Aegis (its key, the menu, the ask line's mic) shows the design's voice overlay centred under the menu bar instead of opening the panel. It runs the panel's own voice turn and counts as an open Aegis surface for the silent rule: Aegis speaks only while it shows, it fades 3 s after the answer, disengaging silences it, and anything needing a confirmation (or voice that can't be used) hands over to the panel. The wake listener treats it as the open panel. With details hidden, Talk opens the panel as before, because the overlay would show your data over whatever is on screen. "Hey Aegis" still opens the panel.

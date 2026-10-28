@@ -68,7 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 break
             }
         }
-        wake.isPanelOpen = { [weak self] in self?.panel.isVisible == true }
+        // AegisShell's voice overlay counts as the open panel: echo cancellation while it speaks, follow-ups.
+        wake.isPanelOpen = { [weak self] in self?.panel.isVisible == true || ShellVoice.shared.isVisible }
         wake.isPlayingReply = { [weak self] in self?.model.voice.speaking == true }
         wake.playbackText = { [weak self] in self?.model.voice.spokenText ?? "" }
         wake.interruptSpeech = { [weak self] in self?.model.interruptSpeech() }
@@ -82,7 +83,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             self?.model.voice.wakes += 1
             self?.panel.show()
         }
-        panel.visibilityChanged = { [weak self] open in self?.wake.panelChanged(open: open) }
+        panel.visibilityChanged = { [weak self] open in
+            if open {
+                ShellVoice.shared.hide()
+            }
+            self?.wake.panelChanged(open: open || ShellVoice.shared.isVisible)
+        }
+        ShellVoice.shared.model = model
+        ShellVoice.shared.openPanel = { [weak self] in self?.panel.show() }
+        ShellVoice.shared.changed = { [weak self] in
+            guard let self else { return }
+            wake.panelChanged(open: panel.isVisible || ShellVoice.shared.isVisible)
+        }
         WorldWindow.shared.openPanel = { [weak self] in self?.panel.show() }
         let shell = ShellController.shared
         shell.model = model
@@ -140,7 +152,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func talk() {
-        panel.talk()
+        // In AegisShell with details showing: the voice overlay over any app (ShellVoice) rather than the panel.
+        if ShellController.shared.isOn, !ShellController.shared.hideDetails, !panel.isVisible {
+            ShellVoice.shared.talk()
+        } else {
+            panel.talk()
+        }
     }
 
     func applicationWillTerminate(_: Notification) {
