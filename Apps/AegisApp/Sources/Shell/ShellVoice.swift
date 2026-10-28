@@ -1,3 +1,4 @@
+import AegisKit
 import AppKit
 import SwiftUI
 
@@ -45,6 +46,23 @@ final class ShellVoice {
         case let .failed(question, message): Turn(state: .answering, transcript: question, answer: message)
         case .idle: Turn(state: .listening, transcript: "")
         }
+    }
+
+    /// What Aegis read for an answer, beneath it (the design's "Read: Calendar · 1 event"): kinds and counts only.
+    static func read(_ answer: Answer, sources: [String: Event]) -> String? {
+        func count(_ number: Int, _ one: String, _ many: String) -> String? {
+            number == 0 ? nil : "\(number) \(number == 1 ? one : many)"
+        }
+        let kinds = answer.eventIDs.map { sources[$0]?.source }
+        let parts = [
+            count(answer.scheduleIDs.count, "calendar event", "calendar events"),
+            count(kinds.count { $0 == .imessage || $0 == .sms }, "message", "messages"),
+            count(kinds.count { $0 == .email }, "email", "emails"),
+            count(kinds.count { $0 == .notification }, "notification", "notifications"),
+            // Not loaded yet: still counted, by what they are to Aegis.
+            count(kinds.count { $0 == nil }, "item", "items"),
+        ].compactMap(\.self)
+        return parts.isEmpty ? nil : "Read: " + parts.joined(separator: " · ")
     }
 
     func talk() {
@@ -171,8 +189,14 @@ private struct ShellVoiceView: View {
         let turn = ShellVoice.turn(heard: heard, ask: model.askState == voice.before ? .idle : model.askState, partial: model.partialAnswer)
         // Typed along with the voice while it reads this very answer; whole otherwise.
         let speaking = model.voice.speaking && !turn.answer.isEmpty && model.voice.spokenText == turn.answer
+        let answer: Answer? = if model.askState != voice.before, case let .answered(_, answer) = model.askState {
+            answer
+        } else {
+            nil
+        }
         HUDVoiceOverlay(
-            state: turn.state, transcript: turn.transcript, answer: turn.answer, name: model.personality.name.lowercased(),
+            state: turn.state, transcript: turn.transcript, answer: turn.answer,
+            meta: answer.flatMap { ShellVoice.read($0, sources: model.sources) }, name: model.personality.name.lowercased(),
             typed: speaking ? Double(model.voice.saidCount ?? turn.answer.count) / Double(turn.answer.count) : 1
         )
         .contentShape(Rectangle())

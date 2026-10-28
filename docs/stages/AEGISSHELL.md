@@ -84,7 +84,7 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 ## Stage 7 — Overlays and polish
 
 - Talk to Aegis and see its HUD over any app; optional interface sounds (off by default); themed wallpaper.
-- **Voice over any app (2026-10-28, ADR-0033 amendment):** with details showing, Talk to Aegis shows the voice overlay under the menu bar (listening, thinking, the answer typed as it's spoken); a click or a confirmation hands over to the panel. Still to come: "Hey Aegis" into the overlay, what Aegis read beneath the answer, and the hidden-details answer.
+- **Voice over any app (2026-10-28, ADR-0033 amendment):** with details showing, Talk to Aegis shows the voice overlay under the menu bar (listening, thinking, the answer typed as it's spoken); a click or a confirmation hands over to the panel. What Aegis read sits beneath the answer as kinds and counts ("Read: 1 calendar event · 2 messages"). Still to come: "Hey Aegis" into the overlay, and the hidden-details answer.
 - Optional auto-engage on a dedicated hub Mac (off by default).
 
 ## Dependencies and order

@@ -32,4 +32,21 @@ final class ShellVoiceTests: XCTestCase {
         // Listening again shows the new words, not the answer before them.
         XCTAssertEqual(ShellVoice.turn(heard: "", ask: .answered(question: "how long?", answer: answer), partial: "").state, .listening)
     }
+
+    func testItSaysWhatAegisReadInKindsAndCounts() {
+        func answer(_ events: [String], _ schedule: [String]) -> Answer {
+            Answer(text: "Done.", eventIDs: events, scheduleIDs: schedule, model: "synthetic", generatedAt: Date(timeIntervalSince1970: 1))
+        }
+        let sources = SampleCoreService.recentEvents(now: Date(timeIntervalSince1970: 1_000_000)).reduce(into: [String: Event]()) {
+            $0[$1.id] = $1
+        }
+        let message = sources.values.first { $0.source == .imessage || $0.source == .sms }
+        let mail = sources.values.first { $0.source == .email }
+        XCTAssertNil(ShellVoice.read(answer([], []), sources: sources))
+        XCTAssertEqual(ShellVoice.read(answer([], ["s1"]), sources: sources), "Read: 1 calendar event")
+        XCTAssertEqual(
+            ShellVoice.read(answer([message?.id, mail?.id, "not-loaded"].compactMap(\.self), ["s1", "s2"]), sources: sources),
+            "Read: 2 calendar events · 1 message · 1 email · 1 item"
+        )
+    }
 }
