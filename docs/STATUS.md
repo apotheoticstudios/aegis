@@ -11,6 +11,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
 | — | Real mornings and feedback on the new features | agent:human | — | Owner's reviews drive the next fixes |
+| #94–#96 | AegisShell polish: the urgent line (Open, Later), the hidden mark, the menu fitting long names, matching workspace keys (⌃⌥1–4 when ⌃1–4 are taken), and the voice overlay over any app with details showing (ADR-0033) | agent:claude | merged | Installed; the voice overlay needs the owner's first real try (Codex's review hit its usage limit) |
 | — | AegisShell workspaces: Work, Focus, Evening, Movie (menu, ⌃1–4, voice), each with its accent, wash and scene | agent:claude | claude/shell-workspaces | Merged; the owner's first real run to come |
 | #83 | AegisShell stages 3–6: the stream (#78), world and home readings, the art shapes (#77), window layouts (#83); launcher fix (present while engaged) | agent:claude + agent:codex | merged | The owner's first real run to come |
 | — | AegisShell stage 5: the launcher (⌥Space while engaged; apps, files, settings, commands and Ask Aegis; through ActionPolicy) | agent:claude | claude/shell-launcher | Merged; the owner's first real run to come |
