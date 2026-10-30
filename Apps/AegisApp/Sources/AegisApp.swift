@@ -207,6 +207,7 @@ struct MenuContent: View {
         }
         Button("World view") { WorldWindow.shared.show() }
         Button("World view settings…") { WorldKeysWindow.show() }
+        Button("Beholder research…") { BeholderWindow.show() }
         Button("Personality…") { PersonalityWindow.show(delegate.model) }
         Button("Claude and ChatGPT…") { CloudSettingsWindow.show() }
         Button("Run setup again…") { delegate.showSetup(again: true) }

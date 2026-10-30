@@ -3,8 +3,8 @@ import AppKit
 import SwiftUI
 
 /// The HUD panel, laid out as the Project: Aegis design system draws it (ADR-0029): one glass shell with the AEGIS
-/// top bar and the menu, and five screens built around a centre instrument. HOME is the overview, SYSTEM the Mac's
-/// diagnostics, COMMS everything collected, CHAT the conversation, LOGS what Aegis did and remembers.
+/// top bar and the menu. HOME is the overview, SYSTEM the Mac's
+/// diagnostics, COMMS everything collected, CHAT the conversation, LOGS what Aegis did and remembers, BEHOLDER public research.
 struct BriefView: View {
     let model: PanelModel
     @State private var screen = HUDScreen.home
@@ -53,6 +53,7 @@ struct BriefView: View {
         case .comms: CommsScreen(model: model, screen: $screen)
         case .chat: ChatScreen(model: model, screen: $screen)
         case .logs: LogsScreen(model: model, screen: $screen)
+        case .beholder: BeholderScreen(model: model, screen: $screen)
         }
     }
 }
@@ -73,9 +74,9 @@ struct HUDFit<Content: View>: View {
     }
 }
 
-/// The menu's five sections, in order.
+/// The menu's sections, in order.
 enum HUDScreen: Int, CaseIterable {
-    case home, system, comms, chat, logs
+    case home, system, comms, chat, logs, beholder
 
     var title: String {
         switch self {
@@ -84,6 +85,7 @@ enum HUDScreen: Int, CaseIterable {
         case .comms: "Comms"
         case .chat: "Chat"
         case .logs: "Logs"
+        case .beholder: "Beholder"
         }
     }
 }
