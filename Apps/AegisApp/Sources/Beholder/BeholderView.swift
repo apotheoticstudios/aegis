@@ -55,18 +55,7 @@ struct BeholderDashboard: View {
                 Button("Clear") { research.clear() }
             }
             HStack(spacing: HUD.space4) {
-                ForEach(BeholderProvider.allCases) { provider in
-                    Toggle(provider.title, isOn: Binding(
-                        get: { research.selected.contains(provider) },
-                        set: {
-                            if $0 {
-                                research.selected.insert(provider)
-                            } else {
-                                research.selected.remove(provider)
-                            }
-                        }
-                    )).toggleStyle(.checkbox)
-                }
+                BeholderSourcePicker(selected: $research.selected)
                 Spacer()
                 Button("Export case…") { prepareExport() }.disabled(research.findings.isEmpty || research.searching)
             }
