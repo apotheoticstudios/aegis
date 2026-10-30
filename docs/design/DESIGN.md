@@ -544,6 +544,18 @@ Two kinds, both interactive:
 - **Actions follow the same safety rules** as App control and Home control (confirmation tiers, action log, never-list).
 - **Distribution:** signed and notarized for direct download; a shell like this cannot ship on the Mac App Store.
 
+## Beholder public research
+
+Beholder is the owner's optional username research dashboard (#98, ADR-0034), with an original multi-eyed
+beholder emblem. Its first slice checks selected GitHub, GitLab, Hacker News and DEV public profile APIs only
+after the owner starts a search. It previews the exact username and destinations. Providers receive the
+username, IP address and app request metadata; personal records and memory never accompany it.
+
+Results stay separate as candidate accounts with source URLs, check times and explicit failure states. A matching
+handle never proves a person's identity. Cases remain in memory with explicit clear/export controls; leaving
+the screen or closing the window cancels requests. No automatic memory writes, identity merging, background
+monitoring, uploads or linked-page crawling. Future sources and analysis need scoped issues.
+
 ## World view (God's Eye View)
 
 Aegis integrates [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view), an MIT-licensed open-source 3D globe of live public data, as an optional "World" view in the panel, using the same services God's Eye View itself needs.

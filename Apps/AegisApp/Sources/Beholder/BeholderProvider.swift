@@ -97,8 +97,19 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
 
 struct BeholderFinding: Codable, Sendable, Equatable, Identifiable {
     enum Status: String, Codable, Sendable {
-        case checking = "Checking", candidate = "Candidate account", noResult = "No public result"
-        case unsupported = "Unsupported handle", limited = "Rate limited", unavailable = "Unavailable", cancelled = "Cancelled"
+        case checking, candidate, noResult, unsupported, limited, unavailable, cancelled
+
+        var title: String {
+            switch self {
+            case .checking: "Checking"
+            case .candidate: "Candidate account"
+            case .noResult: "No public result"
+            case .unsupported: "Unsupported handle"
+            case .limited: "Rate limited"
+            case .unavailable: "Unavailable"
+            case .cancelled: "Cancelled"
+            }
+        }
     }
 
     let provider: BeholderProvider

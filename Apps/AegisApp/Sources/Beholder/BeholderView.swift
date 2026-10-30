@@ -4,13 +4,14 @@ import UniformTypeIdentifiers
 
 struct BeholderScreen: View {
     let model: PanelModel
+    let research: BeholderModel
     @Binding var screen: HUDScreen
 
     var body: some View {
         HUDShell {
             HUDTopBar(model: model, screen: $screen)
         } content: {
-            BeholderDashboard(followsPanel: true)
+            BeholderDashboard(research: research, followsPanel: true)
         } bottom: {
             Text("PUBLIC SOURCES · LOCAL CASE · NO AUTOMATIC MEMORY").hudType(.data).foregroundStyle(HUD.inkMuted)
         }
@@ -23,8 +24,9 @@ struct BeholderDashboard: View {
     @State private var exporting = false
     @State private var document = BeholderDocument()
     @State private var exportProblem: String?
+    @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
-    init(research: BeholderModel = BeholderModel(), followsPanel: Bool = false) {
+    init(research: BeholderModel, followsPanel: Bool = false) {
         _research = State(initialValue: research)
         self.followsPanel = followsPanel
     }
@@ -38,7 +40,8 @@ struct BeholderDashboard: View {
                     Text("Follow the evidence.").foregroundStyle(HUD.inkMuted)
                 }
                 Spacer()
-                Text("\(research.candidates) CANDIDATES").hudType(.data).foregroundStyle(HUD.primary)
+                Text("\(research.candidates) " + (research.candidates == 1 ? "CANDIDATE" : "CANDIDATES"))
+                    .hudType(.data).foregroundStyle(HUD.primary)
             }
             HStack {
                 TextField("Username", text: $research.query)
@@ -88,7 +91,11 @@ struct BeholderDashboard: View {
                     }
                 }
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: HUD.space4) {
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)],
+                        alignment: .leading,
+                        spacing: HUD.space4
+                    ) {
                         ForEach(research.findings) { finding in card(finding) }
                     }
                 }
@@ -97,6 +104,7 @@ struct BeholderDashboard: View {
                 .font(.caption).foregroundStyle(HUD.inkMuted)
         }
         .foregroundStyle(HUD.ink).padding(HUD.space4)
+        .environment(\.hudTheme, theme)
         .onDisappear { research.cancel() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
@@ -112,8 +120,9 @@ struct BeholderDashboard: View {
 
     private var preview: String {
         let name = research.preparedUsername.map { "“\($0)”" } ?? "the username you enter"
-        let hosts = research.providers.map(\.host).joined(separator: ", ")
-        return "Search sends only \(name) to: \(hosts.isEmpty ? "no sources selected" : hosts). Providers receive your IP address."
+        let hosts = research.providers.filter { research.preparedUsername.map($0.supports) ?? true }.map(\.host).joined(separator: ", ")
+        return "Search sends only \(name) to: \(hosts.isEmpty ? "no compatible sources selected" : hosts). "
+            + "Providers receive your IP address and the Aegis-Beholder/1.0 app identifier."
     }
 
     private func card(_ finding: BeholderFinding) -> some View {
@@ -121,7 +130,7 @@ struct BeholderDashboard: View {
             HStack {
                 Text(finding.provider.title).font(.headline)
                 Spacer()
-                Text(finding.status.rawValue).font(.caption)
+                Text(finding.status.title).font(.caption)
                     .foregroundStyle(finding.status == .candidate ? HUD.primary : HUD.inkMuted)
             }
             ForEach(finding.fields.keys.sorted(), id: \.self) { label in
@@ -175,8 +184,11 @@ struct BeholderDocument: FileDocument {
 
 /// Original vector artwork: a central eye, toothed orb and ten eye stalks. No external artwork or network assets.
 struct BeholderEmblem: View {
+    @Environment(\.hudTheme) private var theme
+
     var body: some View {
         Canvas { context, size in
+            let ink = theme.color(.primary)
             let scale = min(size.width, size.height) / 100
             context.scaleBy(x: scale, y: scale)
             for index in 0 ..< 10 {
@@ -185,19 +197,19 @@ struct BeholderEmblem: View {
                 var stalk = Path()
                 stalk.move(to: CGPoint(x: 50 + cos(angle) * 22, y: 48 + sin(angle) * 19))
                 stalk.addQuadCurve(to: tip, control: CGPoint(x: tip.x, y: 42))
-                context.stroke(stalk, with: .color(.cyan.opacity(0.75)), lineWidth: 1.5)
-                context.stroke(Path(ellipseIn: CGRect(x: tip.x - 4, y: tip.y - 3, width: 8, height: 6)), with: .color(.cyan), lineWidth: 1)
-                context.fill(Path(ellipseIn: CGRect(x: tip.x - 1, y: tip.y - 2, width: 2, height: 4)), with: .color(.cyan))
+                context.stroke(stalk, with: .color(ink.opacity(0.75)), lineWidth: 1.5)
+                context.stroke(Path(ellipseIn: CGRect(x: tip.x - 4, y: tip.y - 3, width: 8, height: 6)), with: .color(ink), lineWidth: 1)
+                context.fill(Path(ellipseIn: CGRect(x: tip.x - 1, y: tip.y - 2, width: 2, height: 4)), with: .color(ink))
             }
-            context.stroke(Path(ellipseIn: CGRect(x: 23, y: 29, width: 54, height: 57)), with: .color(.cyan), lineWidth: 1.5)
-            context.stroke(Path(ellipseIn: CGRect(x: 31, y: 40, width: 38, height: 25)), with: .color(.cyan), lineWidth: 1.5)
-            context.fill(Path(ellipseIn: CGRect(x: 45, y: 42, width: 10, height: 21)), with: .color(.cyan))
+            context.stroke(Path(ellipseIn: CGRect(x: 23, y: 29, width: 54, height: 57)), with: .color(ink), lineWidth: 1.5)
+            context.stroke(Path(ellipseIn: CGRect(x: 31, y: 40, width: 38, height: 25)), with: .color(ink), lineWidth: 1.5)
+            context.fill(Path(ellipseIn: CGRect(x: 45, y: 42, width: 10, height: 21)), with: .color(ink))
             var mouth = Path()
             mouth.move(to: CGPoint(x: 34, y: 72))
             for index in 0 ..< 9 {
                 mouth.addLine(to: CGPoint(x: 34 + index * 4, y: index.isMultiple(of: 2) ? 72 : 78))
             }
-            context.stroke(mouth, with: .color(.cyan), lineWidth: 1.2)
+            context.stroke(mouth, with: .color(ink), lineWidth: 1.2)
         }
         .accessibilityLabel("Beholder: a floating eye with ten eye stalks")
     }

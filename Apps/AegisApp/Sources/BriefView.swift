@@ -8,6 +8,7 @@ import SwiftUI
 struct BriefView: View {
     let model: PanelModel
     @State private var screen = HUDScreen.home
+    @State private var beholder = BeholderModel()
     /// The owner's theme, chosen in setup (#28).
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
@@ -53,7 +54,7 @@ struct BriefView: View {
         case .comms: CommsScreen(model: model, screen: $screen)
         case .chat: ChatScreen(model: model, screen: $screen)
         case .logs: LogsScreen(model: model, screen: $screen)
-        case .beholder: BeholderScreen(model: model, screen: $screen)
+        case .beholder: BeholderScreen(model: model, research: beholder, screen: $screen)
         }
     }
 }

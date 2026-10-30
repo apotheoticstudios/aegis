@@ -14,7 +14,8 @@ Only unauthenticated HTTPS GETs to those four fixed API endpoints are allowed. F
 cookies, credentials or cache; redirects are rejected. Requests have 12-second inactivity and 20-second resource
 timeouts; responses are bounded to 256 KiB while streaming. At most four requests run, once each, with no retries,
 pagination, discovered-identifier expansion, remote images, scripts or linked-page fetching. Providers see the
-username, ordinary request metadata and the connection's IP address. They may log it; local inference does not
+username, the common `Aegis-Beholder/1.0` User-Agent (not a per-owner ID), ordinary request metadata and the
+connection's IP address. The preview discloses this. They may log it; local inference does not
 make an online lookup anonymous.
 
 Results are source observations, never identity assertions. Each keeps the exact queried source URL, retrieval
@@ -24,9 +25,10 @@ absence evidence. A missing public result does not prove an account does not exi
 activity). Accounts on different services are never merged automatically. Text is displayed literally, not
 executed, opened as a URL or fed into an action/model prompt.
 
-Cases live in memory until cleared or the app exits. Cancellation, navigation away and closing/hiding the host
+The HUD retains its own case across tab changes; the menu-bar window has a separate case. Cases live in memory
+until cleared or the app exits. Cancellation, navigation away and closing/hiding the host
 stop outstanding work; generations prevent obsolete results from entering another search. Export is a deliberate
-JSON file save with source URLs, observation times and the identity warning. No automatic persistence, uploads,
+JSON file save with stable status codes, source URLs, observation times and the identity warning. No automatic persistence, uploads,
 telemetry, query/content logging, Contacts access or memory writes exist. Opening a canonical profile is a
 separate explicit browser-link action and uses the browser's own privacy settings.
 

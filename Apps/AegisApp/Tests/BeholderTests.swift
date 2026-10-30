@@ -72,6 +72,10 @@ final class BeholderTests: XCTestCase {
         XCTAssertEqual(result.fields["Display name"], "Example Alex")
         XCTAssertNil(result.fields["html_url"])
         XCTAssertEqual(BeholderClient.clean(String(repeating: "x", count: 5000)).count, 600)
+        XCTAssertLessThanOrEqual(BeholderClient.clean("e" + String(repeating: "\u{301}", count: 10000)).unicodeScalars.count, 600)
+        XCTAssertEqual(BeholderClient.clean("&quot;Example&amp;Alex&quot; &#x2F;"), "\"Example&Alex\" /")
+        XCTAssertEqual(parse(#"{"login":"ExampleAlex","type":"Organization"}"#).fields["Account type"], "Organization")
+        XCTAssertEqual(parse(#"[{"username":"ExampleAlex","state":"blocked"}]"#, provider: .gitlab).fields["Account state"], "blocked")
         XCTAssertEqual(try XCTUnwrap(result.provider.profileURL("ExampleAlex")).host, "github.com")
     }
 
@@ -110,6 +114,29 @@ final class BeholderTests: XCTestCase {
         let finding = await client.lookup(.github, username: "ExampleAlex")
         XCTAssertEqual(finding.status, .candidate)
         XCTAssertEqual(finding.fields["Display name"], "Example Alex")
+        let vendor = await client.lookup(.github, username: "ExampleVendor")
+        XCTAssertEqual(vendor.status, .candidate)
+        let missing = await client.lookup(.github, username: "ExampleMissing")
+        XCTAssertEqual(missing.status, .noResult)
+        let limited = await client.lookup(.github, username: "ExampleLimited")
+        XCTAssertEqual(limited.status, .limited)
+    }
+
+    func testRedirectNeverSendsToAnotherHostAndHeadersContainNoCredentials() async {
+        ExampleRequests.shared.clear()
+        let client = BeholderClient(transport: BeholderWebTransport(protocolClasses: [ExampleProfileProtocol.self]))
+        let result = await client.lookup(.github, username: "ExampleRedirect")
+        XCTAssertEqual(result.status, .unavailable)
+        let requests = ExampleRequests.shared.requests()
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.url?.host, "api.github.com")
+        for request in requests {
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertNil(request.httpBody)
+            XCTAssertNil(request.httpBodyStream)
+            let headers = Set((request.allHTTPHeaderFields ?? [:]).keys.map { $0.lowercased() })
+            XCTAssertTrue(headers.isSubset(of: ["accept", "user-agent"]))
+        }
     }
 
     @MainActor func testSyntheticDashboardRenders() async throws {
@@ -147,31 +174,39 @@ final class BeholderTests: XCTestCase {
         model.selected = [.github, .hackerNews]
         model.query = "ExampleAlex"
         model.start()
-        await client.waitFor(2)
+        try await client.waitFor(2)
         model.query = "ExampleOther"
         model.start()
-        await client.waitFor(4)
+        try await client.waitFor(4)
         await client.complete("ExampleOther")
-        for _ in 0 ..< 100 where model.searching {
-            await Task.yield()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while model.searching, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(2))
         }
         XCTAssertFalse(model.searching)
         XCTAssertEqual(model.username, "ExampleOther")
         XCTAssertEqual(model.findings.map(\.provider), [.github, .hackerNews])
         XCTAssertEqual(model.candidates, 2)
         await client.complete("ExampleAlex")
-        for _ in 0 ..< 10 {
-            await Task.yield()
-        }
+        try await Task.sleep(for: .milliseconds(20))
         XCTAssertEqual(model.findings.compactMap { $0.fields["Handle"] }, ["ExampleOther", "ExampleOther"])
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: model.export()) as? [String: Any])
         XCTAssertEqual(object["username"] as? String, "ExampleOther")
         XCTAssertEqual((object["findings"] as? [[String: Any]])?.count, 2)
+        XCTAssertNotNil(object["exportedAt"] as? String)
+        XCTAssertTrue((object["warning"] as? String)?.contains("not verified identities") == true)
+        for finding in try XCTUnwrap(object["findings"] as? [[String: Any]]) {
+            XCTAssertNotNil(finding["sourceURL"] as? String)
+            XCTAssertNotNil(finding["checkedAt"] as? String)
+            XCTAssertEqual(finding["status"] as? String, "candidate")
+        }
         model.start()
-        await client.waitFor(6)
+        try await client.waitFor(6)
         model.cancel()
         XCTAssertTrue(model.findings.allSatisfy { $0.status == .cancelled })
         await client.complete("ExampleOther")
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(model.findings.allSatisfy { $0.status == .cancelled })
         model.clear()
         XCTAssertTrue(model.findings.isEmpty)
         XCTAssertTrue(model.username.isEmpty)
@@ -194,19 +229,36 @@ private final class ExampleProfileProtocol: URLProtocol, @unchecked Sendable {
 
     override func stopLoading() {}
     override func startLoading() {
+        ExampleRequests.shared.append(request)
         guard let url = request.url else { return }
         let name = url.lastPathComponent
         if name == "ExampleTimeout" {
             client?.urlProtocol(self, didFailWithError: URLError(.timedOut)); return
         }
         var headers = ["Content-Type": name == "ExampleHTML" ? "text/html" : "application/json"]
-        if name == "ExampleOversized" {
+        if ["ExampleOversized", "ExampleLimited", "ExampleMissing"].contains(name) {
             headers["Content-Length"] = String(BeholderWebTransport.byteLimit + 1)
         }
-        guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers) else { return }
+        if name == "ExampleVendor" {
+            headers["Content-Type"] = "application/vnd.forem.api-v1+json"
+        }
+        if name == "ExampleRedirect", url.host == "api.github.com",
+           let destination = URL(string: "https://example.com/ExampleRedirect"),
+           let redirect = HTTPURLResponse(
+               url: url,
+               statusCode: 302,
+               httpVersion: nil,
+               headerFields: ["Location": destination.absoluteString]
+           )
+        {
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: destination), redirectResponse: redirect)
+            return
+        }
+        let status = name == "ExampleLimited" ? 429 : name == "ExampleMissing" ? 404 : 200
+        guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: headers) else { return }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         let body = name == "ExampleStream" ? String(repeating: "x", count: BeholderWebTransport.byteLimit + 1)
-            : #"{"login":"ExampleAlex","name":"Example Alex"}"#
+            : "{\"login\":\"\(name)\",\"name\":\"Example Alex\"}"
         client?.urlProtocol(self, didLoad: Data(body.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
@@ -220,6 +272,23 @@ private actor ExampleTransport: BeholderTransport {
     }
 }
 
+private final class ExampleRequests: @unchecked Sendable {
+    static let shared = ExampleRequests()
+    private let lock = NSLock()
+    private var stored: [URLRequest] = []
+    func append(_ request: URLRequest) {
+        lock.withLock { stored.append(request) }
+    }
+
+    func requests() -> [URLRequest] {
+        lock.withLock { stored }
+    }
+
+    func clear() {
+        lock.withLock { stored = [] }
+    }
+}
+
 /// Deliberately ignores cancellation to prove late replies cannot contaminate a newer case.
 private actor ExampleSearch: BeholderSearching {
     var count = 0
@@ -229,9 +298,13 @@ private actor ExampleSearch: BeholderSearching {
         return await withCheckedContinuation { pending.append((username, provider, $0)) }
     }
 
-    func waitFor(_ target: Int) async {
-        for _ in 0 ..< 1000 where count < target {
-            await Task.yield()
+    func waitFor(_ target: Int) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while count < target, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        if count < target {
+            throw URLError(.timedOut)
         }
     }
 

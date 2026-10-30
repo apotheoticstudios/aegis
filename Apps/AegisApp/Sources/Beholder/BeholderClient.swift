@@ -41,8 +41,7 @@ struct BeholderWebTransport: BeholderTransport {
         request.setValue(accept, forHTTPHeaderField: "Accept")
         request.setValue("Aegis-Beholder/1.0", forHTTPHeaderField: "User-Agent")
         let (bytes, response) = try await session.bytes(for: request, delegate: BeholderNoRedirect())
-        guard let http = response as? HTTPURLResponse,
-              response.expectedContentLength <= Self.byteLimit else { throw URLError(.dataLengthExceedsMaximum) }
+        guard let http = response as? HTTPURLResponse else { throw URLError(.cannotParseResponse) }
         guard http.statusCode == 200 else {
             return BeholderPayload(
                 data: Data(),
@@ -50,7 +49,11 @@ struct BeholderWebTransport: BeholderTransport {
                 rateLimited: http.statusCode == 429 || http.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
             )
         }
-        guard http.mimeType == "application/json" else { throw URLError(.cannotParseResponse) }
+        guard response.expectedContentLength <= Self.byteLimit else { throw URLError(.dataLengthExceedsMaximum) }
+        let mime = http.mimeType?.lowercased() ?? ""
+        guard mime == "application/json" || (mime.hasPrefix("application/") && mime.hasSuffix("+json")) else {
+            throw URLError(.cannotParseResponse)
+        }
         var data = Data()
         for try await byte in bytes {
             try Task.checkCancellation()
@@ -125,7 +128,10 @@ struct BeholderClient: BeholderSearching {
               provider == .hackerNews ? handle == username : handle.lowercased() == username.lowercased() else { return result }
         result.status = .candidate
         result.fields["Handle"] = handle
-        for (label, key) in [("Display name", "name"), ("Bio", "bio"), ("Bio", "summary"), ("About", "about")] {
+        for (label, key) in [
+            ("Display name", "name"), ("Bio", "bio"), ("Bio", "summary"), ("About", "about"),
+            ("Account type", "type"), ("Account state", "state"),
+        ] {
             if let raw = object[key] as? String {
                 let text = clean(raw)
                 if !text.isEmpty {
@@ -138,12 +144,19 @@ struct BeholderClient: BeholderSearching {
 
     /// Render untrusted biographies only as bounded plain text, never HTML, Markdown, links or model instructions.
     static func clean(_ raw: String) -> String {
-        let text = String(raw.prefix(4096)).replacingOccurrences(of: "<[^>]*>", with: " ", options: .regularExpression)
+        var text = String(String.UnicodeScalarView(raw.unicodeScalars.prefix(4096)))
+            .replacingOccurrences(of: "<[^>]*>", with: " ", options: .regularExpression)
+        for (entity, value) in [
+            ("&quot;", "\""), ("&#39;", "'"), ("&#x27;", "'"), ("&#x2F;", "/"),
+            ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "), ("&amp;", "&"),
+        ] {
+            text = text.replacingOccurrences(of: entity, with: value)
+        }
         let scalars = text.unicodeScalars.filter {
             !CharacterSet.controlCharacters.contains($0) && !CharacterSet.illegalCharacters.contains($0)
                 && $0.properties.generalCategory != .format
         }
-        return String(String.UnicodeScalarView(scalars)).split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(600)
-            .description
+        let joined = String(String.UnicodeScalarView(scalars)).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return String(String.UnicodeScalarView(joined.unicodeScalars.prefix(600)))
     }
 }

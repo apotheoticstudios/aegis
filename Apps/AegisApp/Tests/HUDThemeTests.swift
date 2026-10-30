@@ -146,7 +146,7 @@ private extension HUDScreen {
         case .comms: AnyView(CommsScreen(model: model, screen: .constant(self)))
         case .chat: AnyView(ChatScreen(model: model, screen: .constant(self)))
         case .logs: AnyView(LogsScreen(model: model, screen: .constant(self)))
-        case .beholder: AnyView(BeholderScreen(model: model, screen: .constant(self)))
+        case .beholder: AnyView(BeholderScreen(model: model, research: BeholderModel(), screen: .constant(self)))
         }
     }
 }
