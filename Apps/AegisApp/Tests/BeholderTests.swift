@@ -140,6 +140,9 @@ final class BeholderTests: XCTestCase {
     }
 
     @MainActor func testSyntheticDashboardRenders() async throws {
+        guard ProcessInfo.processInfo.environment["RENDER_BEHOLDER"] == "1" else {
+            throw XCTSkip("Opt-in native window capture: RENDER_BEHOLDER=1 on an unlocked Mac.")
+        }
         let model = BeholderModel(client: BeholderClient(transport: BeholderWebTransport(protocolClasses: [ExampleProfileProtocol.self])))
         model.query = "ExampleAlex"
         model.start()
