@@ -3,6 +3,12 @@ import Foundation
 /// App-private discovery rules. A profile with the same handle is a candidate, never an identified person.
 enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     case github, gitlab, hackerNews, dev
+    case codeberg, dockerHub, keybase, lichess, chess, scratch, bluesky, mastodon
+
+    /// Expansion never silently adds destinations to an existing owner's search.
+    static var originalSources: Set<Self> {
+        Set(allCases.prefix(4))
+    }
 
     var id: String {
         rawValue
@@ -14,6 +20,14 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .gitlab: "GitLab"
         case .hackerNews: "Hacker News"
         case .dev: "DEV"
+        case .codeberg: "Codeberg"
+        case .dockerHub: "Docker Hub"
+        case .keybase: "Keybase"
+        case .lichess: "Lichess"
+        case .chess: "Chess.com"
+        case .scratch: "Scratch"
+        case .bluesky: "Bluesky (.bsky.social)"
+        case .mastodon: "Mastodon.social"
         }
     }
 
@@ -23,6 +37,14 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .gitlab: "gitlab.com"
         case .hackerNews: "hacker-news.firebaseio.com"
         case .dev: "dev.to"
+        case .codeberg: "codeberg.org"
+        case .dockerHub: "hub.docker.com"
+        case .keybase: "keybase.io"
+        case .lichess: "lichess.org"
+        case .chess: "api.chess.com"
+        case .scratch: "api.scratch.mit.edu"
+        case .bluesky: "public.api.bsky.app"
+        case .mastodon: "mastodon.social"
         }
     }
 
@@ -32,7 +54,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         if value.hasPrefix("@") {
             value.removeFirst()
         }
-        guard value.range(of: #"\A[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\z"#, options: .regularExpression) != nil,
+        guard value.range(of: #"\A[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}\z"#, options: .regularExpression) != nil,
               !value.contains("..") else { return nil }
         return value
     }
@@ -44,6 +66,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
                 && !username.contains("--") && !username.hasSuffix("-")
         case .hackerNews: username.count <= 15 && !username.contains(".")
         case .gitlab, .dev: true
+        default: matchesExpandedSyntax(username)
         }
     }
 
@@ -62,6 +85,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .dev:
             parts.path = "/api/users/by_username"
             parts.queryItems = [URLQueryItem(name: "url", value: username)]
+        default: return expandedEndpoint(username)
         }
         return parts.url
     }
@@ -77,6 +101,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
             parts.host = "news.ycombinator.com"; parts.path = "/user"
             parts.queryItems = [URLQueryItem(name: "id", value: username)]
         case .dev: parts.host = "dev.to"; parts.path = "/" + username
+        default: return expandedProfileURL(username)
         }
         return parts.url
     }
@@ -89,6 +114,10 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .gitlab: parts.queryItems?.first(where: { $0.name == "username" })?.value
         case .dev: parts.queryItems?.first(where: { $0.name == "url" })?.value
         case .hackerNews: String(url.lastPathComponent.dropLast(5))
+        case .keybase: parts.queryItems?.first(where: { $0.name == "usernames" })?.value
+        case .bluesky: Self.blueskyBase(parts.queryItems?.first(where: { $0.name == "actor" })?.value)
+        case .mastodon: parts.queryItems?.first(where: { $0.name == "acct" })?.value
+        default: url.lastPathComponent
         }
         guard let name else { return false }
         return provider.endpoint(name) == url
@@ -97,10 +126,11 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
 
 struct BeholderFinding: Codable, Sendable, Equatable, Identifiable {
     enum Status: String, Codable, Sendable {
-        case checking, candidate, noResult, unsupported, limited, unavailable, cancelled
+        case queued, checking, candidate, noResult, unsupported, limited, unavailable, cancelled
 
         var title: String {
             switch self {
+            case .queued: "Queued"
             case .checking: "Checking"
             case .candidate: "Candidate account"
             case .noResult: "No public result"

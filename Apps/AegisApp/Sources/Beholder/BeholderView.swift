@@ -121,8 +121,12 @@ struct BeholderDashboard: View {
     private var preview: String {
         let name = research.preparedUsername.map { "“\($0)”" } ?? "the username you enter"
         let hosts = research.providers.filter { research.preparedUsername.map($0.supports) ?? true }.map(\.host).joined(separator: ", ")
+        let bluesky = research.preparedUsername.flatMap { username in
+            research.selected.contains(.bluesky) && BeholderProvider.bluesky.supports(username)
+                ? " Bluesky receives “\(BeholderProvider.bluesky.lookupHandle(username))”." : nil
+        } ?? ""
         return "Search sends only \(name) to: \(hosts.isEmpty ? "no compatible sources selected" : hosts). "
-            + "Providers receive your IP address and the Aegis-Beholder/1.0 app identifier."
+            + "Providers receive your IP address and the Aegis-Beholder/1.0 app identifier." + bluesky
     }
 
     private func card(_ finding: BeholderFinding) -> some View {

@@ -547,8 +547,8 @@ Two kinds, both interactive:
 ## Beholder public research
 
 Beholder is the owner's optional username research dashboard (#98, ADR-0034), with an original multi-eyed
-beholder emblem. Its first slice checks selected GitHub, GitLab, Hacker News and DEV public profile APIs only
-after the owner starts a search. It previews the exact username and destinations. Providers receive the
+beholder emblem. It checks selected GitHub, GitLab, Hacker News, DEV, Codeberg, Docker Hub, Keybase, Lichess, Chess.com, Scratch, Bluesky and Mastodon.social public profile APIs only
+after the owner starts a search. The original four remain selected by default; added sources are opt-in. At most four requests run at once. It previews the exact username and destinations. Providers receive the
 username, IP address and app request metadata; personal records and memory never accompany it.
 
 Results stay separate as candidate accounts with source URLs, check times and explicit failure states. A matching

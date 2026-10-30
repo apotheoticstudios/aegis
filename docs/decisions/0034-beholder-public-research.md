@@ -10,9 +10,9 @@ username and destination hosts; pressing Search or Return authorises that bounde
 opening the dashboard sends nothing. This is a narrow new network exception for research, separate from private
 record retrieval and cloud hand-off. It must not silently extend either permission.
 
-Only unauthenticated HTTPS GETs to those four fixed API endpoints are allowed. Fresh ephemeral sessions have no
+Only unauthenticated HTTPS GETs to the twelve fixed API endpoints below are allowed. Fresh ephemeral sessions have no
 cookies, credentials or cache; redirects are rejected. Requests have 12-second inactivity and 20-second resource
-timeouts; responses are bounded to 256 KiB while streaming. At most four requests run, once each, with no retries,
+timeouts; responses are bounded to 256 KiB while streaming. At most four requests run concurrently, once per selected source, with no retries,
 pagination, discovered-identifier expansion, remote images, scripts or linked-page fetching. Providers see the
 username, the common `Aegis-Beholder/1.0` User-Agent (not a per-owner ID), ordinary request metadata and the
 connection's IP address. The preview discloses this. They may log it; local inference does not
@@ -53,3 +53,48 @@ additional code integration must review its actual licence and outbound behavior
 
 This is a first working dashboard, not exhaustive coverage or guaranteed identification. Broader public-web,
 registry and geographic research can build on the same evidence and permission boundaries.
+
+
+## Broader coverage (#100, owner requested 2026-10-30)
+
+The initial four remain the default selection. Eight additional sources are opt-in. The closed catalogue is
+compiled into the app; no remote configuration, Python tool or site-rule download is executed. A fixed four-slot
+queue replaces unbounded fan-out, with explicit Queued/Checking states. Stop cancels active and queued work;
+completion order never changes the catalogue order displayed/exported. Each request retains the original
+transport restrictions, bounded text and exact returned-handle checks.
+
+| Added source | Fixed API host and path | Positive account identity |
+| --- | --- | --- |
+| Codeberg | codeberg.org/api/v1/users/{handle} | login |
+| Docker Hub | hub.docker.com/v2/users/{handle}/ | username |
+| Keybase | keybase.io/_/api/1.0/user/lookup.json | OK status, one result, basics.username |
+| Lichess | lichess.org/api/user/{handle} | username |
+| Chess.com | api.chess.com/pub/player/{handle} | username |
+| Scratch | api.scratch.mit.edu/users/{handle} | username |
+| Bluesky (.bsky.social) | public.api.bsky.app/xrpc/app.bsky.actor.getProfile | handle including .bsky.social |
+| Mastodon.social | mastodon.social/api/v1/accounts/lookup | matching local username AND local acct |
+
+Keybase receives `usernames` and fixed `fields=basics,profile`, never a cross-service identifier query. Bluesky
+receives only the explicitly named .bsky.social namespace (a bare handle is qualified with that label); custom
+handle domains and DIDs are outside this slice. Mastodon queries only the named server's local accounts, not
+arbitrary federated hosts. No posts, followers, contact networks, linked proofs or extra identities are fetched.
+A provider requiring sign-in or returning an unrecognised/mismatched response is Unavailable, never a positive
+match. Only explicit HTTP 404 or documented empty Keybase results become No public result. No public result
+still does not prove absence. All new adapters are tested with invented responses, not live private-person scans.
+
+Discovery inspiration: selected entries of Sherlock's MIT catalogue at
+https://github.com/sherlock-project/sherlock/blob/e40a45ec2a074b90703b3b4b842c8a3adbd6ada3/sherlock_project/resources/data.json.
+No upstream code, full dataset, headers or example usernames are copied/bundled. Native positive JSON identity
+checks replace status-only profile probes. References used to verify the selected endpoint shapes:
+
+- https://raw.githubusercontent.com/go-gitea/gitea/main/routers/api/v1/user/user.go
+- Docker Hub's public profile route is also recorded in the pinned Sherlock Docker Hub entry above.
+- https://keybase.io/docs/api/1.0/call/user/lookup
+- https://github.com/lichess-org/api/blob/master/doc/specs/tags/users/api-user-username.yaml
+- https://www.chess.com/news/view/published-data-api
+- https://github.com/scratchfoundation/scratch-rest-api/wiki/Users
+- https://github.com/bluesky-social/atproto/blob/main/packages/bsky/lexicons/app/bsky/actor/getProfile.json
+- https://github.com/mastodon/mastodon/blob/main/app/controllers/api/v1/accounts/lookup_controller.rb
+
+Vendor API availability and access policies may change. Failures remain visible; the app never attempts an
+alternate private endpoint, authentication, scraping workaround or a different search provider automatically.
