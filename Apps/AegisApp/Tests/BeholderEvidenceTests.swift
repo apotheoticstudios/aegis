@@ -99,8 +99,8 @@ final class BeholderEvidenceTests: XCTestCase {
         let summary = BeholderEvidence.summary([manual, unsupported, finding(.github, .candidate)])
         XCTAssertEqual(summary.manual, 2)
         XCTAssertEqual(summary.candidates, 1)
-        XCTAssertEqual(summary.headline, "1 of 1 automatic check completed · 1 candidate account · 2 unchecked links")
-        XCTAssertEqual(BeholderEvidence.summary([manual]).headline, "No automatic checks · 1 unchecked link")
+        XCTAssertEqual(summary.headline, "1 of 1 automatic check completed · 1 candidate account · 2 manual sources")
+        XCTAssertEqual(BeholderEvidence.summary([manual]).headline, "No automatic checks · 1 manual source")
     }
 
     func testSameHandleAtDifferentSourcesStaysSeparate() {
@@ -150,6 +150,9 @@ final class BeholderEvidenceTests: XCTestCase {
             let reason = BeholderEvidence.explain(finding(provider, .candidate)).reason
             XCTAssertFalse(reason.contains("account with this handle exists"), "\(provider)")
             XCTAssertTrue(reason.contains("does not show who runs it"), "\(provider)")
+            let absent = BeholderEvidence.explain(finding(provider, .noResult)).reason
+            XCTAssertTrue(absent.contains("no matching public record"), "\(provider)")
+            XCTAssertFalse(absent.contains("public account"), "\(provider)")
         }
     }
 

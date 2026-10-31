@@ -11,7 +11,7 @@ enum BeholderEvidence {
             case .noResult: "No public result"
             case .unresolved: "Unresolved"
             case .notChecked: "Not checked"
-            case .manual: "Unchecked link"
+            case .manual: "Manual source"
             }
         }
     }
@@ -80,7 +80,7 @@ enum BeholderEvidence {
                 parts.append("\(notChecked) not checked" + (cancelled > 0 ? " (\(cancelled) cancelled)" : ""))
             }
             if manual > 0 {
-                parts.append("\(manual) unchecked " + (manual == 1 ? "link" : "links"))
+                parts.append("\(manual) manual " + (manual == 1 ? "source" : "sources"))
             }
             return parts.joined(separator: " · ")
         }
@@ -155,7 +155,7 @@ enum BeholderEvidence {
                 : "\(source) returned a public profile record matching " + quoted(finding) + " exactly. "
                 + "It does not show who runs it or link it to any other result."
         case .noResult:
-            "\(source) answered that no public account has this handle. "
+            "\(source) answered with no matching public record for this handle. "
                 + "Private, renamed or removed accounts can look the same, so this does not prove absence."
         case .unresolved:
             finding.status == .limited
