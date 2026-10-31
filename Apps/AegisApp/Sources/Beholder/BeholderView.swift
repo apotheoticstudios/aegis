@@ -20,13 +20,12 @@ struct BeholderScreen: View {
 
 struct BeholderDashboard: View {
     private enum Sheet: Identifiable {
-        case planner, people, sources, destinations, link(BeholderPeopleView.Target)
+        case planner, people, sources, link(BeholderPeopleView.Target)
         var id: String {
             switch self {
             case .planner: "planner"
             case .people: "people"
             case .sources: "sources"
-            case .destinations: "destinations"
             case let .link(target): target.id.uuidString
             }
         }
@@ -85,11 +84,7 @@ struct BeholderDashboard: View {
                 Button("Export case…") { prepareExport() }
                     .disabled((research.findings.isEmpty && research.people.people.isEmpty) || research.searching)
             }
-            HStack(alignment: .top) {
-                Text(previewSummary).font(.caption).foregroundStyle(HUD.inkMuted)
-                Spacer()
-                Button("Review destinations…") { sheet = .destinations }.font(.caption)
-            }
+            Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
             if let problem = research.problem ?? exportProblem {
                 Text(problem).foregroundStyle(HUD.warn)
             }
@@ -109,14 +104,21 @@ struct BeholderDashboard: View {
                         ProgressView().controlSize(.small)
                     }
                 }
-                BeholderEvidenceSummaryView(findings: research.findings)
                 ScrollView {
-                    LazyVGrid(
-                        columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)],
-                        alignment: .leading,
-                        spacing: HUD.space4
-                    ) {
-                        ForEach(research.findings) { finding in card(finding) }
+                    VStack(alignment: .leading, spacing: HUD.space3) {
+                        if research.searching {
+                            Text("Search in progress. Results appear as checks finish.")
+                                .font(.caption).foregroundStyle(HUD.inkMuted).frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            BeholderEvidenceSummaryView(findings: research.findings)
+                        }
+                        LazyVGrid(
+                            columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)],
+                            alignment: .leading,
+                            spacing: HUD.space4
+                        ) {
+                            ForEach(research.findings) { finding in card(finding) }
+                        }
                     }
                 }
             }
@@ -139,15 +141,6 @@ struct BeholderDashboard: View {
                         }.padding(.horizontal, HUD.space4).padding(.top, HUD.space3)
                         BeholderSourceGuideView(selected: $research.selected)
                     }.frame(width: 440).background(HUD.void)
-                case .destinations:
-                    VStack(alignment: .leading, spacing: HUD.space4) {
-                        HStack {
-                            Text("SEARCH DESTINATIONS").hudType(.data)
-                            Spacer()
-                            Button("Done") { sheet = nil }.keyboardShortcut(.cancelAction)
-                        }
-                        ScrollView { Text(preview).font(.caption).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
-                    }.padding(HUD.space4).frame(width: 620, height: 400).foregroundStyle(HUD.ink).background(HUD.void)
                 case let .link(target): BeholderPeopleView(research: research, target: target)
                 }
             }.environment(\.hudTheme, theme)
@@ -175,20 +168,12 @@ struct BeholderDashboard: View {
         }
     }
 
-    private var previewSummary: String {
-        guard let name = research.preparedUsername else { return "Enter a username to preview where it will be sent." }
-        let eligible = research.providers.filter { $0.supports(name) }
-        let automatic = eligible.filter { !$0.isManual }.count
-        let manual = eligible.filter(\.isManual).count
-        let automaticText = automatic == 0 ? "No automatic requests." : "Search sends this username to \(automatic) selected \(automatic == 1 ? "service" : "services")."
-        return automaticText + " \(manual) manual \(manual == 1 ? "link stays" : "links stay") unchecked. Review destinations before sending."
-    }
-
     private var preview: String {
         guard let name = research.preparedUsername else { return "Enter a username to preview where it will be sent." }
         let eligible = research.providers.filter { $0.supports(name) }
         let hosts = eligible.filter { !$0.isManual && $0 != .bluesky }.map(\.host).joined(separator: ", ")
         let manualCount = eligible.filter(\.isManual).count
+        let manualTotal = research.providers.filter(\.isManual).count
         var targets: [String] = []
         if !hosts.isEmpty {
             targets.append("“\(name)” to \(hosts) (case may be normalised)")
@@ -198,8 +183,8 @@ struct BeholderDashboard: View {
         }
         let destination = targets.isEmpty ? "Search sends no automatic requests." : "Search sends " + targets.joined(separator: "; ") + "."
         let automatic = targets.isEmpty ? "" : " Automatic sources receive your IP address and the Aegis-Beholder/1.0 app identifier."
-        let manualSubject = manualCount == 1 ? "1 manual link stays" : "\(manualCount) manual links stay"
-        let manual = manualCount == 0 ? "" : " \(manualSubject) unchecked. Search does not contact manual sources. Open a link in your browser to inspect it."
+        let manual = manualTotal == 0 ? "" : " \(manualCount) of \(manualTotal) manual sources have prepared links. "
+            + "Search does not contact manual sources. Open a prepared link in your browser to inspect it."
         return destination + automatic + manual
     }
 
@@ -208,8 +193,9 @@ struct BeholderDashboard: View {
             HStack {
                 Text(finding.provider.title).font(.headline)
                 Spacer()
-                Text(finding.status.title).font(.caption)
-                    .foregroundStyle(finding.status == .candidate ? HUD.primary : HUD.inkMuted)
+                if finding.status.title != BeholderEvidence.outcome(finding).title {
+                    Text(finding.status.title).font(.caption).foregroundStyle(HUD.inkMuted)
+                }
             }
             ForEach(finding.fields.keys.sorted(), id: \.self) { label in
                 VStack(alignment: .leading, spacing: 3) {

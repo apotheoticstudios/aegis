@@ -32,24 +32,34 @@ final class BeholderWorkspaceRenderTests: XCTestCase {
         for (name, size, panel) in [
             ("workspace-compact", CGSize(width: 900, height: 650), false),
             ("workspace-wide", CGSize(width: 1400, height: 900), false),
-            ("workspace-hud", CGSize(width: 900, height: 650), true),
+            // Panel-aware dashboard layout only; this does not exercise HUDShell or panel focus.
+            ("workspace-panel-aware", CGSize(width: 900, height: 650), true),
         ] {
-            let host = NSHostingView(rootView: BeholderDashboard(research: model, followsPanel: panel)
-                .frame(width: size.width, height: size.height).background(HUD.void).environment(\.colorScheme, .dark))
-            let window = NSWindow(
-                contentRect: NSRect(origin: CGPoint(x: -4000, y: -4000), size: size),
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            window.contentView = host; window.orderFront(nil)
-            defer { window.orderOut(nil) }
-            host.layoutSubtreeIfNeeded()
-            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-            host.cacheDisplay(in: host.bounds, to: bitmap)
-            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-            try png.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("beholder-\(name).png"))
+            try capture(model, size: size, name: name, panel: panel)
         }
+        let running = BeholderModel(client: WorkspaceFixtures())
+        running.query = "ExamplePending"; running.selected = Set(BeholderProvider.allCases); running.start()
+        XCTAssertTrue(running.searching)
+        try capture(running, size: CGSize(width: 900, height: 650), name: "workspace-running")
+        running.cancel()
+    }
+
+    @MainActor private func capture(_ model: BeholderModel, size: CGSize, name: String, panel: Bool = false) throws {
+        let host = NSHostingView(rootView: BeholderDashboard(research: model, followsPanel: panel)
+            .frame(width: size.width, height: size.height).background(HUD.void).environment(\.colorScheme, .dark))
+        let window = NSWindow(
+            contentRect: NSRect(origin: CGPoint(x: -4000, y: -4000), size: size),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = host; window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("beholder-\(name).png"))
     }
 }
 
