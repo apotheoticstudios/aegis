@@ -362,8 +362,19 @@ public enum WorldAlerts {
         })
     }
 
-    private static func unescaped(_ text: String) -> String {
-        [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&apos;", "'"), ("&amp;", "&")].reduce(text) {
+    /// XML's named and numeric character references ("&amp;", "&#8217;") as text.
+    static func unescaped(_ text: String) -> String {
+        var text = text
+        if let regex = try? NSRegularExpression(pattern: #"&#(x?)([0-9a-fA-F]{1,6});"#) {
+            for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+                guard let whole = Range(match.range, in: text), let digits = Range(match.range(at: 2), in: text),
+                      let value = UInt32(text[digits], radix: match.range(at: 1).length == 1 ? 16 : 10),
+                      let scalar = Unicode.Scalar(value)
+                else { continue }
+                text.replaceSubrange(whole, with: String(Character(scalar)))
+            }
+        }
+        return [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&apos;", "'"), ("&amp;", "&")].reduce(text) {
             $0.replacingOccurrences(of: $1.0, with: $1.1)
         }
     }

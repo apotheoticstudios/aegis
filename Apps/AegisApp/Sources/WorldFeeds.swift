@@ -56,7 +56,25 @@ enum WorldFeeds {
         return lines + fresh.alerts.map(\.text)
     }
 
-    private static let session = URLSession(configuration: .ephemeral) // privacy-guard: allow-network air, disasters and Kp, ADR-0024
+    /// The world headlines (#116), the two feeds interleaved, pinned at the countries they name; nil when neither answers.
+    static func headlines() async -> [WorldNews.Pin]? {
+        guard !WorldSidecar.isTestHost else { return nil }
+        async let bbc = feed(WorldNews.feeds[0])
+        async let aljazeera = feed(WorldNews.feeds[1])
+        let lists = await [bbc, aljazeera].compactMap(\.self).map(WorldNews.headlines)
+        guard !lists.isEmpty, let table = try? Data(contentsOf: WorldNews.zoneTable) else { return nil }
+        let mixed = (0 ..< (lists.map(\.count).max() ?? 0)).flatMap { index in lists.compactMap { index < $0.count ? $0[index] : nil } }
+        return WorldNews.pins(mixed, countries: WorldNews.countries(zoneTab: table))
+    }
+
+    private static func feed(_ url: URL) async -> Data? {
+        guard let (data, response) = try? await session.data(from: url), (response as? HTTPURLResponse)?.statusCode == 200 else {
+            return nil
+        }
+        return data
+    }
+
+    private static let session = URLSession(configuration: .ephemeral) // privacy-guard: allow-network air, disasters, Kp and news, ADR-0024
 
     private static func air(_ home: WorldHome.Point) async -> String? {
         guard let url = WorldAlerts.airURL(latitude: home.latitude, longitude: home.longitude),

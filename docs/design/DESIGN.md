@@ -573,6 +573,8 @@ Air, eruptions and warnings (2026-10-26, ADR-0024): the brief adds the air at ho
 
 Space weather, disasters and what's new (2026-10-31, #115, ADR-0024; ideas from worldmonitor, OSIRIS and Crucix, no code copied): "any aurora tonight?" checks NOAA's Kp forecast and home's geomagnetic latitude (worked out on the Mac); "any disasters near me?" lists GDACS's orange and red alerts (earthquakes, cyclones, floods, eruptions, wildfires, droughts) within 5,000 km this week. The brief adds a storm that may show aurora at home (or any strong one) and the region's disasters, each only for 12 hours after it first appears or escalates (Crucix's sweep delta); Bureau warnings for home always stay.
 
+World headlines (2026-10-31, #116, ADR-0024): "what's happening in the world?" or "world news" pins the latest BBC World and Al Jazeera headlines on the globe, each at the country it names (matched on the Mac; points from macOS's time zone table), and reads the top five. Shown and read only.
+
 ### Services and keys (as God's Eye View uses them)
 
 | Service | Needed for | Cost | Decision |

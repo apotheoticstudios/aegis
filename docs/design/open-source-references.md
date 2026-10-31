@@ -104,7 +104,7 @@ What Aegis took (#115, all re-implemented):
 - **More disaster types** (all three aggregate disasters): Aegis's existing GDACS request now covers all its types.
 - **What's new** (Crucix's sweep delta): regional alerts leave the brief 12 hours after they first appear, unless they escalate.
 
-Next, by the owner's choice: world headlines pinned on the globe (worldmonitor's and Crucix's news layers; GDELT), as its own step.
+- **World headlines on the globe** (#116; worldmonitor's and Crucix's news layers): GDELT's map API is retired (404), and its article API has no locations and allows one request every 5 seconds. So Aegis follows OSIRIS's approach instead: public RSS headlines (BBC World, Al Jazeera) matched to the countries they name.
 
 Left out:
 - **God's Eye View already has them:** flights, ships, satellites, quakes, fires, cameras, air quality, radio.

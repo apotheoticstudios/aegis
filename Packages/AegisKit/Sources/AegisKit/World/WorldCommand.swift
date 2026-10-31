@@ -23,6 +23,8 @@ public enum WorldCommand: Sendable, Equatable {
     /// "How's the air?", "any volcano alerts?", "any weather warnings?", "any aurora tonight?", "any disasters near me?":
     /// public data about home, no globe needed.
     case alerts(WorldAlerts.Kind)
+    /// "What's happening in the world?": world headlines pinned at the countries they name (#116).
+    case headlines
     /// Something the World view won't do, and what to say instead.
     case declined(String)
 
@@ -181,7 +183,7 @@ public enum WorldCommand: Sendable, Equatable {
         return .alerts(kind)
     }
 
-    /// Commands with a fixed form: open, close, trips, home and flight.
+    /// Commands with a fixed form: open, close, trips, home, flight and the headlines.
     private static func fixedCommand(_ line: String) -> WorldCommand? {
         let forms: [(String, WorldCommand)] = [
             (
@@ -204,6 +206,13 @@ public enum WorldCommand: Sendable, Equatable {
                 #"^(?:(?:show|find|track|follow|where(?:'s| is))(?: me)? my (?:next )?(?:flight|plane)|"#
                     + #"is my (?:flight|plane) (?:in the air|flying|airborne))$"#,
                 .myFlight
+            ),
+            (
+                #"^(?:(?:show|give|read|tell|get)(?: me)? )?(?:the )?(?:latest |top |today'?s )?(?:world |international |global )?"#
+                    + #"(?:news|headlines|news headlines)(?: (?:on the (?:globe|map)|(?:from )?around the world|today))?$|"#
+                    + #"^what'?s (?:happening|going on) (?:in|around) the world(?: today| right now| now)?$|"#
+                    + #"^what'?s the (?:latest )?(?:world )?news$"#,
+                .headlines
             ),
         ]
         return forms.first { line.range(of: $0.0, options: .regularExpression) != nil }?.1
