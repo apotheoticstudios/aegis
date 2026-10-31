@@ -29,7 +29,7 @@ struct BeholderPeopleView: View {
             HStack {
                 Text("PEOPLE IN THIS CASE").hudType(.data)
                 Spacer()
-                Button("Done") { dismiss() }
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             Text("Group accounts using evidence you have reviewed. A matching handle alone does not establish who owns it.")
                 .foregroundStyle(HUD.inkMuted)

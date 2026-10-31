@@ -108,6 +108,8 @@ struct BeholderDashboard: View {
             if followsPanel, !open {
                 research.cancel()
                 planning = false
+                showingPeople = false
+                linkTarget = nil
             }
         }
         .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: "Beholder-case") { result in
