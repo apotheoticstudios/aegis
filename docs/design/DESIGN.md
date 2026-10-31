@@ -551,6 +551,10 @@ beholder emblem. It checks selected GitHub, GitLab, Hacker News, DEV, Codeberg, 
 after the owner starts a search. The original four remain selected by default; added sources are opt-in. At most four requests run at once. It previews the exact username and destinations. Providers receive the
 username, IP address and app request metadata; personal records and memory never accompany it.
 
+The social-source expansion (#104 / #105) adds Write.as, Mixcloud, Framatube and seven named Mastodon servers.
+Original sources stay selected by default; additional APIs and manual profile links are opt-in. Manual links are
+labelled unverified and are opened only by a separate browser click, never contacted by Search.
+
 Results stay separate as candidate accounts with source URLs, check times and explicit failure states. A matching
 handle never proves a person's identity. Cases remain in memory with explicit clear/export controls; leaving
 the screen or closing the window cancels requests. No automatic memory writes, identity merging, background

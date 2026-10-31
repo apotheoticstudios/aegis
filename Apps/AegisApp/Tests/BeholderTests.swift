@@ -13,7 +13,7 @@ final class BeholderTests: XCTestCase {
         }
         XCTAssertNil(BeholderProvider.username(String(repeating: "a", count: 65)))
         XCTAssertNil(BeholderProvider.github.endpoint("Example_Alex"))
-        for provider in BeholderProvider.allCases {
+        for provider in BeholderProvider.automaticSources {
             let url = try XCTUnwrap(provider.endpoint("ExampleAlex"))
             XCTAssertEqual(url.scheme, "https")
             XCTAssertEqual(url.host, provider.host)

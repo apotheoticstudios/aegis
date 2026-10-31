@@ -21,7 +21,7 @@ enum BeholderProfiles {
         default: "username"
         }
         guard let handle = object[key] as? String, handle.lowercased() == provider.lookupHandle(username) else { return result }
-        if provider == .mastodon {
+        if provider.mastodonHost != nil {
             guard let acct = object["acct"] as? String, acct.lowercased() == provider.lookupHandle(username) else { return result }
         }
         result.status = .candidate

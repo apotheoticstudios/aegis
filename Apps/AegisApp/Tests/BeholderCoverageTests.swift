@@ -16,7 +16,7 @@ final class BeholderCoverageTests: XCTestCase {
     ]
 
     func testExpandedProfilesRequireExactIdentifiers() throws {
-        XCTAssertEqual(BeholderProvider.allCases.count, 12)
+        XCTAssertTrue(Set(BeholderProvider.allCases).isSuperset(of: fixtures.keys))
         for provider in fixtures.keys {
             let json = try XCTUnwrap(fixtures[provider])
             let result = parse(json, provider)
@@ -84,11 +84,14 @@ final class BeholderCoverageTests: XCTestCase {
         let service = CoverageSearch()
         let model = BeholderModel(client: service)
         XCTAssertEqual(model.selected, BeholderProvider.originalSources)
-        model.selected = Set(BeholderProvider.allCases)
+        model.selected = Set(BeholderProvider.automaticSources)
         model.query = "ExampleAlex"
         model.start()
         try await service.waitFor(4)
-        XCTAssertEqual(model.findings.filter { $0.status == .queued }.count, 8)
+        XCTAssertEqual(
+            model.findings.filter { $0.status == .queued }.count,
+            BeholderProvider.automaticSources.count - BeholderModel.parallelLimit
+        )
         await service.release(.github)
         try await service.waitFor(5)
         let peak = await service.peak
@@ -106,11 +109,11 @@ final class BeholderCoverageTests: XCTestCase {
     @MainActor func testCompletionKeepsCatalogueOrderAcrossBatches() async throws {
         let service = CoverageSearch()
         let model = BeholderModel(client: service)
-        model.selected = Set(BeholderProvider.allCases)
+        model.selected = Set(BeholderProvider.automaticSources)
         model.query = "ExampleAlex"
         model.start()
-        for count in [4, 8, 12] {
-            try await service.waitFor(count)
+        for offset in stride(from: 0, to: BeholderProvider.automaticSources.count, by: BeholderModel.parallelLimit) {
+            try await service.waitFor(min(offset + BeholderModel.parallelLimit, BeholderProvider.automaticSources.count))
             await service.releaseAll()
         }
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
@@ -118,7 +121,7 @@ final class BeholderCoverageTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(2))
         }
         XCTAssertFalse(model.searching)
-        XCTAssertEqual(model.findings.map(\.provider), BeholderProvider.allCases)
+        XCTAssertEqual(model.findings.map(\.provider), BeholderProvider.automaticSources)
         XCTAssertTrue(model.findings.allSatisfy { $0.status == .candidate })
         let peak = await service.peak
         XCTAssertEqual(peak, 4)
@@ -127,7 +130,7 @@ final class BeholderCoverageTests: XCTestCase {
     @MainActor func testImmediateStopStartsNoLookup() async throws {
         let service = CoverageSearch()
         let model = BeholderModel(client: service)
-        model.selected = Set(BeholderProvider.allCases)
+        model.selected = Set(BeholderProvider.automaticSources)
         model.query = "ExampleAlex"
         model.start()
         model.cancel()

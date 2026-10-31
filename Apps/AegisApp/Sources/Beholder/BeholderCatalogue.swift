@@ -18,6 +18,14 @@ extension BeholderProvider {
     }
 
     func matchesExpandedSyntax(_ username: String) -> Bool {
+        if self == .mixcloud,
+           ["me", "search", "genres", "upload", "oauth", "developers", "popular", "new", "discover"].contains(username.lowercased())
+        {
+            return false
+        }
+        if let pattern = socialAPIPattern {
+            return username.range(of: "\\A(?:" + pattern + ")\\z", options: [.regularExpression, .caseInsensitive]) != nil
+        }
         if self == .codeberg, username.lowercased() == "search" {
             return false
         }
@@ -38,7 +46,13 @@ extension BeholderProvider {
 
     func expandedEndpoint(_ username: String) -> URL? {
         let handle = lookupHandle(username)
+        if mastodonHost != nil {
+            return Self.address(host, "/api/v1/accounts/lookup", [("acct", handle)])
+        }
         switch self {
+        case .writeAs: return Self.address(host, "/api/collections/" + handle)
+        case .framaTube: return Self.address(host, "/api/v1/accounts/" + handle)
+        case .mixcloud: return Self.address(host, "/" + handle + "/")
         case .codeberg: return Self.address(host, "/api/v1/users/" + handle)
         case .dockerHub: return Self.address(host, "/v2/users/" + handle + "/")
         case .keybase: return Self.address(host, "/_/api/1.0/user/lookup.json", [("usernames", handle), ("fields", "basics,profile")])
@@ -53,7 +67,13 @@ extension BeholderProvider {
 
     func expandedProfileURL(_ username: String) -> URL? {
         let handle = lookupHandle(username)
+        if mastodonHost != nil {
+            return Self.address(host, "/@" + handle)
+        }
         switch self {
+        case .writeAs: return Self.address(host, "/" + handle + "/")
+        case .framaTube: return Self.address(host, "/a/" + handle)
+        case .mixcloud: return Self.address("www.mixcloud.com", "/" + handle + "/")
         case .codeberg, .keybase: return Self.address(host, "/" + handle)
         case .dockerHub: return Self.address(host, "/u/" + handle)
         case .lichess: return Self.address(host, "/@/" + handle)

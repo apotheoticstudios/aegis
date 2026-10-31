@@ -10,7 +10,7 @@ username and destination hosts; pressing Search or Return authorises that bounde
 opening the dashboard sends nothing. This is a narrow new network exception for research, separate from private
 record retrieval and cloud hand-off. It must not silently extend either permission.
 
-Only unauthenticated HTTPS GETs to the twelve fixed API endpoints below are allowed. Fresh ephemeral sessions have no
+Only unauthenticated HTTPS GETs to the twenty-two fixed API endpoints below are allowed. Fresh ephemeral sessions have no
 cookies, credentials or cache; redirects are rejected. Requests have 12-second inactivity and 20-second resource
 timeouts; responses are bounded to 256 KiB while streaming. At most four requests run concurrently, once per selected source, with no retries,
 pagination, discovered-identifier expansion, remote images, scripts or linked-page fetching. Providers see the
@@ -100,3 +100,36 @@ Vendor API availability and access policies may change. Failures remain visible;
 alternate private endpoint, authentication, scraping workaround or a different search provider automatically.
 
 Review refinements (#100): a qualified .bsky.social input is eligible only for Bluesky; it is never sent to another source. The preview lists the qualified Bluesky payload separately. Scratch profile.status is labelled Working on, never Account state. The reserved Codeberg search route is ineligible. Bluesky HTTP 400 missing-profile replies remain Unavailable rather than being guessed absent; moderation/closure flags on other services are not interpreted as identity findings. The original-source selection shares one provider definition after the #101 integration.
+
+## Social coverage (#104 / #105, owner requested 2026-10-31)
+
+Ten further API sources are individually opt-in. The original four remain the defaults. Seven are named
+Mastodon servers: mastodon.online, mstdn.social, fosstodon.org, hachyderm.io, infosec.exchange, mas.to and
+social.vivaldi.net. Each uses only `/api/v1/accounts/lookup?acct={handle}` and requires both the returned username
+and local acct to match. No arbitrary server, remote account address or WebFinger resolution is accepted.
+Server access policies can require authentication or block requests; those responses stay Unavailable.
+
+Write.as uses only `write.as/api/collections/{alias}`. Its successful API envelope and exact alias are required;
+only title and description are retained. A collection is labelled Blog, not asserted to be a person's account.
+PeerTube uses only `framatube.org/api/v1/accounts/{name}`. Returned name, local host and canonical actor URL
+must all match; only display name and description are retained. No posts, videos, followers or CSS are fetched.
+Mixcloud uses only `api.mixcloud.com/{handle}/`, whose exact root user key must match. Reserved API routes
+(me, search, genres, upload, OAuth and other non-user roots) are ineligible. Returned shows, pictures and links
+are never followed. These adapters use locally constructed canonical profile links; all existing transport bounds apply.
+
+Primary API references (no upstream executable code copied):
+
+- https://docs.joinmastodon.org/methods/accounts/#lookup
+- https://github.com/mastodon/mastodon/blob/main/app/controllers/api/v1/accounts/lookup_controller.rb
+- https://developers.write.as/docs/api/#retrieve-a-collection
+- https://www.mixcloud.com/developers/
+- https://docs.joinpeertube.org/api-rest-reference.html#operation/getAccount
+- https://github.com/Chocobozzz/PeerTube/blob/develop/support/doc/api/openapi.yaml
+
+The broader Sherlock-style directory is deliberately separate from positive API evidence. Public profile URL
+patterns can be useful even when a platform needs sign-in, API registration or browser rendering. Such sources
+must be marked Open manually, never Candidate account or No public result merely because a URL was generated.
+Their links are opened only by a separate owner click in the browser. Search itself must not request them,
+claim they were checked, use browser cookies, or bypass the platform's access controls. Source coverage and
+automatically checked accounts are different counts. The pinned Sherlock patterns inspire native fixed rules;
+Hunchly's provenance principle informs source and observation times, without bundling either tool.

@@ -4,6 +4,11 @@ import Foundation
 enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     case github, gitlab, hackerNews, dev
     case codeberg, dockerHub, keybase, lichess, chess, scratch, bluesky, mastodon
+    case mastodonOnline, mstdnSocial, fosstodon, hachyderm, infosecExchange, masTo, socialVivaldi, writeAs, framaTube, mixcloud
+
+    static var automaticSources: [Self] {
+        allCases
+    }
 
     /// Expansion never silently adds destinations to an existing owner's search.
     static var originalSources: Set<Self> {
@@ -28,6 +33,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .scratch: "Scratch"
         case .bluesky: "Bluesky (.bsky.social)"
         case .mastodon: "Mastodon.social"
+        default: socialAPITitle ?? rawValue
         }
     }
 
@@ -45,6 +51,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .scratch: "api.scratch.mit.edu"
         case .bluesky: "public.api.bsky.app"
         case .mastodon: "mastodon.social"
+        default: socialAPIHost ?? ""
         }
     }
 
@@ -112,15 +119,19 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     static func permits(_ url: URL) -> Bool {
         guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let provider = allCases.first(where: { $0.host == parts.host }) else { return false }
-        let name: String? = switch provider {
-        case .github: url.lastPathComponent
-        case .gitlab: parts.queryItems?.first(where: { $0.name == "username" })?.value
-        case .dev: parts.queryItems?.first(where: { $0.name == "url" })?.value
-        case .hackerNews: String(url.lastPathComponent.dropLast(5))
-        case .keybase: parts.queryItems?.first(where: { $0.name == "usernames" })?.value
-        case .bluesky: Self.blueskyBase(parts.queryItems?.first(where: { $0.name == "actor" })?.value)
-        case .mastodon: parts.queryItems?.first(where: { $0.name == "acct" })?.value
-        default: url.lastPathComponent
+        let name: String? = if provider.mastodonHost != nil {
+            parts.queryItems?.first(where: { $0.name == "acct" })?.value
+        } else {
+            switch provider {
+            case .github: url.lastPathComponent
+            case .gitlab: parts.queryItems?.first(where: { $0.name == "username" })?.value
+            case .dev: parts.queryItems?.first(where: { $0.name == "url" })?.value
+            case .hackerNews: String(url.lastPathComponent.dropLast(5))
+            case .keybase: parts.queryItems?.first(where: { $0.name == "usernames" })?.value
+            case .bluesky: Self.blueskyBase(parts.queryItems?.first(where: { $0.name == "actor" })?.value)
+            case .mastodon: parts.queryItems?.first(where: { $0.name == "acct" })?.value
+            default: url.lastPathComponent
+            }
         }
         guard let name else { return false }
         return provider.endpoint(name) == url

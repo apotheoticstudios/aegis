@@ -109,6 +109,9 @@ struct BeholderClient: BeholderSearching {
         }
         guard payload.status == 200, payload.data.count <= BeholderWebTransport.byteLimit,
               let json = try? JSONSerialization.jsonObject(with: payload.data, options: .fragmentsAllowed) else { return result }
+        if [.writeAs, .framaTube, .mixcloud].contains(provider) {
+            return BeholderSocialAPIs.parse(json, provider: provider, username: username, now: now)
+        }
         if !BeholderProvider.originalSources.contains(provider) {
             return BeholderProfiles.expanded(json, provider: provider, username: username, now: now)
         }
