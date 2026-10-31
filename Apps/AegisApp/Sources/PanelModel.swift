@@ -674,22 +674,22 @@ enum BriefPresentation {
     /// Why no reply draft came back, in plain words (#176).
     static func draftMessage(_ code: String) -> String {
         switch code {
-        case "busy": "Aegis is writing your brief. Try again in a minute."
+        case "busy": "I'm writing your brief. Try again in a minute."
         case "nothing_open": "Nothing from them is waiting on you now."
-        case "unreachable", "unavailable": "Aegis's background part isn't reachable right now."
+        case "unreachable", "unavailable": "My background part isn't reachable right now."
         case "timed_out", "cancelled": "That took too long. Try again."
-        default: "Aegis couldn't write a draft it was sure of. Try again."
+        default: "I couldn't write a draft I was sure of. Try again."
         }
     }
 
     static func askMessage(_ code: String) -> String {
         switch code {
-        case "busy": "Aegis is writing your brief. Ask again in a minute."
+        case "busy": "I'm writing your brief. Ask again in a minute."
         case "bad_question": "Try a shorter question."
-        case "too_long": "That needs more than Aegis can read at once. Try narrowing it, for example to a person or a day."
-        case "unreachable", "unavailable": "Aegis's background part isn't reachable right now."
+        case "too_long": "That needs more than I can read at once. Try narrowing it, for example to a person or a day."
+        case "unreachable", "unavailable": "My background part isn't reachable right now."
         case "timedOut", "cancelled": "That took too long. Try again."
-        default: "Aegis couldn't answer that this time. Try asking another way."
+        default: "I couldn't answer that this time. Try asking another way."
         }
     }
 

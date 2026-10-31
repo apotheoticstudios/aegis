@@ -3,9 +3,23 @@ import CryptoKit
 import Darwin
 import Foundation
 import OSLog
+import Synchronization
 
 /// Private, bounded diagnostics. The API cannot accept transcripts, paths, exception text or payloads.
 final class DiagnosticLog: @unchecked Sendable {
+    private let unhealthy = Mutex(0)
+
+    /// Unreadable sources, logged only when their number changes: status is polled every few seconds.
+    func recordUnhealthy(_ failures: Int) {
+        let changed = unhealthy.withLock { last in
+            defer { last = failures }
+            return last != failures
+        }
+        if changed, failures > 0 {
+            record(.sourceUnhealthy, number: failures)
+        }
+    }
+
     enum Code: String, Codable, CaseIterable, Sendable {
         case appStarted, appStopped, previousExitUnclean, uncaughtException, registrationFailed
         case wakeAcknowledged, captureStarted, captureEnded, captureTimedOut, acknowledgementTimedOut
@@ -202,10 +216,7 @@ struct DiagnosticCoreService: CoreService {
             log.record(.answerReady)
         }
         if case let .status(status) = response {
-            let failures = status.sources.filter { !$0.readable }.count
-            if failures > 0 {
-                log.record(.sourceUnhealthy, number: failures)
-            }
+            log.recordUnhealthy(status.sources.filter { !$0.readable }.count)
         }
         if case let .refused(code) = response {
             let diagnostic: DiagnosticLog.Code? = switch code {
