@@ -108,14 +108,18 @@ struct BeholderDashboard: View {
     }
 
     private var preview: String {
-        let name = research.preparedUsername.map { "“\($0)”" } ?? "the username you enter"
-        let hosts = research.providers.filter { research.preparedUsername.map($0.supports) ?? true }.map(\.host).joined(separator: ", ")
-        let bluesky = research.preparedUsername.flatMap { username in
-            research.selected.contains(.bluesky) && BeholderProvider.bluesky.supports(username)
-                ? " Bluesky receives “\(BeholderProvider.bluesky.lookupHandle(username))”." : nil
-        } ?? ""
-        return "Search sends only \(name) to: \(hosts.isEmpty ? "no compatible sources selected" : hosts). "
-            + "Providers receive your IP address and the Aegis-Beholder/1.0 app identifier." + bluesky
+        guard let name = research.preparedUsername else { return "Enter a username to preview where it will be sent." }
+        let eligible = research.providers.filter { $0.supports(name) }
+        let hosts = eligible.filter { $0 != .bluesky }.map(\.host).joined(separator: ", ")
+        var targets: [String] = []
+        if !hosts.isEmpty {
+            targets.append("“\(name)” to \(hosts) (case may be normalised)")
+        }
+        if eligible.contains(.bluesky) {
+            targets.append("“\(BeholderProvider.bluesky.lookupHandle(name))” to \(BeholderProvider.bluesky.host)")
+        }
+        let destination = targets.isEmpty ? "No compatible sources selected." : "Search sends " + targets.joined(separator: "; ") + "."
+        return destination + " Providers receive your IP address and the Aegis-Beholder/1.0 app identifier."
     }
 
     private func card(_ finding: BeholderFinding) -> some View {

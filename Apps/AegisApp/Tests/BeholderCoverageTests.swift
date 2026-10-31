@@ -10,7 +10,7 @@ final class BeholderCoverageTests: XCTestCase {
         .keybase: #"{"status":{"code":0},"them":[{"basics":{"username":"examplealex"},"profile":{"full_name":"Example Alex"}}]}"#,
         .lichess: #"{"id":"examplealex","username":"ExampleAlex"}"#,
         .chess: #"{"username":"examplealex","name":"Example Alex","status":"premium"}"#,
-        .scratch: #"{"username":"ExampleAlex","profile":{"bio":"Example bio"}}"#,
+        .scratch: #"{"username":"ExampleAlex","profile":{"bio":"Example bio","status":"Example robotics project"}}"#,
         .bluesky: #"{"handle":"examplealex.bsky.social","did":"did:plc:example","displayName":"Example Alex"}"#,
         .mastodon: #"{"username":"ExampleAlex","acct":"examplealex","display_name":"Example Alex","note":"<p>Example bio</p>"}"#,
     ]
@@ -35,6 +35,9 @@ final class BeholderCoverageTests: XCTestCase {
     }
 
     func testProviderSpecificMissingAndRemoteAccounts() {
+        let scratch = parse(fixtures[.scratch] ?? "", .scratch)
+        XCTAssertEqual(scratch.fields["Working on"], "Example robotics project")
+        XCTAssertNil(scratch.fields["Account state"])
         XCTAssertEqual(parse(#"{"status":{"code":0},"them":[null]}"#, .keybase).status, .noResult)
         XCTAssertEqual(parse(#"{"status":{"code":0},"them":[]}"#, .keybase).status, .noResult)
         XCTAssertEqual(parse(#"{"status":{"code":1},"them":[null]}"#, .keybase).status, .unavailable)
@@ -68,6 +71,10 @@ final class BeholderCoverageTests: XCTestCase {
         XCTAssertNil(BeholderProvider.dockerHub.endpoint("Example_Alex"))
         XCTAssertNil(BeholderProvider.mastodon.endpoint("ExampleAlex.example.com"))
         XCTAssertNil(BeholderProvider.bluesky.endpoint("ExampleAlex.example.com"))
+        XCTAssertNil(BeholderProvider.codeberg.endpoint("search"))
+        for provider in BeholderProvider.allCases where provider != .bluesky {
+            XCTAssertNil(provider.endpoint("examplealex.bsky.social"))
+        }
         let longBluesky = try XCTUnwrap(BeholderProvider.bluesky.endpoint(String(repeating: "a", count: 63)))
         XCTAssertTrue(BeholderProvider.permits(longBluesky))
         XCTAssertEqual(BeholderProvider.bluesky.endpoint("ExampleAlex"), BeholderProvider.bluesky.endpoint("examplealex.bsky.social"))

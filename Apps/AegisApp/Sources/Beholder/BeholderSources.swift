@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Source-selection rules that know only `allCases`, `title` and `host`, so new providers need no picker changes.
+/// Source-selection rules driven by the provider catalogue, so new providers need no picker changes.
 enum BeholderSources {
     /// The sources Beholder first shipped with: the first four cases, whatever is added after them.
-    static let original = Set(BeholderProvider.allCases.prefix(4))
+    static var original: Set<BeholderProvider> {
+        BeholderProvider.originalSources
+    }
 
     /// Sources whose name or host contains `filter` (ignoring case and accents), kept in the given order.
     static func matching(_ filter: String, in providers: [BeholderProvider] = BeholderProvider.allCases) -> [BeholderProvider] {

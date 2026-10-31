@@ -60,7 +60,10 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     }
 
     func supports(_ username: String) -> Bool {
-        switch self {
+        if self != .bluesky, username.lowercased().hasSuffix(".bsky.social") {
+            return false
+        }
+        return switch self {
         case .github:
             username.count <= 39 && !username.contains("_") && !username.contains(".")
                 && !username.contains("--") && !username.hasSuffix("-")

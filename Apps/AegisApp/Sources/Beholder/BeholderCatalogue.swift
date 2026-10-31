@@ -18,6 +18,9 @@ extension BeholderProvider {
     }
 
     func matchesExpandedSyntax(_ username: String) -> Bool {
+        if self == .codeberg, username.lowercased() == "search" {
+            return false
+        }
         let pattern: String
         switch self {
         case .codeberg: pattern = #"[A-Za-z0-9][A-Za-z0-9_.-]{0,39}"#

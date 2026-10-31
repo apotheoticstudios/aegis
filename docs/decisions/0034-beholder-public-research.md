@@ -98,3 +98,5 @@ checks replace status-only profile probes. References used to verify the selecte
 
 Vendor API availability and access policies may change. Failures remain visible; the app never attempts an
 alternate private endpoint, authentication, scraping workaround or a different search provider automatically.
+
+Review refinements (#100): a qualified .bsky.social input is eligible only for Bluesky; it is never sent to another source. The preview lists the qualified Bluesky payload separately. Scratch profile.status is labelled Working on, never Account state. The reserved Codeberg search route is ineligible. Bluesky HTTP 400 missing-profile replies remain Unavailable rather than being guessed absent; moderation/closure flags on other services are not interpreted as identity findings. The original-source selection shares one provider definition after the #101 integration.

@@ -37,7 +37,7 @@ enum BeholderProfiles {
             if let raw = fields[key] as? String {
                 let value = BeholderClient.clean(raw)
                 if !value.isEmpty {
-                    result.fields[label] = value
+                    result.fields[provider == .scratch && key == "status" ? "Working on" : label] = value
                 }
             }
         }
