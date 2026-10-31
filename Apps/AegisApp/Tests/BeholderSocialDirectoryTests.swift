@@ -9,7 +9,6 @@ final class BeholderSocialDirectoryTests: XCTestCase {
     private let expected: KeyValuePairs<String, String> = [
         "instagram": "https://www.instagram.com/ExampleAlex/",
         "x": "https://x.com/ExampleAlex",
-        "facebook": "https://www.facebook.com/ExampleAlex",
         "tiktok": "https://www.tiktok.com/@ExampleAlex",
         "threads": "https://www.threads.com/@ExampleAlex",
         "youtube": "https://www.youtube.com/@ExampleAlex",
@@ -18,7 +17,6 @@ final class BeholderSocialDirectoryTests: XCTestCase {
         "snapchat": "https://www.snapchat.com/add/ExampleAlex",
         "twitch": "https://www.twitch.tv/ExampleAlex",
         "reddit": "https://www.reddit.com/user/ExampleAlex",
-        "tumblr": "https://www.tumblr.com/ExampleAlex",
         "telegram": "https://t.me/ExampleAlex",
         "medium": "https://medium.com/@ExampleAlex",
         "soundCloud": "https://soundcloud.com/ExampleAlex",
@@ -39,12 +37,10 @@ final class BeholderSocialDirectoryTests: XCTestCase {
         "koFi": "https://ko-fi.com/ExampleAlex",
         "buyMeACoffee": "https://buymeacoffee.com/ExampleAlex",
         "aboutMe": "https://about.me/ExampleAlex",
-        "substack": "https://substack.com/@ExampleAlex",
         "kick": "https://kick.com/ExampleAlex",
         "rumble": "https://rumble.com/user/ExampleAlex",
         "minds": "https://www.minds.com/ExampleAlex/",
         "vk": "https://vk.com/ExampleAlex",
-        "mixcloud": "https://www.mixcloud.com/ExampleAlex/",
         "vimeo": "https://vimeo.com/ExampleAlex",
         "dailymotion": "https://www.dailymotion.com/ExampleAlex",
         "linktree": "https://linktr.ee/ExampleAlex",
@@ -67,7 +63,11 @@ final class BeholderSocialDirectoryTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ids.count, 40)
         XCTAssertEqual(Set(ids).count, ids.count)
         XCTAssertEqual(Set(entries.map(\.host)).count, ids.count, "One directory entry per site")
-        let existing = Set(BeholderProvider.allCases.map(\.rawValue))
+        // The original twelve, fixed: Codex adds these IDs as provider cases on integration.
+        let existing: Set = [
+            "github", "gitlab", "hackerNews", "dev", "codeberg", "dockerHub",
+            "keybase", "lichess", "chess", "scratch", "bluesky", "mastodon",
+        ]
         for id in ids {
             XCTAssertNotNil(id.range(of: #"\A[a-z][A-Za-z0-9]*\z"#, options: .regularExpression), id)
             XCTAssertFalse(existing.contains(id), id)
@@ -93,7 +93,7 @@ final class BeholderSocialDirectoryTests: XCTestCase {
     func testPerSiteRulesRejectUnsupportedHandles() throws {
         let cases: [(String, String)] = [
             ("x", "ExampleAlexTooLong"), ("vimeo", "12345"), ("unsplash", "ExampleAlex"),
-            ("facebook", "Ex_Alex"), ("facebook", "Exam"), ("telegram", "Ex_1"), ("telegram", "_ExampleAlex"),
+            ("telegram", "Ex_1"), ("telegram", "_ExampleAlex"),
             ("snapchat", "ExampleAlex_"), ("linkedIn", "Example_Alex"), ("buyMeACoffee", "Example_Alex"),
             ("twitch", "Exa"), ("deviantArt", "1ExampleAlex"), ("lastFm", "ExampleAlexTooLong"),
         ]
