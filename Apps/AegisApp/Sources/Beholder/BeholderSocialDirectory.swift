@@ -30,10 +30,10 @@ struct BeholderSocialEntry: Sendable {
 /// Manually opened social, creator and community profiles. URL shapes follow sherlock-project/sherlock
 /// data.json (MIT) pinned at e40a45ec2a07 or the site's own docs; see docs/design/BEHOLDER-SOURCES.md.
 enum BeholderSocialDirectory {
-    private static let signIn = "Sign-in wall: logged-out pages hide or fake profiles."
-    private static let blocked = "Bot protection makes automated checks unreliable."
-    private static let soft = "Missing profiles still return a normal page, so only a person can judge it."
-    private static let noAPI = "No keyless public profile API; the official API needs registration or keys."
+    private static let signIn = "Sign-in walls can hide or change logged-out profile pages."
+    private static let blocked = "Bot protection can make automated checks unreliable."
+    private static let soft = "Missing profiles may still return a normal page, so automated checks are unreliable."
+    private static let noAPI = "Automatic checking is not configured for this site."
 
     /// Stable order; IDs are frozen because Codex mirrors them as `BeholderProvider` cases.
     static let entries: [BeholderSocialEntry] = [
@@ -47,14 +47,6 @@ enum BeholderSocialDirectory {
             reason: signIn
         ),
         .init(id: "x", title: "X (Twitter)", host: "x.com", pattern: "[A-Za-z0-9_]{1,15}", pathPrefix: "/", reason: signIn),
-        .init(
-            id: "facebook",
-            title: "Facebook",
-            host: "www.facebook.com",
-            pattern: "[A-Za-z0-9.]{5,50}",
-            pathPrefix: "/",
-            reason: signIn
-        ),
         .init(id: "tiktok", title: "TikTok", host: "www.tiktok.com", pattern: "[A-Za-z0-9_.]{2,24}", pathPrefix: "/@", reason: blocked),
         .init(id: "threads", title: "Threads", host: "www.threads.com", pattern: "[A-Za-z0-9._]{1,30}", pathPrefix: "/@", reason: signIn),
         .init(id: "youtube", title: "YouTube", host: "www.youtube.com", pattern: "[A-Za-z0-9_.-]{3,30}", pathPrefix: "/@", reason: noAPI),
@@ -85,7 +77,6 @@ enum BeholderSocialDirectory {
         ),
         .init(id: "twitch", title: "Twitch", host: "www.twitch.tv", pattern: "[A-Za-z0-9_]{4,25}", pathPrefix: "/", reason: noAPI),
         .init(id: "reddit", title: "Reddit", host: "www.reddit.com", pattern: "[A-Za-z0-9_-]{3,20}", pathPrefix: "/user/", reason: blocked),
-        .init(id: "tumblr", title: "Tumblr", host: "www.tumblr.com", pattern: "[A-Za-z0-9-]{1,32}", pathPrefix: "/", reason: noAPI),
         .init(
             id: "telegram",
             title: "Telegram",
@@ -185,14 +176,6 @@ enum BeholderSocialDirectory {
             reason: blocked
         ),
         .init(id: "aboutMe", title: "About.me", host: "about.me", pattern: "[A-Za-z0-9_-]{1,40}", pathPrefix: "/", reason: soft),
-        .init(
-            id: "substack",
-            title: "Substack",
-            host: "substack.com",
-            pattern: "[A-Za-z0-9][A-Za-z0-9_-]{1,60}",
-            pathPrefix: "/@",
-            reason: soft
-        ),
         .init(id: "kick", title: "Kick", host: "kick.com", pattern: "[A-Za-z0-9_]{3,25}", pathPrefix: "/", reason: blocked),
         .init(id: "rumble", title: "Rumble", host: "rumble.com", pattern: "[A-Za-z0-9_-]{1,40}", pathPrefix: "/user/", reason: blocked),
         .init(
@@ -205,15 +188,6 @@ enum BeholderSocialDirectory {
             reason: soft
         ),
         .init(id: "vk", title: "VK", host: "vk.com", pattern: "[A-Za-z][A-Za-z0-9_.]{4,31}", pathPrefix: "/", reason: signIn),
-        .init(
-            id: "mixcloud",
-            title: "Mixcloud",
-            host: "www.mixcloud.com",
-            pattern: "[A-Za-z0-9_-]{1,50}",
-            pathPrefix: "/",
-            pathSuffix: "/",
-            reason: noAPI
-        ),
         // Must start with a letter: an all-digit path is a video, not a profile.
         .init(id: "vimeo", title: "Vimeo", host: "vimeo.com", pattern: "[A-Za-z][A-Za-z0-9_]{2,63}", pathPrefix: "/", reason: noAPI),
         .init(
