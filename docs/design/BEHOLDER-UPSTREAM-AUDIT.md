@@ -26,4 +26,3 @@ No upstream code, dataset or runtime is bundled. The implementation uses origina
 - #112: native categories and combined category/access/text filters for the existing catalogue; selecting sources never starts a lookup.
 
 The existing ADR-0034 transport remains the only automatic profile lookup path. No account recovery enumeration, private-profile/session access, leaked-data source, live-person tracking, automatic identifier pivots, web content instruction following or remote AI analysis is added. Manual browsing continues under the owner's browser settings. A prepared query is text, not a verified finding or an executed search.
-
