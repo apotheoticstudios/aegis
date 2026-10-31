@@ -8,7 +8,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
 
     case instagram
     case twitter = "x"
-    case facebook, tiktok, threads, youtube, linkedIn
+    case tiktok, threads, youtube, linkedIn
     case pinterest, snapchat, twitch, reddit, tumblr, telegram, medium
     case soundCloud, bandcamp, steam, deviantArt, behance, dribbble, artStation
     case flickr, vsco, letterboxd, lastFm, goodreads, wattpad, strava
