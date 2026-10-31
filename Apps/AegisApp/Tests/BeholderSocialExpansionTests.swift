@@ -108,13 +108,14 @@ final class BeholderSocialExpansionTests: XCTestCase {
     }
 
     func testMixcloudRequiresAnExactRootUserKey() {
-        let good = #"{"key":"/ExampleAlex/","name":"Example Alex","biog":"Example bio"}"#
+        let good = #"{"key":"/ExampleAlex/","username":"ExampleAlex","name":"Example Alex","biog":"Example bio"}"#
         XCTAssertEqual(parse(good, .mixcloud).status, .candidate)
         XCTAssertEqual(parse(good, .mixcloud).fields["Bio"], "Example bio")
         for json in [
             good.replacingOccurrences(of: "/ExampleAlex/", with: "/ExampleOther/"),
             good.replacingOccurrences(of: "/ExampleAlex/", with: "/ExampleAlex/example-show/"),
             #"{"key":"/ExampleAlex/","username":"ExampleOther"}"#,
+            #"{"key":"/ExampleAlex/"}"#,
             #"{"name":"ExampleAlex"}"#,
         ] {
             XCTAssertEqual(parse(json, .mixcloud).status, .unavailable)
@@ -140,6 +141,7 @@ final class BeholderSocialExpansionTests: XCTestCase {
             XCTAssertTrue([.manual, .unsupported].contains(finding.status))
             XCTAssertNil(finding.checkedAt)
             XCTAssertNil(finding.sourceURL)
+            XCTAssertEqual(finding.access, .manual)
             XCTAssertNil(finding.provider.endpoint("ExampleAlex"))
             XCTAssertEqual(finding.provider.accessLabel, "Open manually")
             if let target = finding.preparedProfileURL {
@@ -184,11 +186,31 @@ final class BeholderSocialExpansionTests: XCTestCase {
         XCTAssertEqual(report["schema"] as? Int, 2)
         let finding = try XCTUnwrap((report["findings"] as? [[String: Any]])?.first)
         XCTAssertEqual(finding["status"] as? String, "manual")
+        XCTAssertEqual(finding["access"] as? String, "manual")
         XCTAssertNotNil(finding["preparedProfileURL"])
         XCTAssertNil(finding["sourceURL"])
         XCTAssertNil(finding["checkedAt"])
         let old = Data(#"{"provider":"github","status":"candidate","fields":{}}"#.utf8)
         XCTAssertNil(try JSONDecoder().decode(BeholderFinding.self, from: old).preparedProfileURL)
+        XCTAssertNil(try JSONDecoder().decode(BeholderFinding.self, from: old).access)
+        model.query = "Ex"
+        model.selected = [.youtube]
+        model.start()
+        XCTAssertEqual(model.findings.first?.status, .unsupported)
+        XCTAssertEqual(model.findings.first?.access, .manual)
+        XCTAssertEqual(BeholderFinding(provider: .github, status: .unsupported).access, .automatic)
+    }
+
+    func testAccessModeLabelsAndMastodonStateAreExplicit() {
+        XCTAssertEqual(BeholderProvider.instagram.sourceAccessibilityLabel, "Instagram, Open manually")
+        XCTAssertEqual(BeholderProvider.github.sourceAccessibilityLabel, "GitHub, Automatic check")
+        let json = #"{"username":"ExampleAlex","acct":"examplealex","suspended":true,"limited":true,"moved":{"url":"https://example.com/ignored"}}"#
+        for provider in BeholderProvider.automaticSources where provider.mastodonHost != nil {
+            let result = parse(json, provider)
+            XCTAssertEqual(result.fields["Account state"], "Suspended, Limited, Moved")
+            XCTAssertNil(result.fields["moved"])
+            XCTAssertNil(result.fields["url"])
+        }
     }
 
     @MainActor func testSyntheticManualDashboardRenders() async throws {

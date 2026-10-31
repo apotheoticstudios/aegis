@@ -75,11 +75,10 @@ enum BeholderSocialAPIs {
                   actor == expectedActor.url?.absoluteString else { return result }
             profile = object; nameKey = "name"; titleKey = "displayName"
         case .mixcloud:
-            guard let key = object["key"] as? String, key.lowercased() == "/" + provider.lookupHandle(username) + "/" else { return result }
-            if let returned = object["username"] {
-                guard let handle = returned as? String, handle.lowercased() == provider.lookupHandle(username) else { return result }
-            }
-            profile = object.merging(["username": String(key.dropFirst().dropLast())]) { _, new in new }
+            guard let key = object["key"] as? String, key.lowercased() == "/" + provider.lookupHandle(username) + "/",
+                  let handle = object["username"] as? String,
+                  handle.lowercased() == provider.lookupHandle(username) else { return result }
+            profile = object
             nameKey = "username"; titleKey = "name"
         default: return result
         }

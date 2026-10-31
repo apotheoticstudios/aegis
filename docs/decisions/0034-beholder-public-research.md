@@ -113,7 +113,7 @@ Write.as uses only `write.as/api/collections/{alias}`. Its successful API envelo
 only title and description are retained. A collection is labelled Blog, not asserted to be a person's account.
 PeerTube uses only `framatube.org/api/v1/accounts/{name}`. Returned name, local host and canonical actor URL
 must all match; only display name and description are retained. No posts, videos, followers or CSS are fetched.
-Mixcloud uses only `api.mixcloud.com/{handle}/`, whose exact root user key must match. Reserved API routes
+Mixcloud uses only `api.mixcloud.com/{handle}/`, whose exact root user key and returned username must both match. Reserved API routes
 (me, search, genres, upload, OAuth and other non-user roots) are ineligible. Returned shows, pictures and links
 are never followed. These adapters use locally constructed canonical profile links; all existing transport bounds apply.
 
@@ -142,5 +142,7 @@ still apply to manual links, and a known automatic adapter takes precedence over
 
 Explicit JSON export is schema 2: it adds the `manual` status and optional `preparedProfileURL` for an unchecked
 directory target. Such a URL is not request provenance: `sourceURL` and `checkedAt` remain absent for manual
-findings. Automatic findings retain actual request provenance and time. Old finding JSON with the optional
+findings. Automatic findings retain actual request provenance and time. New findings also encode a fixed `access` mode
+(`automatic` or `manual`), including Unsupported results. Legacy JSON can omit it. Provider-reported Mastodon
+suspension, limitation and moved-profile flags are displayed without following their destination URLs. Old finding JSON with the optional
 field absent still decodes. There is no change to AegisKit or IPC contracts, no import path or persistent case store.

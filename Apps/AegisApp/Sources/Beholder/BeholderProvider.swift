@@ -36,10 +36,15 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         isManual ? "Open manually" : "Automatic check"
     }
 
+    var sourceAccessibilityLabel: String {
+        title + ", " + accessLabel
+    }
+
     func manualFinding(_ username: String) -> BeholderFinding? {
         guard let entry = manualEntry else { return nil }
         let target = entry.profileURL(username)
         var finding = BeholderFinding(provider: self, status: target == nil ? .unsupported : .manual)
+        finding.access = .manual
         finding.preparedProfileURL = target
         finding.fields["Access"] = entry.reason
         return finding
@@ -180,6 +185,8 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
 }
 
 struct BeholderFinding: Codable, Sendable, Equatable, Identifiable {
+    enum Access: String, Codable, Sendable { case automatic, manual }
+
     enum Status: String, Codable, Sendable {
         case queued, checking, candidate, noResult, unsupported, limited, unavailable, cancelled, manual
 
@@ -204,6 +211,8 @@ struct BeholderFinding: Codable, Sendable, Equatable, Identifiable {
     var sourceURL: URL?
     /// A prepared directory link, never a URL that Beholder requested or verified.
     var preparedProfileURL: URL?
+    /// Absent only when decoding a legacy finding; new exports always identify the source mode.
+    var access: Access? = .automatic
     var fields: [String: String] = [:]
     var id: BeholderProvider {
         provider

@@ -41,6 +41,23 @@ enum BeholderProfiles {
                 }
             }
         }
+        if provider.mastodonHost != nil, let state = mastodonState(object) {
+            result.fields["Account state"] = state
+        }
         return result
+    }
+
+    private static func mastodonState(_ object: [String: Any]) -> String? {
+        var states: [String] = []
+        if object["suspended"] as? Bool == true {
+            states.append("Suspended")
+        }
+        if object["limited"] as? Bool == true {
+            states.append("Limited")
+        }
+        if let moved = object["moved"] as? [String: Any], !moved.isEmpty {
+            states.append("Moved")
+        }
+        return states.isEmpty ? nil : states.joined(separator: ", ")
     }
 }

@@ -74,7 +74,7 @@ struct BeholderSourceList: View {
                                 }
                             }
                             .toggleStyle(.checkbox)
-                            .accessibilityLabel(provider.title)
+                            .accessibilityLabel(provider.sourceAccessibilityLabel)
                             .accessibilityHint(provider.isManual ? "Unchecked link; opens only when you choose its browser button"
                                 : "Sends the username to \(provider.host) when you search")
                         }

@@ -121,7 +121,8 @@ struct BeholderDashboard: View {
         }
         let destination = targets.isEmpty ? "Search sends no automatic requests." : "Search sends " + targets.joined(separator: "; ") + "."
         let automatic = targets.isEmpty ? "" : " Automatic sources receive your IP address and the Aegis-Beholder/1.0 app identifier."
-        let manual = manualCount == 0 ? "" : " \(manualCount) manual links stay unchecked; Search does not contact those sites. Open each in your browser to inspect it."
+        let manualSubject = manualCount == 1 ? "1 manual link stays" : "\(manualCount) manual links stay"
+        let manual = manualCount == 0 ? "" : " \(manualSubject) unchecked. Search does not contact manual sources. Open a link in your browser to inspect it."
         return destination + automatic + manual
     }
 
