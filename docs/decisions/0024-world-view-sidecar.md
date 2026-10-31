@@ -66,3 +66,20 @@ Air quality, eruptions and Australian weather warnings around home, in the brief
 - **Eruptions:** GDACS, the UN and EU's disaster alerts (free, no key). The month's significant eruptions worldwide are fetched and those within 5,000 km of home kept on the Mac: nothing about home is sent. The brief shows the week's.
 - **Warnings:** the Bureau of Meteorology's public FTP warning files (CAP). Its website and app API forbid automated use, and the FTP channel is under its default copyright terms (personal use). URLSession no longer speaks FTP, so macOS's `/usr/bin/curl` fetches them, restricted to FTP. Home's districts come from the Bureau's forecast-town and river-gauge tables (fetched once a month into `World/bureau/`): the nearest town's public and fire weather districts, and towns within 15 km, plus gauges within 25 km for flood warnings. The home state's warning files are fetched whole and matched on the Mac: nothing about home is sent. Warning text is shown and read only, never acted on.
 - **Commercial release** would need the Bureau's terms checked, as for Cesium.
+
+## Amendment (2026-10-31, #115)
+
+Space weather, more disaster types and what's new, from ideas in worldmonitor (AGPL-3.0), OSIRIS (MIT) and Crucix (AGPL-3.0); no code copied (see `docs/design/open-source-references.md`).
+
+- **Space weather:** NOAA SWPC's planetary Kp forecast (US government, public, no key), fetched whole: nothing about home is sent. Home's geomagnetic latitude (a dipole model) is worked out on the Mac to say whether aurora may be visible from home.
+- **Disasters:** the GDACS request widens from eruptions to all its types (earthquakes, cyclones, floods, eruptions, wildfires, droughts). It's still fetched whole, and alerts within 5,000 km of home are kept on the Mac.
+- **What's new:** a regional alert stays in the brief for 12 hours after it first appears or escalates, then drops out. The first-seen times (event IDs and levels, all public) are kept 30 days in Aegis's settings. Bureau warnings for home always stay in the brief.
+
+## Amendment (2026-10-31, #116)
+
+World headlines on the globe: worldmonitor's and Crucix's news layers, re-implemented. GDELT's map API is retired and its article API carries no locations, so this follows OSIRIS's approach of matching headlines to the places they name.
+
+- **Feeds:** BBC News World's and Al Jazeera's public RSS feeds, fetched only when the owner asks ("what's happening in the world?"). Nothing is sent but the requests.
+- **Places:** each headline is matched on the Mac to the first country it names (English names, short forms, demonyms and capitals). The point comes from macOS's own time zone table (`/usr/share/zoneinfo/zone.tab`), so there is no geocoding lookup.
+- **Shown only:** one pin per country (at most 24) on the local globe, and the top five read out. Headlines are collected content: never passed to the model or to actions. Angle brackets are dropped before the globe shows them.
+- **Commercial release** would need the feeds' terms checked (both allow personal use), as for Cesium and the Bureau.

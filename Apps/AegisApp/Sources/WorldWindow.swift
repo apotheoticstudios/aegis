@@ -122,7 +122,18 @@ final class WorldWindow {
             return await retarget(place)
         case let .alerts(kind):
             return await WorldFeeds.answer(kind)
+        case .headlines:
+            return await showHeadlines()
         }
+    }
+
+    /// World headlines, each pinned at the country it names (#116). Shown and read only, never acted on.
+    private func showHeadlines() async -> String {
+        guard let pins = await WorldFeeds.headlines() else { return "I couldn't get the world headlines just now." }
+        guard !pins.isEmpty else { return WorldNews.answer(pins) }
+        guard await opened(), let view = Self.object(WorldNews.view(pins)) else { return "The World view couldn't start." }
+        await apply(view)
+        return WorldNews.answer(pins)
     }
 
     private func retarget(_ place: String) async -> String {

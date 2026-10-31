@@ -146,7 +146,8 @@ final class GroundingTests: XCTestCase {
             options: .init(modelName: "synthetic"), clock: { prepNow }
         )
         let response = await core.handle(.ask(question: "What about the invoice?"))
-        XCTAssertEqual(response, .refused(code: "unknown_citation"))
+        guard case let .answer(answer) = response else { return XCTFail("Expected answer") }
+        XCTAssertEqual(answer.text, Ask.notFound, "the invented claim is never shown")
         XCTAssertTrue(model.lastJob?.id.hasPrefix("ask-") == true)
     }
 }

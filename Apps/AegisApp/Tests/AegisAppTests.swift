@@ -199,7 +199,7 @@ final class AegisAppTests: XCTestCase {
         XCTAssertEqual(model.askState, .idle)
         await model.ask("   ")
         XCTAssertEqual(model.askState, .idle, "an empty question sends nothing")
-        XCTAssertEqual(BriefPresentation.askMessage("busy"), "Aegis is writing your brief. Ask again in a minute.")
+        XCTAssertEqual(BriefPresentation.askMessage("busy"), "I'm writing your brief. Ask again in a minute.")
         XCTAssertFalse(BriefPresentation.askMessage("anything_else").isEmpty)
     }
 

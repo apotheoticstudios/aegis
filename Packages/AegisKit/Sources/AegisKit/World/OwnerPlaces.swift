@@ -22,15 +22,19 @@ public enum OwnerPlaces {
                 "label": .string(label), "color": .string("primary"),
             ])
         }
-        let points = placed.compactMap(\.coordinate)
+        let camera = camera(framing: placed.compactMap(\.coordinate).map { ($0.latitude, $0.longitude) })
+        return .object(["camera": camera, "layers": .array([]), "annotations": .array(pins)])
+    }
+
+    /// A camera looking straight down on the middle of the points, high enough to show them all.
+    static func camera(framing points: [(latitude: Double, longitude: Double)]) -> WorldValue {
         let lats = points.map(\.latitude), lons = points.map(\.longitude)
         let span = max((lats.max() ?? 0) - (lats.min() ?? 0), (lons.max() ?? 0) - (lons.min() ?? 0))
         let altitude = min(max(span * 111_000 * 1.6, 60000), 15_000_000)
-        let camera: WorldValue = .object([
+        return .object([
             "lat": .number(((lats.max() ?? 0) + (lats.min() ?? 0)) / 2), "lon": .number(((lons.max() ?? 0) + (lons.min() ?? 0)) / 2),
             "altitude_m": .number(altitude.rounded()), "heading_deg": .number(0), "pitch_deg": .number(-90),
         ])
-        return .object(["camera": camera, "layers": .array([]), "annotations": .array(pins)])
     }
 
     /// The next flight in the calendar (from 12 hours ago to 3 days ahead): its ICAO callsign ("QFA520") for live

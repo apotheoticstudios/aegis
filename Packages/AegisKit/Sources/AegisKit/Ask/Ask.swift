@@ -64,7 +64,7 @@ public enum Ask {
         _ draft: [String: Any], input: AskInput, model: String, generatedAt: Date
     ) -> Result<Answer, AskRejection> {
         guard Set(draft.keys) == ["answer", "event_ids", "schedule_ids"],
-              let text = draft["answer"] as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let drafted = draft["answer"] as? String, !drafted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let rawEvents = draft["event_ids"] as? [String],
               let rawSchedule = draft["schedule_ids"] as? [String]
         else { return .failure(.invalidDraft) }
@@ -72,26 +72,34 @@ public enum Ask {
             var seen = Set<String>()
             return ids.filter { seen.insert($0).inserted }
         }
-        let events = unique(rawEvents), schedule = unique(rawSchedule)
-        guard Set(events).isSubset(of: input.eventIDs), Set(schedule).isSubset(of: input.scheduleIDs) else {
-            return .failure(.unknownCitation)
+        // Small slips are repaired rather than losing the answer: invented citations are dropped, raw record IDs
+        // leave the text, extra lines join and an overlong answer ends at its last full sentence.
+        let events = unique(rawEvents).filter(input.eventIDs.contains)
+        let schedule = unique(rawSchedule).filter(input.scheduleIDs.contains)
+        var text = drafted.replacingOccurrences(
+            of: #"\s*[\[(]?\b(?:ev|cal|rem|occ)_[0-9a-f]{6,}[\])]?"#,
+            with: "",
+            options: .regularExpression
+        )
+        text = text.split(whereSeparator: { (character: Character) in character.isNewline }).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if text.unicodeScalars.count > Answer.maxTextScalars {
+            let cut = String(String.UnicodeScalarView(text.unicodeScalars.prefix(Answer.maxTextScalars - 1)))
+            text = cut.lastIndex(where: { ".!?".contains($0) }).map { String(cut[...$0]) } ?? cut + "…"
         }
-        guard text.unicodeScalars.count <= Answer.maxTextScalars else { return .failure(.tooLong) }
+        guard !text.isEmpty else { return .failure(.invalidDraft) }
         guard !EventEvidence.exposesIdentity(text) else { return .failure(.unsafeText) }
-        // Raw record IDs belong in the citations, never in the text the owner reads.
-        guard text.range(of: #"\b(?:ev|cal|rem|occ)_[0-9a-f]{6,}"#, options: .regularExpression) == nil else {
-            return .failure(.unsafeText)
-        }
         // A broad question may cite many records: the first ones stand, in the model's order.
         let cited = Array(events.prefix(Answer.maxCitations))
         let citedSchedule = Array(schedule.prefix(max(0, Answer.maxCitations - cited.count)))
-        guard text.filter({ $0 == "\n" }).count < 3,
-              !text.unicodeScalars.contains(where: {
-                  ($0.properties.generalCategory == .control && $0.value != 10)
-                      || $0.properties.generalCategory == .format || $0.value == 0x2028 || $0.value == 0x2029
-              }) else { return .failure(.unsafeText) }
+        func hidden(_ scalar: Unicode.Scalar) -> Bool {
+            let category = scalar.properties.generalCategory
+            return category == .control || category == .format || scalar.value == 0x2028 || scalar.value == 0x2029
+        }
+        guard !text.unicodeScalars.contains(where: hidden) else { return .failure(.unsafeText) }
+        // Nothing real backs the answer: say so plainly rather than show claims about the owner's data.
         if events.isEmpty, schedule.isEmpty, text != notFound, text != "I couldn't find it." {
-            return .failure(.unknownCitation)
+            return .success(Answer(text: notFound, eventIDs: [], scheduleIDs: [], model: model, generatedAt: generatedAt))
         }
         return .success(Answer(text: text, eventIDs: cited, scheduleIDs: citedSchedule, model: model, generatedAt: generatedAt))
     }

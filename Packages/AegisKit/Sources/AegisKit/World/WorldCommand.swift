@@ -20,8 +20,11 @@ public enum WorldCommand: Sendable, Equatable {
     case action(name: String, arguments: WorldValue, said: String)
     /// "What about Sydney?": the last World question again, for another place.
     case retarget(place: String)
-    /// "How's the air?", "any volcano alerts?", "any weather warnings?": public data about home, no globe needed.
+    /// "How's the air?", "any volcano alerts?", "any weather warnings?", "any aurora tonight?", "any disasters near me?":
+    /// public data about home, no globe needed.
     case alerts(WorldAlerts.Kind)
+    /// "What's happening in the world?": world headlines pinned at the countries they name (#116).
+    case headlines
     /// Something the World view won't do, and what to say instead.
     case declined(String)
 
@@ -133,10 +136,15 @@ public enum WorldCommand: Sendable, Equatable {
         return nil
     }
 
-    /// Air quality, eruptions and weather warnings, for home only: another named place is declined, not answered for home.
+    /// Air quality, eruptions, space weather, disasters and weather warnings, for home only: another named place is
+    /// declined, not answered for home.
     private static func alertCommand(_ line: String) -> WorldCommand? {
         let air = #"\b(?:air quality|aqi|air pollution|smoke haze|bushfire smoke)\b|\b(?:is|how'?s|how is) the air\b|"#
             + #"\bis it (?:smoky|smokey|hazy)\b"#
+        // Not "flights over Aurora": the city.
+        let space = #"(?<!\b(?:over|near|in|around|to|at|from) )\b(?:auroras?|southern lights|northern lights)\b|"#
+            + #"\b(?:space weather|geomagnetic|solar storms?|kp index)\b"#
+        let disaster = #"\b(?:disasters?|catastrophes?|gdacs)\b"#
         let volcano = #"\b(?:volcan(?:o|oes|ic)|eruptions?|erupting|ash clouds?)\b"#
         // A volcano question is about now, not how volcanoes work.
         let current = #"\b(?:any|alerts?|warnings?|erupting|eruptions?|active|latest|recent|news|near|nearby|around|happening|today|now)\b"#
@@ -147,6 +155,12 @@ public enum WorldCommand: Sendable, Equatable {
             kind = .air
         } else if line.range(of: volcano, options: .regularExpression) != nil, line.range(of: current, options: .regularExpression) != nil {
             kind = .volcanoes
+        } else if line.range(of: space, options: .regularExpression) != nil {
+            kind = .space
+        } else if line.range(of: disaster, options: .regularExpression) != nil,
+                  line.range(of: current, options: .regularExpression) != nil
+        {
+            kind = .disasters
         } else if line.range(of: warning, options: .regularExpression) != nil {
             kind = .warnings
         } else {
@@ -161,13 +175,15 @@ public enum WorldCommand: Sendable, Equatable {
             case .air: "the air at home"
             case .volcanoes: "for eruptions around home"
             case .warnings: "the Bureau of Meteorology's warnings for home"
+            case .space: "space weather and aurora from home"
+            case .disasters: "for disasters around home"
             }
             return .declined("I can only check \(only) for now.")
         }
         return .alerts(kind)
     }
 
-    /// Commands with a fixed form: open, close, trips, home and flight.
+    /// Commands with a fixed form: open, close, trips, home, flight and the headlines.
     private static func fixedCommand(_ line: String) -> WorldCommand? {
         let forms: [(String, WorldCommand)] = [
             (
@@ -190,6 +206,13 @@ public enum WorldCommand: Sendable, Equatable {
                 #"^(?:(?:show|find|track|follow|where(?:'s| is))(?: me)? my (?:next )?(?:flight|plane)|"#
                     + #"is my (?:flight|plane) (?:in the air|flying|airborne))$"#,
                 .myFlight
+            ),
+            (
+                #"^(?:(?:show|give|read|tell|get)(?: me)? )?(?:the )?(?:latest |top |today'?s )?(?:world |international |global )?"#
+                    + #"(?:news|headlines|news headlines)(?: (?:on the (?:globe|map)|(?:from )?around the world|today))?$|"#
+                    + #"^what'?s (?:happening|going on) (?:in|around) the world(?: today| right now| now)?$|"#
+                    + #"^what'?s the (?:latest )?(?:world )?news$"#,
+                .headlines
             ),
         ]
         return forms.first { line.range(of: $0.0, options: .regularExpression) != nil }?.1

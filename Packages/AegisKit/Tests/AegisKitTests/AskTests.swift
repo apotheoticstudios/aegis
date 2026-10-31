@@ -229,20 +229,33 @@ final class AskTests: XCTestCase {
             draft = valid; draft.removeValue(forKey: field); rejected(draft, .invalidDraft)
         }
         var draft = valid; draft["action"] = "send"; rejected(draft, .invalidDraft)
-        draft = valid; draft["event_ids"] = ["unknown"]; rejected(draft, .unknownCitation)
-        draft = valid; draft["schedule_ids"] = ["unknown"]; rejected(draft, .unknownCitation)
-        draft = valid; draft["answer"] = String(repeating: "x", count: Answer.maxTextScalars + 1); rejected(draft, .tooLong)
-        draft = valid; draft["event_ids"] = [String](); rejected(draft, .unknownCitation)
+        func text(_ draft: [String: Any]) throws -> String {
+            try Ask.check(draft, input: input, model: "example", generatedAt: now).get().text
+        }
+        // Invented citations are dropped; with nothing real left, the answer says it couldn't find it.
+        draft = valid; draft["event_ids"] = [ids[0], "unknown"]
+        XCTAssertEqual(try Ask.check(draft, input: input, model: "example", generatedAt: now).get().eventIDs, [ids[0]])
+        draft = valid; draft["event_ids"] = ["unknown"]; XCTAssertEqual(try text(draft), Ask.notFound)
+        draft = valid; draft["event_ids"] = [String](); XCTAssertEqual(try text(draft), Ask.notFound)
+        draft = valid; draft["event_ids"] = [String](); draft["schedule_ids"] = ["unknown"]; XCTAssertEqual(try text(draft), Ask.notFound)
+        // An overlong answer ends at its last full sentence.
+        draft = valid; draft["answer"] = String(repeating: "Example sentence. ", count: 100)
+        let long = try text(draft)
+        XCTAssertLessThanOrEqual(long.unicodeScalars.count, Answer.maxTextScalars)
+        XCTAssertTrue(long.hasSuffix("sentence."))
         draft = valid; draft["event_ids"] = ids
         XCTAssertEqual(
             try Ask.check(draft, input: input, model: "example", generatedAt: now).get().eventIDs,
             Array(ids.prefix(10)),
             "a broad answer keeps its first ten citations"
         )
-        draft = valid; draft["answer"] = "Alex asked in \(ids[1]) and \(ids[2])."; rejected(draft, .unsafeText)
-        for text in ["sender_id=one said hello", "conversation=abc123", "bad\ttext", "bad\u{0}text", "one\ntwo\nthree\nfour"] {
+        // Raw record IDs leave the text, and extra lines join.
+        draft = valid; draft["answer"] = "Alex asked in \(ids[1]) and (\(ids[2]))."; XCTAssertEqual(try text(draft), "Alex asked in and.")
+        draft = valid; draft["answer"] = "one\ntwo\nthree\nfour"; XCTAssertEqual(try text(draft), "one two three four")
+        for text in ["sender_id=one said hello", "conversation=abc123", "bad\ttext", "bad\u{0}text"] {
             draft = valid; draft["answer"] = text; rejected(draft, .unsafeText)
         }
+        draft = valid; draft["answer"] = " \(ids[1]) "; rejected(draft, .invalidDraft)
         let answer = try Ask.check(valid, input: input, model: "example", generatedAt: now).get()
         XCTAssertEqual(answer.eventIDs, [ids[0]])
         draft = valid; draft["answer"] = "I couldn't find it."; draft["event_ids"] = [String]()

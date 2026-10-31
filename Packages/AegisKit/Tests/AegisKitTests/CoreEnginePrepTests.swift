@@ -134,16 +134,23 @@ final class CoreEnginePrepTests: XCTestCase {
         let drafts: [(String?, String)] = [
             (nil, "invalid_draft"), ("not JSON", "invalid_draft"),
             ("{\"answer\":\"fine\"}", "invalid_draft"),
-            (draft("fine", events: ["ev_ffffffffffffffff"]), "unknown_citation"),
-            (draft("fine", schedule: [prepOccurrence().id]), "unknown_citation"),
-            (draft(String(repeating: "x", count: Answer.maxTextScalars + 1)), "too_long"),
-            (draft("See ev_ffffffffffffffff."), "unsafe_text"),
             (draft("Example\u{202E} text"), "unsafe_text"),
         ]
         for (text, code) in drafts {
             let core = try engine(store: storage, model: PrepModel(text: text))
             let result = await core.handle(.prep(occurrenceID: prepOccurrence().id))
             XCTAssertEqual(result, .refused(code: code))
+        }
+        // Uncited or invented claims are never shown: the answer says it couldn't find anything instead.
+        for text in [
+            draft("fine", events: ["ev_ffffffffffffffff"]),
+            draft("fine", schedule: [prepOccurrence().id]),
+            draft("See ev_ffffffffffffffff."),
+        ] {
+            let core = try engine(store: storage, model: PrepModel(text: text))
+            guard case let .answer(answer) = await core.handle(.prep(occurrenceID: prepOccurrence().id))
+            else { return XCTFail("Expected answer") }
+            XCTAssertEqual(answer.text, Ask.notFound)
         }
     }
 
