@@ -1,5 +1,7 @@
 @testable import Aegis
+import AppKit
 import Foundation
+import SwiftUI
 import XCTest
 
 /// All payloads are invented; no external profile is requested.
@@ -187,6 +189,35 @@ final class BeholderSocialExpansionTests: XCTestCase {
         XCTAssertNil(finding["checkedAt"])
         let old = Data(#"{"provider":"github","status":"candidate","fields":{}}"#.utf8)
         XCTAssertNil(try JSONDecoder().decode(BeholderFinding.self, from: old).preparedProfileURL)
+    }
+
+    @MainActor func testSyntheticManualDashboardRenders() async throws {
+        guard ProcessInfo.processInfo.environment["RENDER_BEHOLDER_SOCIAL"] == "1" else {
+            throw XCTSkip("Opt-in manual-source capture on an unlocked Mac.")
+        }
+        let model = BeholderModel()
+        model.selected = [.instagram, .youtube, .tumblr, .substack]
+        model.query = "ExampleAlex"
+        model.start()
+        XCTAssertFalse(model.searching)
+        let size = CGSize(width: 900, height: 760)
+        let host = NSHostingView(rootView: BeholderDashboard(research: model).frame(width: size.width, height: size.height)
+            .background(HUD.void).environment(\.colorScheme, .dark))
+        let window = NSWindow(
+            contentRect: NSRect(origin: CGPoint(x: -3000, y: -3000), size: size),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("beholder-social-manual.png"))
     }
 
     private func parse(_ json: String, _ provider: BeholderProvider, status: Int = 200) -> BeholderFinding {
