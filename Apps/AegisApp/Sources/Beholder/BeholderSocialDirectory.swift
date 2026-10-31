@@ -77,6 +77,7 @@ enum BeholderSocialDirectory {
         ),
         .init(id: "twitch", title: "Twitch", host: "www.twitch.tv", pattern: "[A-Za-z0-9_]{4,25}", pathPrefix: "/", reason: noAPI),
         .init(id: "reddit", title: "Reddit", host: "www.reddit.com", pattern: "[A-Za-z0-9_-]{3,20}", pathPrefix: "/user/", reason: blocked),
+        .init(id: "tumblr", title: "Tumblr", host: "tumblr.com", pattern: "[A-Za-z0-9-]{1,32}", pathPrefix: "/", reason: noAPI),
         .init(
             id: "telegram",
             title: "Telegram",
@@ -176,6 +177,7 @@ enum BeholderSocialDirectory {
             reason: blocked
         ),
         .init(id: "aboutMe", title: "About.me", host: "about.me", pattern: "[A-Za-z0-9_-]{1,40}", pathPrefix: "/", reason: soft),
+        .init(id: "substack", title: "Substack", host: "substack.com", pattern: "[A-Za-z0-9]{4,32}", pathPrefix: "/@", reason: soft),
         .init(id: "kick", title: "Kick", host: "kick.com", pattern: "[A-Za-z0-9_]{3,25}", pathPrefix: "/", reason: blocked),
         .init(id: "rumble", title: "Rumble", host: "rumble.com", pattern: "[A-Za-z0-9_-]{1,40}", pathPrefix: "/user/", reason: blocked),
         .init(

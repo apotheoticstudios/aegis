@@ -1,10 +1,10 @@
 # Beholder social directory (manual links)
 
-`Apps/AegisApp/Sources/Beholder/BeholderSocialDirectory.swift` builds browser-only public profile links for 48 social, creator and community sites (issue #104). It is a local URL builder:
+`Apps/AegisApp/Sources/Beholder/BeholderSocialDirectory.swift` builds browser-only public profile links for 50 social, creator and community sites (issue #104). It is a local URL builder:
 
 - No network code. Selecting a source or pressing Search never contacts these sites; the owner clicks one specific link and the browser opens it.
 - No existence claims. A link means "this is where a profile with that handle would be", never "an account exists" or "this is the same person".
-- Fixed hosts. Every entry has one hard-coded HTTPS host; the username only fills the path. No subdomain sites (artist-subdomain Bandcamp, itch.io, Tumblr and Substack blogs), no redirects, no shorteners.
+- Fixed hosts. Every entry has one hard-coded HTTPS host; the username only fills the path. No subdomain sites (artist-subdomain Bandcamp, itch.io, Tumblr and Substack blog subdomains) and no shorteners. The builder itself never fetches or follows redirects; the owner's browser may redirect normally once they open a link.
 - Strict input. ASCII only, matched in full against the site's anchored rule; slashes, queries, fragments, percent escapes, `@`, `:`, spaces, controls, a leading `.` and `..` cannot pass. Qualified `*.bsky.social` names are refused on every site (they belong to the Bluesky source).
 
 The issue's frozen IDs are the `id` column below, in directory order.
@@ -20,6 +20,8 @@ Departures from the pinned data:
 | Instagram, LinkedIn, Last.fm | bare domain | `www.` host | canonical host, no redirect |
 | Threads | `www.threads.net` | `www.threads.com` | [Meta: "We're migrating from Threads.net to Threads.com"](https://about.fb.com/news/2025/04/new-features-threads-web-experience/) |
 | Buy Me a Coffee | `buymeacoff.ee` (shortener) | `buymeacoffee.com` | no shortener redirect |
+| Tumblr | `{}.tumblr.com` | `tumblr.com/{}` | [Tumblr Help](https://help.tumblr.com/knowledge-base/web-notifications/) gives `https://tumblr.com/username`; subdomains redirect there |
+| Substack | `{}.substack.com` (publication) | `substack.com/@{}`, `[A-Za-z0-9]{4,32}` | [Substack: What are Substack Handles?](https://support.substack.com/hc/en-us/articles/15574565677204-What-are-Substack-Handles) (letters and numbers, 4–32), also [How can I publish on Substack](https://support.substack.com/hc/en-us/articles/29152946791188-How-can-I-publish-on-Substack) |
 | LinkedIn | `[a-zA-Z0-9]{3,100}` | adds `-` | generated public URLs contain hyphens |
 | Vimeo | any | must start with a letter | an all-digit path is a video |
 
@@ -41,6 +43,7 @@ Why manual: **sign-in** = sign-in walls can hide or change logged-out profile pa
 | snapchat | Snapchat | `www.snapchat.com/add/{}` | soft |
 | twitch | Twitch | `www.twitch.tv/{}` | API |
 | reddit | Reddit | `www.reddit.com/user/{}` | bot |
+| tumblr | Tumblr | `tumblr.com/{}` | API |
 | telegram | Telegram | `t.me/{}` | soft |
 | medium | Medium | `medium.com/@{}` | bot |
 | soundCloud | SoundCloud | `soundcloud.com/{}` | API |
@@ -61,6 +64,7 @@ Why manual: **sign-in** = sign-in walls can hide or change logged-out profile pa
 | koFi | Ko-fi | `ko-fi.com/{}` | soft |
 | buyMeACoffee | Buy Me a Coffee | `buymeacoffee.com/{}` | bot |
 | aboutMe | About.me | `about.me/{}` | soft |
+| substack | Substack | `substack.com/@{}` | soft |
 | kick | Kick | `kick.com/{}` | bot |
 | rumble | Rumble | `rumble.com/user/{}` | bot |
 | minds | Minds | `www.minds.com/{}/` | soft |
@@ -82,4 +86,4 @@ Why manual: **sign-in** = sign-in walls can hide or change logged-out profile pa
 
 ## Left out
 
-Facebook, Tumblr (`www.tumblr.com/{}`) and Substack (`substack.com/@{}`) were dropped: the pinned data has no fixed-host route for them and no primary source for one was found, so no route was invented. Mixcloud moved to an automatic source (keyless `api.mixcloud.com`, #105). Also not in the pinned data and no official rule checked: Gab, GETTR, Truth Social, OK (ok.ru), Weibo (profile paths use numeric IDs or non-ASCII nicknames), 500px. Disqus was left out because the pinned pattern (`disqus.com/{}`) conflicts with Disqus's own `/by/{}` profile path. The existing twelve automatic sources (GitHub, GitLab, Hacker News, DEV, Codeberg, Docker Hub, Keybase, Lichess, Chess.com, Scratch, Bluesky, Mastodon.social) are not repeated. Adult sites and Sherlock's non-social entries are out of scope.
+Facebook was dropped: the pinned data has no route for it and no primary source was linked, so no route was invented. Mixcloud moved to an automatic source (keyless `api.mixcloud.com`, #105). Also not in the pinned data and no official rule checked: Gab, GETTR, Truth Social, OK (ok.ru), Weibo (profile paths use numeric IDs or non-ASCII nicknames), 500px. Disqus was left out because the pinned pattern (`disqus.com/{}`) conflicts with Disqus's own `/by/{}` profile path. The existing twelve automatic sources (GitHub, GitLab, Hacker News, DEV, Codeberg, Docker Hub, Keybase, Lichess, Chess.com, Scratch, Bluesky, Mastodon.social) are not repeated. Adult sites and Sherlock's non-social entries are out of scope.

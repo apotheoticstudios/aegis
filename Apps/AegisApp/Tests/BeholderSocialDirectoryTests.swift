@@ -17,6 +17,7 @@ final class BeholderSocialDirectoryTests: XCTestCase {
         "snapchat": "https://www.snapchat.com/add/ExampleAlex",
         "twitch": "https://www.twitch.tv/ExampleAlex",
         "reddit": "https://www.reddit.com/user/ExampleAlex",
+        "tumblr": "https://tumblr.com/ExampleAlex",
         "telegram": "https://t.me/ExampleAlex",
         "medium": "https://medium.com/@ExampleAlex",
         "soundCloud": "https://soundcloud.com/ExampleAlex",
@@ -37,6 +38,7 @@ final class BeholderSocialDirectoryTests: XCTestCase {
         "koFi": "https://ko-fi.com/ExampleAlex",
         "buyMeACoffee": "https://buymeacoffee.com/ExampleAlex",
         "aboutMe": "https://about.me/ExampleAlex",
+        "substack": "https://substack.com/@ExampleAlex",
         "kick": "https://kick.com/ExampleAlex",
         "rumble": "https://rumble.com/user/ExampleAlex",
         "minds": "https://www.minds.com/ExampleAlex/",
@@ -95,7 +97,12 @@ final class BeholderSocialDirectoryTests: XCTestCase {
             ("x", "ExampleAlexTooLong"), ("vimeo", "12345"), ("unsplash", "ExampleAlex"),
             ("telegram", "Ex_1"), ("telegram", "_ExampleAlex"),
             ("snapchat", "ExampleAlex_"), ("linkedIn", "Example_Alex"), ("buyMeACoffee", "Example_Alex"),
-            ("twitch", "Exa"), ("deviantArt", "1ExampleAlex"), ("lastFm", "ExampleAlexTooLong"),
+            ("twitch", "Exa"), ("substack", "Exa"), ("substack", "Example_Alex"), ("tumblr", "Example_Alex"),
+            ("deviantArt", "1ExampleAlex"),
+            (
+                "lastFm",
+                "ExampleAlexTooLong"
+            ),
         ]
         for (id, handle) in cases {
             XCTAssertNil(try XCTUnwrap(BeholderSocialDirectory.entry(id: id)).profileURL(handle), "\(id) \(handle)")
