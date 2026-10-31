@@ -20,11 +20,13 @@ struct BeholderScreen: View {
 
 struct BeholderDashboard: View {
     private enum Sheet: Identifiable {
-        case planner, people, link(BeholderPeopleView.Target)
+        case planner, people, sources, destinations, link(BeholderPeopleView.Target)
         var id: String {
             switch self {
             case .planner: "planner"
             case .people: "people"
+            case .sources: "sources"
+            case .destinations: "destinations"
             case let .link(target): target.id.uuidString
             }
         }
@@ -74,14 +76,20 @@ struct BeholderDashboard: View {
                 }
             }
             HStack(spacing: HUD.space4) {
-                BeholderSourcePicker(selected: $research.selected)
+                Button { sheet = .sources } label: {
+                    Label(BeholderSources.summary(research.selected), systemImage: "line.3.horizontal.decrease.circle")
+                }.accessibilityLabel("Choose public sources").accessibilityValue(BeholderSources.summary(research.selected))
                 Button("Research planner…") { sheet = .planner }
                 Button("People (\(research.people.people.count))…") { sheet = .people }
                 Spacer()
                 Button("Export case…") { prepareExport() }
                     .disabled((research.findings.isEmpty && research.people.people.isEmpty) || research.searching)
             }
-            Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
+            HStack(alignment: .top) {
+                Text(previewSummary).font(.caption).foregroundStyle(HUD.inkMuted)
+                Spacer()
+                Button("Review destinations…") { sheet = .destinations }.font(.caption)
+            }
             if let problem = research.problem ?? exportProblem {
                 Text(problem).foregroundStyle(HUD.warn)
             }
@@ -101,6 +109,7 @@ struct BeholderDashboard: View {
                         ProgressView().controlSize(.small)
                     }
                 }
+                BeholderEvidenceSummaryView(findings: research.findings)
                 ScrollView {
                     LazyVGrid(
                         columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)],
@@ -111,7 +120,7 @@ struct BeholderDashboard: View {
                     }
                 }
             }
-            Text("A matching handle is not a verified identity. No public result does not prove an account is absent.")
+            Text("Case stays in memory until you export it.")
                 .font(.caption).foregroundStyle(HUD.inkMuted)
         }
         .foregroundStyle(HUD.ink).padding(HUD.space4)
@@ -121,6 +130,24 @@ struct BeholderDashboard: View {
                 switch presented {
                 case .planner: BeholderQueryPlannerView()
                 case .people: BeholderPeopleView(research: research)
+                case .sources:
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            Button("Original four") { research.selected = BeholderProvider.originalSources }
+                            Spacer()
+                            Button("Done") { sheet = nil }.keyboardShortcut(.cancelAction)
+                        }.padding(.horizontal, HUD.space4).padding(.top, HUD.space3)
+                        BeholderSourceGuideView(selected: $research.selected)
+                    }.frame(width: 440).background(HUD.void)
+                case .destinations:
+                    VStack(alignment: .leading, spacing: HUD.space4) {
+                        HStack {
+                            Text("SEARCH DESTINATIONS").hudType(.data)
+                            Spacer()
+                            Button("Done") { sheet = nil }.keyboardShortcut(.cancelAction)
+                        }
+                        ScrollView { Text(preview).font(.caption).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                    }.padding(HUD.space4).frame(width: 620, height: 400).foregroundStyle(HUD.ink).background(HUD.void)
                 case let .link(target): BeholderPeopleView(research: research, target: target)
                 }
             }.environment(\.hudTheme, theme)
@@ -146,6 +173,15 @@ struct BeholderDashboard: View {
                 exportProblem = "The case could not be exported. Choose another destination and try again."
             }
         }
+    }
+
+    private var previewSummary: String {
+        guard let name = research.preparedUsername else { return "Enter a username to preview where it will be sent." }
+        let eligible = research.providers.filter { $0.supports(name) }
+        let automatic = eligible.filter { !$0.isManual }.count
+        let manual = eligible.filter(\.isManual).count
+        let automaticText = automatic == 0 ? "No automatic requests." : "Search sends this username to \(automatic) selected \(automatic == 1 ? "service" : "services")."
+        return automaticText + " \(manual) manual \(manual == 1 ? "link stays" : "links stay") unchecked. Review destinations before sending."
     }
 
     private var preview: String {
@@ -181,14 +217,8 @@ struct BeholderDashboard: View {
                     Text(verbatim: finding.fields[label] ?? "").textSelection(.enabled)
                 }
             }
-            if let checked = finding.checkedAt {
-                Text("Checked " + checked.formatted(date: .abbreviated, time: .standard)).font(.caption).foregroundStyle(HUD.inkMuted)
-            }
-            if let source = finding.sourceURL {
-                Text(verbatim: source.absoluteString).font(.caption2).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
-            }
+            BeholderEvidenceExplanationView(finding: finding)
             if finding.status == .manual, let url = finding.preparedProfileURL {
-                Text(verbatim: url.absoluteString).font(.caption2).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
                 Link("Open unchecked profile ↗", destination: url).font(.caption)
                     .help("This link has not been checked. Opens using your browser's privacy and sign-in settings.")
             } else if finding.status == .candidate, let url = finding.provider.profileURL(research.username) {
