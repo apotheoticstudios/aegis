@@ -81,9 +81,18 @@ final class BeholderEvidenceTests: XCTestCase {
         XCTAssertNil(explained.requestURL)
         try XCTAssertEqual(
             explained.provenance,
-            ["Prepared link, not opened or checked: " + XCTUnwrap(manual.preparedProfileURL).absoluteString]
+            ["Prepared link, unchecked by Beholder: " + XCTUnwrap(manual.preparedProfileURL).absoluteString]
         )
         XCTAssertTrue(explained.reason.contains("did not contact"))
+        // The compiled provider capability wins over stored fields, even with no access mode at all.
+        let legacy = BeholderFinding(
+            provider: .instagram, status: .candidate, checkedAt: now, sourceURL: manual.preparedProfileURL, access: nil,
+            fields: ["Handle": "ExampleAlex"]
+        )
+        XCTAssertEqual(BeholderEvidence.outcome(legacy), .manual)
+        XCTAssertNil(BeholderEvidence.explain(legacy).checkedAt)
+        XCTAssertNil(BeholderEvidence.explain(legacy).requestURL)
+        XCTAssertEqual(BeholderEvidence.summary([legacy]).candidates, 0)
         let unsupported = try XCTUnwrap(BeholderProvider.twitter.manualFinding("Example-Alex"))
         XCTAssertEqual(BeholderEvidence.outcome(unsupported), .manual)
         XCTAssertTrue(BeholderEvidence.explain(unsupported).reason.contains("no link was prepared"))
@@ -129,7 +138,19 @@ final class BeholderEvidenceTests: XCTestCase {
             }
         }
         XCTAssertTrue(BeholderEvidence.identityNote.contains("do not show"))
-        XCTAssertTrue(BeholderEvidence.explain(finding(.github, .candidate, handle: nil)).reason.contains("a matching handle"))
+        XCTAssertTrue(BeholderEvidence.explain(finding(.github, .candidate, handle: nil)).reason.contains("matching the handle exactly"))
+    }
+
+    func testCandidateWordingNeverClaimsAnAccountOrOwner() {
+        let blog = BeholderEvidence.explain(finding(.writeAs, .candidate))
+        XCTAssertEqual(blog.outcome, .candidate)
+        XCTAssertTrue(blog.reason.contains("public blog whose alias is “ExampleAlex”"))
+        XCTAssertTrue(blog.reason.contains("not an account name"))
+        for provider in [BeholderProvider.github, .writeAs, .mastodon, .framaTube] {
+            let reason = BeholderEvidence.explain(finding(provider, .candidate)).reason
+            XCTAssertFalse(reason.contains("account with this handle exists"), "\(provider)")
+            XCTAssertTrue(reason.contains("does not show who runs it"), "\(provider)")
+        }
     }
 
     @MainActor func testSyntheticEvidenceRendersAtCompactWidth() throws {

@@ -39,7 +39,7 @@ enum BeholderEvidence {
                 lines.append((checkedAt == nil ? "Request not completed: " : "Requested: ") + requestURL.absoluteString)
             }
             if let preparedURL {
-                lines.append("Prepared link, not opened or checked: " + preparedURL.absoluteString)
+                lines.append("Prepared link, unchecked by Beholder: " + preparedURL.absoluteString)
             }
             return lines
         }
@@ -97,8 +97,9 @@ enum BeholderEvidence {
         + "do not show that accounts belong to the same person."
 
     /// Only a recorded check time makes an automatic finding an observation; a request address alone does not.
+    /// A manual provider stays manual whatever its stored access, status or time say.
     static func outcome(_ finding: BeholderFinding) -> Outcome {
-        if finding.access == .manual || finding.status == .manual {
+        if finding.provider.isManual || finding.access == .manual || finding.status == .manual {
             return .manual
         }
         guard finding.checkedAt != nil else { return .notChecked }
@@ -111,6 +112,7 @@ enum BeholderEvidence {
     }
 
     /// One entry per source, in first-seen order with its latest value. Different sources are never merged.
+    /// Expects one username-search run: a cross-handle history can hold two accounts at one source and must not use this.
     static func unique(_ findings: [BeholderFinding]) -> [BeholderFinding] {
         var order: [BeholderProvider] = []
         var latest: [BeholderProvider: BeholderFinding] = [:]
@@ -120,6 +122,7 @@ enum BeholderEvidence {
         return order.compactMap { latest[$0] }
     }
 
+    /// Summarises one username-search run (see `unique`).
     static func summary(_ findings: [BeholderFinding]) -> Summary {
         let items = unique(findings).map { ($0, outcome($0)) }
         let count = { (wanted: Outcome) in items.filter { $0.1 == wanted }.count }
@@ -137,13 +140,20 @@ enum BeholderEvidence {
         unique(findings).map(explain)
     }
 
+    private static func quoted(_ finding: BeholderFinding) -> String {
+        finding.fields["Handle"].map { "“\($0)”" } ?? "the handle"
+    }
+
     static func explain(_ finding: BeholderFinding) -> Explanation {
         let outcome = outcome(finding)
         let source = finding.provider.title
         let reason = switch outcome {
         case .candidate:
-            "\(source) returned " + (finding.fields["Handle"].map { "the handle “\($0)”" } ?? "a matching handle") + " exactly. "
-                + "An account with this handle exists there; that does not show who runs it or link it to any other result."
+            finding.provider == .writeAs
+                ? "Write.as returned a public blog whose alias is " + quoted(finding) + ". A blog alias is not an account name; "
+                + "it does not show who runs it or link it to any other result."
+                : "\(source) returned a public profile record matching " + quoted(finding) + " exactly. "
+                + "It does not show who runs it or link it to any other result."
         case .noResult:
             "\(source) answered that no public account has this handle. "
                 + "Private, renamed or removed accounts can look the same, so this does not prove absence."
