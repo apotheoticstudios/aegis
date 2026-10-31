@@ -183,7 +183,7 @@ final class BeholderSocialExpansionTests: XCTestCase {
         model.query = "ExampleAlex"
         model.start()
         let report = try XCTUnwrap(JSONSerialization.jsonObject(with: model.export()) as? [String: Any])
-        XCTAssertEqual(report["schema"] as? Int, 2)
+        XCTAssertEqual(report["schema"] as? Int, 3)
         let finding = try XCTUnwrap((report["findings"] as? [[String: Any]])?.first)
         XCTAssertEqual(finding["status"] as? String, "manual")
         XCTAssertEqual(finding["access"] as? String, "manual")

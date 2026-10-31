@@ -25,6 +25,8 @@ struct BeholderDashboard: View {
     @State private var document = BeholderDocument()
     @State private var exportProblem: String?
     @State private var planning = false
+    @State private var showingPeople = false
+    @State private var linkTarget: BeholderPeopleView.Target?
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
     init(research: BeholderModel, followsPanel: Bool = false) {
@@ -53,13 +55,15 @@ struct BeholderDashboard: View {
                 if research.searching {
                     Button("Stop") { research.cancel() }
                 }
-                Button("Clear") { research.clear() }
+                Button("Clear case") { research.clear() }
             }
             HStack(spacing: HUD.space4) {
                 BeholderSourcePicker(selected: $research.selected)
                 Button("Research planner…") { planning = true }
+                Button("People (\(research.people.people.count))…") { showingPeople = true }
                 Spacer()
-                Button("Export case…") { prepareExport() }.disabled(research.findings.isEmpty || research.searching)
+                Button("Export case…") { prepareExport() }
+                    .disabled((research.findings.isEmpty && research.people.people.isEmpty) || research.searching)
             }
             Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
             if let problem = research.problem ?? exportProblem {
@@ -70,7 +74,7 @@ struct BeholderDashboard: View {
                 VStack(spacing: HUD.space4) {
                     BeholderEmblem().frame(width: 150, height: 150).opacity(0.6)
                     Text("One handle. Several public sources.").font(.title3)
-                    Text("Choose sources and start a search. Accounts stay separate until you verify who owns them.")
+                    Text("Choose sources and start a search. Link accounts to a person using evidence you have reviewed.")
                         .foregroundStyle(HUD.inkMuted).multilineTextAlignment(.center)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -97,6 +101,8 @@ struct BeholderDashboard: View {
         .foregroundStyle(HUD.ink).padding(HUD.space4)
         .environment(\.hudTheme, theme)
         .sheet(isPresented: $planning) { BeholderQueryPlannerView().environment(\.hudTheme, theme) }
+        .sheet(isPresented: $showingPeople) { BeholderPeopleView(research: research).environment(\.hudTheme, theme) }
+        .sheet(item: $linkTarget) { BeholderPeopleView(research: research, target: $0).environment(\.hudTheme, theme) }
         .onDisappear { research.cancel() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
@@ -156,6 +162,9 @@ struct BeholderDashboard: View {
             } else if finding.status == .candidate, let url = finding.provider.profileURL(research.username) {
                 Link("Open public profile ↗", destination: url).font(.caption)
                     .help("Opens your browser; the website receives the visit under your browser's settings.")
+            }
+            if finding.status == .candidate || finding.status == .manual {
+                Button("Link to person…") { linkTarget = .init(username: research.username, finding: finding) }.font(.caption)
             }
         }
         .padding(HUD.space4).frame(maxWidth: .infinity, alignment: .topLeading)

@@ -40,6 +40,21 @@ are outside this slice. The current app is not replaced by this development chan
 
 ## Reuse and sources
 
+### Owner-reviewed person groups (#114)
+
+The owner requested linking one person across accounts for journalism on 2026-10-31. App-private, in-memory
+person groups now retain explicitly chosen accounts across username searches. Possible, Supported by you and
+Ruled out are owner assessments, never automated identity verdicts. Every link needs an explanation; support
+also needs a public HTTPS evidence URL, which is stored as inert text and never fetched. An account cannot be
+supported under two people simultaneously; possible links can remain under multiple hypotheses. Manual
+identifiers retain exact spelling, without guessed case equivalence. Original source snapshots/check times
+remain distinct from assessment times. Reassessment preserves the original snapshot; removing a link is explicit.
+
+Schema 3 case exports include people, account observations and owner assessments alongside the latest results.
+Groups stay only in memory until an explicit export; Clear case removes them. No automatic persistence,
+Contacts/memory writes, uploads, identifier pivots, name/photo matching or new network destinations are added.
+The case does not assert exhaustive coverage or independent verification of the owner's conclusions.
+
 Sherlock's cross-site discovery and Hunchly's source/time provenance informed the design. No upstream code,
 site dataset or artwork is copied or bundled; the multi-eyed emblem is original SwiftUI vector drawing. Each
 additional code integration must review its actual licence and outbound behavior first.

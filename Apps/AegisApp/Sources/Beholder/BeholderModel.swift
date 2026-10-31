@@ -5,6 +5,7 @@ import Observation
 final class BeholderModel {
     var query = ""
     var selected = BeholderProvider.originalSources
+    var people = BeholderPeople()
     static let parallelLimit = 4
     private(set) var username = ""
     private(set) var findings: [BeholderFinding] = []
@@ -102,6 +103,7 @@ final class BeholderModel {
         query = ""
         username = ""
         findings = []
+        people = BeholderPeople()
         problem = nil
     }
 
@@ -109,7 +111,7 @@ final class BeholderModel {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        return try encoder.encode(Report(schema: 2, username: username, exportedAt: Date(), findings: findings))
+        return try encoder.encode(Report(schema: 3, username: username, exportedAt: Date(), findings: findings, people: people.people))
     }
 
     private struct Report: Encodable {
@@ -118,5 +120,6 @@ final class BeholderModel {
         let exportedAt: Date
         let warning = "Candidate accounts are not verified identities. Prepared manual links are unchecked. No public result does not prove absence."
         let findings: [BeholderFinding]
+        let people: [BeholderPeople.Person]
     }
 }
