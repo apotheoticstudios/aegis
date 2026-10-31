@@ -101,6 +101,7 @@ struct BeholderDashboard: View {
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
                 research.cancel()
+                planning = false
             }
         }
         .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: "Beholder-case") { result in
