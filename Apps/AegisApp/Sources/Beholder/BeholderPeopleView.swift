@@ -6,6 +6,8 @@ struct BeholderPeopleView: View {
         let id = UUID()
         let username: String
         let finding: BeholderFinding
+        var originalPersonID: UUID?
+        var originalLinkID: UUID?
     }
 
     let research: BeholderModel
@@ -20,7 +22,7 @@ struct BeholderPeopleView: View {
 
     init(research: BeholderModel, target: Target? = nil) {
         self.research = research
-        _selected = State(initialValue: research.people.people.first?.id)
+        _selected = State(initialValue: research.people.people.count == 1 ? research.people.people.first?.id : nil)
         _draft = State(initialValue: target)
     }
 
@@ -59,7 +61,7 @@ struct BeholderPeopleView: View {
                                 HStack {
                                     Text(link.finding.provider.title + " · @" + link.username).font(.headline)
                                     Spacer()
-                                    Text(link.assessment.rawValue).font(.caption).foregroundStyle(HUD.primary)
+                                    Text(link.assessment.title).font(.caption).foregroundStyle(HUD.primary)
                                 }
                                 Text(verbatim: link.reason).textSelection(.enabled)
                                 if let url = link.evidenceURL {
@@ -67,7 +69,11 @@ struct BeholderPeopleView: View {
                                 }
                                 Text("Your assessment: " + link.assessedAt.formatted(date: .abbreviated, time: .standard))
                                 if let checked = link.finding.checkedAt {
-                                    Text("Source checked: " + checked.formatted(date: .abbreviated, time: .standard))
+                                    Text("Original source check: " + checked.formatted(date: .abbreviated, time: .standard))
+                                    if let latest = link.lastObservedAt, latest > checked {
+                                        Text("Seen again: " + latest
+                                            .formatted(date: .abbreviated, time: .standard) + " · original snapshot retained")
+                                    }
                                 } else {
                                     Text("Manual profile · Beholder has not checked this account")
                                 }
@@ -76,7 +82,12 @@ struct BeholderPeopleView: View {
                                 }
                                 HStack {
                                     Button("Review link") {
-                                        draft = Target(username: link.username, finding: link.finding)
+                                        draft = Target(
+                                            username: link.username,
+                                            finding: link.finding,
+                                            originalPersonID: person.id,
+                                            originalLinkID: link.id
+                                        )
                                         assessment = link.assessment; reason = link.reason
                                         evidence = link.evidenceURL?.absoluteString ?? ""; problem = nil
                                     }
@@ -96,17 +107,24 @@ struct BeholderPeopleView: View {
         }
         .padding(HUD.space4).frame(width: 680, alignment: .leading)
         .foregroundStyle(HUD.ink).background(HUD.void)
-        .onChange(of: selected) { problem = nil }
+        .onChange(of: selected) {
+            if draft?.originalPersonID != nil {
+                draft = nil
+            }
+            assessment = .possible; reason = ""; evidence = ""; problem = nil
+        }
     }
 
     private func editor(_ target: Target) -> some View {
         VStack(alignment: .leading, spacing: HUD.space2) {
             Text("LINK " + target.finding.provider.title + " · @" + target.username).hudType(.data)
+            Text("To: " + (research.people.people.first(where: { $0.id == selected })?.name ?? "Select a person"))
+                .font(.headline)
             Picker("Assessment", selection: $assessment) {
-                ForEach(BeholderPeople.Assessment.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(BeholderPeople.Assessment.allCases) { Text($0.title).tag($0) }
             }
-            TextField("Why do you link or rule out this account?", text: $reason, axis: .vertical)
-                .textFieldStyle(.roundedBorder).lineLimit(2 ... 3)
+            TextField("Why do you link or rule out this account?", text: $reason)
+                .textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Account link explanation")
             TextField("Public evidence URL (required for support)", text: $evidence).textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Account link evidence URL")
@@ -114,10 +132,25 @@ struct BeholderPeopleView: View {
                 Button("Save assessment") {
                     perform {
                         guard let selected else { throw BeholderPeople.Problem.missing }
-                        try research.people.link(
-                            personID: selected, username: target.username, finding: target.finding,
-                            assessment: assessment, reason: reason, evidence: evidence
-                        )
+                        if let original = target.originalPersonID, let linkID = target.originalLinkID {
+                            guard original == selected else { throw BeholderPeople.Problem.missing }
+                            try research.people.reassess(
+                                personID: original,
+                                linkID: linkID,
+                                assessment: assessment,
+                                reason: reason,
+                                evidence: evidence
+                            )
+                        } else {
+                            try research.people.link(
+                                personID: selected,
+                                username: target.username,
+                                finding: target.finding,
+                                assessment: assessment,
+                                reason: reason,
+                                evidence: evidence
+                            )
+                        }
                         draft = nil; reason = ""; evidence = ""; assessment = .possible
                     }
                 }.disabled(selected == nil)

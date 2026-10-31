@@ -19,14 +19,24 @@ struct BeholderScreen: View {
 }
 
 struct BeholderDashboard: View {
+    private enum Sheet: Identifiable {
+        case planner, people, link(BeholderPeopleView.Target)
+        var id: String {
+            switch self {
+            case .planner: "planner"
+            case .people: "people"
+            case let .link(target): target.id.uuidString
+            }
+        }
+    }
+
     @State private var research: BeholderModel
     var followsPanel = false
     @State private var exporting = false
     @State private var document = BeholderDocument()
     @State private var exportProblem: String?
-    @State private var planning = false
-    @State private var showingPeople = false
-    @State private var linkTarget: BeholderPeopleView.Target?
+    @State private var sheet: Sheet?
+    @State private var clearing = false
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
     init(research: BeholderModel, followsPanel: Bool = false) {
@@ -55,12 +65,18 @@ struct BeholderDashboard: View {
                 if research.searching {
                     Button("Stop") { research.cancel() }
                 }
-                Button("Clear case") { research.clear() }
+                Button("Clear case") {
+                    if research.people.people.isEmpty {
+                        research.clear()
+                    } else {
+                        clearing = true
+                    }
+                }
             }
             HStack(spacing: HUD.space4) {
                 BeholderSourcePicker(selected: $research.selected)
-                Button("Research planner…") { planning = true }
-                Button("People (\(research.people.people.count))…") { showingPeople = true }
+                Button("Research planner…") { sheet = .planner }
+                Button("People (\(research.people.people.count))…") { sheet = .people }
                 Spacer()
                 Button("Export case…") { prepareExport() }
                     .disabled((research.findings.isEmpty && research.people.people.isEmpty) || research.searching)
@@ -100,16 +116,29 @@ struct BeholderDashboard: View {
         }
         .foregroundStyle(HUD.ink).padding(HUD.space4)
         .environment(\.hudTheme, theme)
-        .sheet(isPresented: $planning) { BeholderQueryPlannerView().environment(\.hudTheme, theme) }
-        .sheet(isPresented: $showingPeople) { BeholderPeopleView(research: research).environment(\.hudTheme, theme) }
-        .sheet(item: $linkTarget) { BeholderPeopleView(research: research, target: $0).environment(\.hudTheme, theme) }
+        .sheet(item: $sheet) { presented in
+            Group {
+                switch presented {
+                case .planner: BeholderQueryPlannerView()
+                case .people: BeholderPeopleView(research: research)
+                case let .link(target): BeholderPeopleView(research: research, target: target)
+                }
+            }.environment(\.hudTheme, theme)
+        }
+        .confirmationDialog("Clear this case?", isPresented: $clearing, titleVisibility: .visible) {
+            Button("Export case…") { prepareExport() }.disabled(research.searching)
+            Button("Clear case", role: .destructive) { research.clear() }
+            Button("Keep case", role: .cancel) {}
+        } message: {
+            Text("People, account links and evidence will be removed from this session. Export first to keep a copy.")
+        }
         .onDisappear { research.cancel() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
                 research.cancel()
-                planning = false
-                showingPeople = false
-                linkTarget = nil
+                sheet = nil
+                clearing = false
+                exporting = false
             }
         }
         .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: "Beholder-case") { result in
@@ -167,7 +196,7 @@ struct BeholderDashboard: View {
                     .help("Opens your browser; the website receives the visit under your browser's settings.")
             }
             if finding.status == .candidate || finding.status == .manual {
-                Button("Link to person…") { linkTarget = .init(username: research.username, finding: finding) }.font(.caption)
+                Button("Link to person…") { sheet = .link(.init(username: research.username, finding: finding)) }.font(.caption)
             }
         }
         .padding(HUD.space4).frame(maxWidth: .infinity, alignment: .topLeading)

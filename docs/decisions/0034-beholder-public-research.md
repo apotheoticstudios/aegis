@@ -47,8 +47,11 @@ person groups now retain explicitly chosen accounts across username searches. Po
 Ruled out are owner assessments, never automated identity verdicts. Every link needs an explanation; support
 also needs a public HTTPS evidence URL, which is stored as inert text and never fetched. An account cannot be
 supported under two people simultaneously; possible links can remain under multiple hypotheses. Manual
-identifiers retain exact spelling, without guessed case equivalence. Original source snapshots/check times
-remain distinct from assessment times. Reassessment preserves the original snapshot; removing a link is explicit.
+identifiers retain exact spelling for display and updates. A case-folded comparison only prevents conflicting
+support across people; it never combines manual records. Original source snapshots/check times remain distinct
+from assessment times. Reassessment preserves the original snapshot and records the latest observed time;
+removing a link is explicit. Editing a saved assessment is pinned to its original person. Clearing a case with
+owner-written work requires confirmation and offers export first. Export assessment codes are stable strings.
 
 Schema 3 case exports include people, account observations and owner assessments alongside the latest results.
 Groups stay only in memory until an explicit export; Clear case removes them. No automatic persistence,

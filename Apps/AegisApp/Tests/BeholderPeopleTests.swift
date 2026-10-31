@@ -56,6 +56,7 @@ final class BeholderPeopleTests: XCTestCase {
         XCTAssertEqual(revised.finding, original.finding)
         XCTAssertEqual(revised.assessedAt, later)
         XCTAssertEqual(revised.finding.checkedAt, observed)
+        XCTAssertEqual(revised.lastObservedAt, later)
         try attach(&caseFile, person, "ExampleAlex", .hackerNews)
         try attach(&caseFile, person, "examplealex", .hackerNews)
         XCTAssertEqual(caseFile.people[0].links.count, 3)
@@ -80,6 +81,53 @@ final class BeholderPeopleTests: XCTestCase {
         XCTAssertNil(link.finding.sourceURL)
         XCTAssertEqual(link.assessedAt, observed)
         XCTAssertNotNil(link.finding.preparedProfileURL)
+    }
+
+    func testManualCaseVariantsConflictWithoutCombiningTheRecords() throws {
+        var caseFile = BeholderPeople()
+        let first = try caseFile.create("Example Alex")
+        let second = try caseFile.create("Example Bailey")
+        for (person, handle, assessment) in [
+            (first, "ExampleAlex", BeholderPeople.Assessment.supported),
+            (second, "examplealex", .possible),
+        ] {
+            try caseFile.link(
+                personID: person,
+                username: handle,
+                finding: XCTUnwrap(BeholderProvider.instagram.manualFinding(handle)),
+                assessment: assessment,
+                reason: reason,
+                evidence: evidence
+            )
+        }
+        XCTAssertThrowsError(try caseFile.link(
+            personID: second,
+            username: "examplealex",
+            finding: XCTUnwrap(BeholderProvider.instagram.manualFinding("examplealex")),
+            assessment: .supported,
+            reason: reason,
+            evidence: evidence
+        ))
+        XCTAssertEqual(caseFile.people.map { $0.links[0].username }, ["ExampleAlex", "examplealex"])
+        XCTAssertEqual(caseFile.people[1].links[0].assessment, .possible)
+    }
+
+    func testReviewCannotCreateAnAccountUnderAnotherPerson() throws {
+        var caseFile = BeholderPeople()
+        let first = try caseFile.create("Example Alex")
+        let second = try caseFile.create("Example Bailey")
+        try attach(&caseFile, first, "ExampleAlex", .github)
+        let linkID = caseFile.people[0].links[0].id
+        XCTAssertThrowsError(try caseFile.reassess(
+            personID: second,
+            linkID: linkID,
+            assessment: .supported,
+            reason: reason,
+            evidence: evidence
+        ))
+        XCTAssertTrue(caseFile.people[1].links.isEmpty)
+        try caseFile.reassess(personID: first, linkID: linkID, assessment: .ruledOut, reason: reason, evidence: "")
+        XCTAssertEqual(caseFile.people[0].links[0].assessment, .ruledOut)
     }
 
     func testInvalidSourcesCannotBecomeEvidence() throws {
@@ -168,6 +216,9 @@ final class BeholderPeopleTests: XCTestCase {
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: model.export()) as? [String: Any])
         XCTAssertEqual(json["schema"] as? Int, 3)
         XCTAssertEqual((json["people"] as? [[String: Any]])?.count, 1)
+        let people = try XCTUnwrap(json["people"] as? [[String: Any]])
+        let links = try XCTUnwrap(people[0]["links"] as? [[String: Any]])
+        XCTAssertEqual(links[0]["assessment"] as? String, "supported")
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         let encodedPeople = try JSONSerialization.data(withJSONObject: XCTUnwrap(json["people"]))
         XCTAssertEqual(try decoder.decode([BeholderPeople.Person].self, from: encodedPeople), model.people.people)
@@ -190,9 +241,13 @@ final class BeholderPeopleTests: XCTestCase {
         try attach(&model.people, person, "ExampleAlex", .github, .supported)
         try attach(&model.people, person, "ExampleWriter", .dev)
         let target = BeholderPeopleView.Target(username: "ExampleOther", finding: finding(.gitlab, "ExampleOther"))
+        let choices = BeholderModel()
+        choices.people = model.people
+        try choices.people.create("Example Bailey")
         for (name, view) in [
             ("people", BeholderPeopleView(research: model)),
             ("people-link", BeholderPeopleView(research: model, target: target)),
+            ("people-choose", BeholderPeopleView(research: choices, target: target)),
         ] {
             let size = CGSize(width: 720, height: 820)
             let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height)
