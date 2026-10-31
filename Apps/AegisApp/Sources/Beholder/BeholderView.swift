@@ -110,7 +110,8 @@ struct BeholderDashboard: View {
     private var preview: String {
         guard let name = research.preparedUsername else { return "Enter a username to preview where it will be sent." }
         let eligible = research.providers.filter { $0.supports(name) }
-        let hosts = eligible.filter { $0 != .bluesky }.map(\.host).joined(separator: ", ")
+        let hosts = eligible.filter { !$0.isManual && $0 != .bluesky }.map(\.host).joined(separator: ", ")
+        let manualCount = eligible.filter(\.isManual).count
         var targets: [String] = []
         if !hosts.isEmpty {
             targets.append("“\(name)” to \(hosts) (case may be normalised)")
@@ -118,8 +119,11 @@ struct BeholderDashboard: View {
         if eligible.contains(.bluesky) {
             targets.append("“\(BeholderProvider.bluesky.lookupHandle(name))” to \(BeholderProvider.bluesky.host)")
         }
-        let destination = targets.isEmpty ? "No compatible sources selected." : "Search sends " + targets.joined(separator: "; ") + "."
-        return destination + " Providers receive your IP address and the Aegis-Beholder/1.0 app identifier."
+        let destination = targets.isEmpty ? "Search sends no automatic requests." : "Search sends " + targets.joined(separator: "; ") + "."
+        let automatic = targets.isEmpty ? "" : " Automatic sources receive your IP address and the Aegis-Beholder/1.0 app identifier."
+        let manualSubject = manualCount == 1 ? "1 manual link stays" : "\(manualCount) manual links stay"
+        let manual = manualCount == 0 ? "" : " \(manualSubject) unchecked. Search does not contact manual sources. Open a link in your browser to inspect it."
+        return destination + automatic + manual
     }
 
     private func card(_ finding: BeholderFinding) -> some View {
@@ -142,7 +146,11 @@ struct BeholderDashboard: View {
             if let source = finding.sourceURL {
                 Text(verbatim: source.absoluteString).font(.caption2).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
             }
-            if finding.status == .candidate, let url = finding.provider.profileURL(research.username) {
+            if finding.status == .manual, let url = finding.preparedProfileURL {
+                Text(verbatim: url.absoluteString).font(.caption2).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
+                Link("Open unchecked profile ↗", destination: url).font(.caption)
+                    .help("This link has not been checked. Opens using your browser's privacy and sign-in settings.")
+            } else if finding.status == .candidate, let url = finding.provider.profileURL(research.username) {
                 Link("Open public profile ↗", destination: url).font(.caption)
                     .help("Opens your browser; the website receives the visit under your browser's settings.")
             }
