@@ -81,6 +81,9 @@ struct BeholderClient: BeholderSearching {
     var transport: any BeholderTransport = BeholderWebTransport()
 
     func lookup(_ provider: BeholderProvider, username: String) async -> BeholderFinding {
+        if let manual = provider.manualFinding(username) {
+            return manual
+        }
         guard let endpoint = provider.endpoint(username) else { return BeholderFinding(provider: provider, status: .unsupported) }
         do {
             try Task.checkCancellation()
@@ -100,6 +103,9 @@ struct BeholderClient: BeholderSearching {
     }
 
     static func parse(_ payload: BeholderPayload, provider: BeholderProvider, username: String, now: Date) -> BeholderFinding {
+        if let manual = provider.manualFinding(username) {
+            return manual
+        }
         var result = BeholderFinding(provider: provider, status: .unavailable, checkedAt: now, sourceURL: provider.endpoint(username))
         if payload.status == 429 || payload.rateLimited {
             result.status = .limited; return result

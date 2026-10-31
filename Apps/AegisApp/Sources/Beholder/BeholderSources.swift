@@ -30,7 +30,7 @@ struct BeholderSourcePicker: View {
         Button { showing.toggle() } label: {
             Label(BeholderSources.summary(selected), systemImage: "line.3.horizontal.decrease.circle")
         }
-        .help("Choose which public sources receive the username")
+        .help("Choose automatic checks and unchecked browser links")
         .accessibilityLabel("Choose public sources")
         .accessibilityValue(BeholderSources.summary(selected))
         .popover(isPresented: $showing, arrowEdge: .bottom) {
@@ -70,11 +70,13 @@ struct BeholderSourceList: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(provider.title)
                                     Text(verbatim: provider.host).font(.caption).foregroundStyle(HUD.inkMuted)
+                                    Text(provider.accessLabel).font(.caption2).foregroundStyle(HUD.inkMuted)
                                 }
                             }
                             .toggleStyle(.checkbox)
                             .accessibilityLabel(provider.title)
-                            .accessibilityHint("Sends the username to \(provider.host) when you search")
+                            .accessibilityHint(provider.isManual ? "Unchecked link; opens only when you choose its browser button"
+                                : "Sends the username to \(provider.host) when you search")
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(maxHeight: 320)

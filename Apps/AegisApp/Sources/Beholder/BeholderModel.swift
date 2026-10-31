@@ -40,9 +40,10 @@ final class BeholderModel {
         generation = token
         username = name
         problem = nil
-        let sources = providers
-        findings = sources.map { BeholderFinding(provider: $0, status: .queued, sourceURL: $0.endpoint(name)) }
-        searching = true
+        findings = providers.map { $0.manualFinding(name) ?? BeholderFinding(provider: $0, status: .queued, sourceURL: $0.endpoint(name)) }
+        let sources = providers.filter { !$0.isManual }
+        searching = !sources.isEmpty
+        guard searching else { return }
         let client = client
         job = Task { [weak self] in
             await withTaskGroup(of: BeholderFinding.self) { group in
@@ -108,14 +109,14 @@ final class BeholderModel {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        return try encoder.encode(Report(schema: 1, username: username, exportedAt: Date(), findings: findings))
+        return try encoder.encode(Report(schema: 2, username: username, exportedAt: Date(), findings: findings))
     }
 
     private struct Report: Encodable {
         let schema: Int
         let username: String
         let exportedAt: Date
-        let warning = "Candidate accounts are not verified identities. No public result does not prove absence."
+        let warning = "Candidate accounts are not verified identities. Prepared manual links are unchecked. No public result does not prove absence."
         let findings: [BeholderFinding]
     }
 }

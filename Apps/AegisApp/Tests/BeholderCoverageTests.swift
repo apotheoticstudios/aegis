@@ -52,7 +52,7 @@ final class BeholderCoverageTests: XCTestCase {
     }
 
     func testClosedDestinationsAndProviderSyntax() throws {
-        for provider in BeholderProvider.allCases {
+        for provider in BeholderProvider.automaticSources {
             let url = try XCTUnwrap(provider.endpoint("ExampleAlex"))
             XCTAssertTrue(BeholderProvider.permits(url))
             var altered = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))

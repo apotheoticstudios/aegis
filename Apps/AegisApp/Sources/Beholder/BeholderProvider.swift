@@ -6,8 +6,43 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     case codeberg, dockerHub, keybase, lichess, chess, scratch, bluesky, mastodon
     case mastodonOnline, mstdnSocial, fosstodon, hachyderm, infosecExchange, masTo, socialVivaldi, writeAs, framaTube, mixcloud
 
+    case instagram
+    case twitter = "x"
+    case facebook, tiktok, threads, youtube, linkedIn
+    case pinterest, snapchat, twitch, reddit, tumblr, telegram, medium
+    case soundCloud, bandcamp, steam, deviantArt, behance, dribbble, artStation
+    case flickr, vsco, letterboxd, lastFm, goodreads, wattpad, strava
+    case patreon, koFi, buyMeACoffee, aboutMe, substack, kick, rumble
+    case minds, vk, vimeo, dailymotion, linktree, imgur, discogs
+    case trakt, duolingo, unsplash, untappd, codePen, productHunt, myspace
+    case spotify, genius
+
     static var automaticSources: [Self] {
-        allCases
+        allCases.filter { !$0.isManual }
+    }
+
+    var manualEntry: BeholderSocialEntry? {
+        guard socialAPIHost == nil else { return nil }
+        return Self.manualEntriesByID[rawValue]
+    }
+
+    private static let manualEntriesByID = Dictionary(uniqueKeysWithValues: BeholderSocialDirectory.entries.map { ($0.id, $0) })
+
+    var isManual: Bool {
+        manualEntry != nil
+    }
+
+    var accessLabel: String {
+        isManual ? "Open manually" : "Automatic check"
+    }
+
+    func manualFinding(_ username: String) -> BeholderFinding? {
+        guard let entry = manualEntry else { return nil }
+        let target = entry.profileURL(username)
+        var finding = BeholderFinding(provider: self, status: target == nil ? .unsupported : .manual)
+        finding.preparedProfileURL = target
+        finding.fields["Access"] = entry.reason
+        return finding
     }
 
     /// Expansion never silently adds destinations to an existing owner's search.
@@ -33,7 +68,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .scratch: "Scratch"
         case .bluesky: "Bluesky (.bsky.social)"
         case .mastodon: "Mastodon.social"
-        default: socialAPITitle ?? rawValue
+        default: manualEntry?.title ?? socialAPITitle ?? rawValue
         }
     }
 
@@ -51,7 +86,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .scratch: "api.scratch.mit.edu"
         case .bluesky: "public.api.bsky.app"
         case .mastodon: "mastodon.social"
-        default: socialAPIHost ?? ""
+        default: manualEntry?.host ?? socialAPIHost ?? ""
         }
     }
 
@@ -67,6 +102,9 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     }
 
     func supports(_ username: String) -> Bool {
+        if let manualEntry {
+            return manualEntry.profileURL(username) != nil
+        }
         if self != .bluesky, username.lowercased().hasSuffix(".bsky.social") {
             return false
         }
@@ -82,7 +120,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
 
     /// Destinations are constructed locally, never taken from returned profile fields.
     func endpoint(_ username: String) -> URL? {
-        guard Self.username(username) == username, supports(username) else { return nil }
+        guard !isManual, Self.username(username) == username, supports(username) else { return nil }
         var parts = URLComponents()
         parts.scheme = "https"
         parts.host = host
@@ -102,6 +140,9 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
 
     func profileURL(_ username: String) -> URL? {
         guard Self.username(username) == username, supports(username) else { return nil }
+        if let manualEntry {
+            return manualEntry.profileURL(username)
+        }
         var parts = URLComponents()
         parts.scheme = "https"
         switch self {
@@ -140,7 +181,7 @@ enum BeholderProvider: String, CaseIterable, Codable, Sendable, Identifiable {
 
 struct BeholderFinding: Codable, Sendable, Equatable, Identifiable {
     enum Status: String, Codable, Sendable {
-        case queued, checking, candidate, noResult, unsupported, limited, unavailable, cancelled
+        case queued, checking, candidate, noResult, unsupported, limited, unavailable, cancelled, manual
 
         var title: String {
             switch self {
@@ -152,6 +193,7 @@ struct BeholderFinding: Codable, Sendable, Equatable, Identifiable {
             case .limited: "Rate limited"
             case .unavailable: "Unavailable"
             case .cancelled: "Cancelled"
+            case .manual: "Open manually · unchecked"
             }
         }
     }
@@ -160,6 +202,8 @@ struct BeholderFinding: Codable, Sendable, Equatable, Identifiable {
     var status: Status
     var checkedAt: Date?
     var sourceURL: URL?
+    /// A prepared directory link, never a URL that Beholder requested or verified.
+    var preparedProfileURL: URL?
     var fields: [String: String] = [:]
     var id: BeholderProvider {
         provider

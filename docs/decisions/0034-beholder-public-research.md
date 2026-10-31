@@ -133,3 +133,14 @@ Their links are opened only by a separate owner click in the browser. Search its
 claim they were checked, use browser cookies, or bypass the platform's access controls. Source coverage and
 automatically checked accounts are different counts. The pinned Sherlock patterns inspire native fixed rules;
 Hunchly's provenance principle informs source and observation times, without bundling either tool.
+
+Integration uses the original four sources by default. Automatic source IDs retain their existing encoding;
+manual directory IDs are additive and are excluded from the transport allow-list. Preparing a manual finding
+does not create a task, request, check timestamp, request source URL or existence claim. Mixed searches schedule
+only automatic sources in the four-slot queue; Stop leaves unchecked links unchanged. Directory input rules
+still apply to manual links, and a known automatic adapter takes precedence over a directory template.
+
+Explicit JSON export is schema 2: it adds the `manual` status and optional `preparedProfileURL` for an unchecked
+directory target. Such a URL is not request provenance: `sourceURL` and `checkedAt` remain absent for manual
+findings. Automatic findings retain actual request provenance and time. Old finding JSON with the optional
+field absent still decodes. There is no change to AegisKit or IPC contracts, no import path or persistent case store.

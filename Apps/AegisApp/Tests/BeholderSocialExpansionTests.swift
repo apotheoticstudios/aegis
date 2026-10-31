@@ -122,7 +122,83 @@ final class BeholderSocialExpansionTests: XCTestCase {
         }
     }
 
+    @MainActor func testManualOnlySearchMakesNoRequestsOrExistenceClaims() async {
+        let transport = SocialCountingTransport()
+        let client = BeholderClient(transport: transport)
+        let model = BeholderModel(client: client)
+        let manual = BeholderProvider.allCases.filter(\.isManual)
+        XCTAssertGreaterThanOrEqual(manual.count, 40)
+        XCTAssertEqual(Set(manual.map(\.rawValue)), Set(BeholderSocialDirectory.entries.map(\.id)).subtracting(["mixcloud"]))
+        model.selected = Set(manual)
+        model.query = "ExampleAlex"
+        model.start()
+        XCTAssertFalse(model.searching)
+        XCTAssertEqual(model.findings.map(\.provider), manual)
+        for finding in model.findings {
+            XCTAssertTrue([.manual, .unsupported].contains(finding.status))
+            XCTAssertNil(finding.checkedAt)
+            XCTAssertNil(finding.sourceURL)
+            XCTAssertNil(finding.provider.endpoint("ExampleAlex"))
+            XCTAssertEqual(finding.provider.accessLabel, "Open manually")
+            if let target = finding.preparedProfileURL {
+                XCTAssertEqual(target.host, finding.provider.host)
+                XCTAssertFalse(BeholderProvider.permits(target))
+            }
+            let direct = await client.lookup(finding.provider, username: "ExampleAlex")
+            XCTAssertEqual(direct.status, finding.status)
+            XCTAssertEqual(parse(#"{"username":"ExampleAlex"}"#, finding.provider).status, finding.status)
+        }
+        let count = await transport.requestCount
+        XCTAssertEqual(count, 0)
+        XCTAssertEqual(model.candidates, 0)
+    }
+
+    @MainActor func testMixedSearchCancellationPreservesUncheckedLinks() async throws {
+        let transport = SocialCountingTransport()
+        let model = BeholderModel(client: BeholderClient(transport: transport))
+        model.selected = [.github, .instagram, .youtube]
+        model.query = "ExampleAlex"
+        model.start()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while await transport.requestCount == 0, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        model.cancel()
+        XCTAssertEqual(model.findings.map(\.status), [.cancelled, .manual, .manual])
+        XCTAssertFalse(model.searching)
+        let count = await transport.requestCount
+        XCTAssertEqual(count, 1)
+        model.clear()
+        try await Task.sleep(for: .milliseconds(15))
+        XCTAssertTrue(model.findings.isEmpty)
+    }
+
+    @MainActor func testExportDistinguishesPreparedLinksFromObservations() throws {
+        let model = BeholderModel()
+        model.selected = [.instagram]
+        model.query = "ExampleAlex"
+        model.start()
+        let report = try XCTUnwrap(JSONSerialization.jsonObject(with: model.export()) as? [String: Any])
+        XCTAssertEqual(report["schema"] as? Int, 2)
+        let finding = try XCTUnwrap((report["findings"] as? [[String: Any]])?.first)
+        XCTAssertEqual(finding["status"] as? String, "manual")
+        XCTAssertNotNil(finding["preparedProfileURL"])
+        XCTAssertNil(finding["sourceURL"])
+        XCTAssertNil(finding["checkedAt"])
+        let old = Data(#"{"provider":"github","status":"candidate","fields":{}}"#.utf8)
+        XCTAssertNil(try JSONDecoder().decode(BeholderFinding.self, from: old).preparedProfileURL)
+    }
+
     private func parse(_ json: String, _ provider: BeholderProvider, status: Int = 200) -> BeholderFinding {
         BeholderClient.parse(BeholderPayload(data: Data(json.utf8), status: status), provider: provider, username: "ExampleAlex", now: now)
+    }
+}
+
+private actor SocialCountingTransport: BeholderTransport {
+    private(set) var requestCount = 0
+    func get(_: URL, accept _: String) async throws -> BeholderPayload {
+        requestCount += 1
+        try await Task.sleep(for: .milliseconds(200))
+        return BeholderPayload(data: Data(#"{"login":"ExampleAlex"}"#.utf8), status: 200)
     }
 }
