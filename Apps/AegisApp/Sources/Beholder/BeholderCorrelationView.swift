@@ -8,6 +8,14 @@ struct BeholderCorrelationView: View {
     @State private var accountID: String?
     @State private var filter = ""
     @State private var target: BeholderPeopleView.Target?
+    @State private var tab: Int
+
+    init(research: BeholderModel, personID: UUID? = nil, accountID: String? = nil) {
+        self.research = research
+        _personID = State(initialValue: personID)
+        _accountID = State(initialValue: accountID)
+        _tab = State(initialValue: accountID == nil ? 0 : 1)
+    }
 
     private var person: BeholderPeople.Person? {
         research.people.people.first { $0.id == personID }
@@ -26,9 +34,9 @@ struct BeholderCorrelationView: View {
             }
             Text("Compare already-held public evidence. Shared, recycled or business identifiers can belong to several people.")
                 .font(.caption).foregroundStyle(HUD.inkMuted)
-            TabView {
-                personEvidence.tabItem { Text("Person and leads") }
-                accountEvidence.tabItem { Text("Account archive (\(research.correlation.accounts.count))") }
+            TabView(selection: $tab) {
+                personEvidence.tabItem { Text("Person and leads") }.tag(0)
+                accountEvidence.tabItem { Text("Account archive (\(research.correlation.accounts.count))") }.tag(1)
             }
         }
         .padding(HUD.space4).frame(width: 760, height: 620).foregroundStyle(HUD.ink).background(HUD.void)

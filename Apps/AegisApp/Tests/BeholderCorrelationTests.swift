@@ -1,4 +1,6 @@
-@testable import AegisApp
+@testable import Aegis
+import AppKit
+import SwiftUI
 import XCTest
 
 final class BeholderCorrelationTests: XCTestCase {
@@ -152,6 +154,44 @@ final class BeholderCorrelationTests: XCTestCase {
         ))
         try store.removeEvidence(XCTUnwrap(store.evidence.first?.id))
         XCTAssertTrue(store.evidence.isEmpty)
+    }
+
+    func testCaseInsensitiveRefreshRetainsConsistentAccountSpelling() {
+        var store = BeholderCorrelation()
+        XCTAssertTrue(store.observe(username: "Example", finding: candidate("Example")))
+        XCTAssertTrue(store.observe(username: "example", finding: candidate("example")))
+        XCTAssertEqual(store.accounts.count, 1)
+        XCTAssertEqual(store.accounts[0].username, "example")
+        XCTAssertEqual(store.accounts[0].finding.sourceURL, BeholderProvider.github.endpoint(store.accounts[0].username))
+    }
+
+    @MainActor func testSyntheticIdentifierWorkspaceRenders() throws {
+        guard ProcessInfo.processInfo.environment["RENDER_BEHOLDER"] == "1" else { throw XCTSkip("Opt-in synthetic evidence render") }
+        let model = BeholderModel(client: CorrelationClient())
+        let personID = try model.people.create("Example Alex")
+        var finding = candidate("example")
+        finding.fields["Public email"] = "example@example.com"
+        model.correlation.observe(username: "example", finding: finding)
+        let identifier = try XCTUnwrap(BeholderIdentifier(input: "example@example.com", kind: .email))
+        try model.correlation.identify(personID: personID, identifier: identifier, source: "https://example.com/contact", now: date)
+        for (name, accountID) in [("leads", nil as String?), ("archive", "github:example")] {
+            let size = CGSize(width: 760, height: 620)
+            let host = NSHostingView(rootView: BeholderCorrelationView(research: model, personID: personID, accountID: accountID)
+                .environment(\.colorScheme, .dark))
+            let window = NSWindow(
+                contentRect: NSRect(origin: CGPoint(x: -4000, y: -4000), size: size),
+                styleMask: .borderless,
+                backing: .buffered,
+                defer: false
+            )
+            window.contentView = host; window.orderFront(nil)
+            defer { window.orderOut(nil) }
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            try png.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("beholder-evidence-\(name).png"))
+        }
     }
 
     @MainActor func testCrossSearchArchiveExportAndClearWithoutIdentifierRequests() async throws {

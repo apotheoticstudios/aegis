@@ -77,7 +77,7 @@ struct BeholderCorrelation: Codable, Equatable, Sendable {
         guard eligible || existing != nil else { return true }
         guard eligible ? validAccount(username, finding) : finding.sourceURL == finding.provider.endpoint(username) else { return false }
         if let existing {
-            accounts[existing].finding = finding
+            accounts[existing] = Account(id: id, username: username, finding: finding)
         } else {
             guard accounts.count < Self.accountLimit else { return false }
             accounts.append(Account(id: id, username: username, finding: finding))
