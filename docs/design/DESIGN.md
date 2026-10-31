@@ -571,6 +571,8 @@ Aegis integrates [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view)
 
 Air, eruptions and warnings (2026-10-26, ADR-0024): the brief adds the air at home (Open-Meteo, home rounded to about 10 km), any Bureau of Meteorology warnings covering home (its public warning files, matched to home's districts and nearby river gauges on the Mac) and any significant eruption within 5,000 km in the last week (GDACS); "how's the air?", "any volcano alerts?" and "any weather warnings?" answer the same, without the globe.
 
+Space weather, disasters and what's new (2026-10-31, #115, ADR-0024; ideas from worldmonitor, OSIRIS and Crucix, no code copied): "any aurora tonight?" checks NOAA's Kp forecast and home's geomagnetic latitude (worked out on the Mac); "any disasters near me?" lists GDACS's orange and red alerts (earthquakes, cyclones, floods, eruptions, wildfires, droughts) within 5,000 km this week. The brief adds a storm that may show aurora at home (or any strong one) and the region's disasters, each only for 12 hours after it first appears or escalates (Crucix's sweep delta); Bureau warnings for home always stay.
+
 ### Services and keys (as God's Eye View uses them)
 
 | Service | Needed for | Cost | Decision |

@@ -1,13 +1,19 @@
 import Foundation
 
-/// Air quality, eruptions and Australian weather warnings around home (ADR-0024), for the brief and the owner's
-/// questions. Only the air-quality request carries a place: home rounded to 0.1° (about 10 km). The eruption list and
-/// the Bureau of Meteorology's warning files are fetched whole and matched against home on the Mac. This type builds
-/// the requests and reads the answers; the panel fetches them.
+/// Air quality, eruptions and other disasters, space weather and Australian weather warnings around home (ADR-0024),
+/// for the brief and the owner's questions. Only the air-quality request carries a place: home rounded to 0.1° (about
+/// 10 km). The disaster list, the Kp forecast and the Bureau of Meteorology's warning files are fetched whole and matched
+/// against home on the Mac. This type builds the requests and reads the answers; the panel fetches them.
 public enum WorldAlerts {
     /// What the owner asked about.
     public enum Kind: String, Sendable, CaseIterable {
-        case air, volcanoes, warnings
+        case air, volcanoes, warnings, space, disasters
+    }
+
+    /// A regional alert for the brief. `key` names the event and its level, so an escalation counts as new (#115).
+    public struct Alert: Sendable, Equatable {
+        public let key: String
+        public let text: String
     }
 
     // MARK: - Air quality
@@ -71,29 +77,30 @@ public enum WorldAlerts {
         return (band, band < bands.count ? bands[band] : "hazardous")
     }
 
-    // MARK: - Volcanoes
+    // MARK: - Eruptions and other disasters
 
-    /// Eruptions within this distance of home count as the region: from eastern Australia, Indonesia to New Zealand.
-    public static let volcanoRegionKm = 5000.0
+    /// Alerts within this distance of home count as the region: from eastern Australia, Indonesia to New Zealand.
+    public static let regionKm = 5000.0
 
-    /// Significant eruptions worldwide over the last 30 days, from GDACS (the UN and EU's disaster alerts; free, no
-    /// key). Nothing about home is sent.
-    public static func volcanoesURL(now: Date) -> URL? {
+    /// GDACS's significant alerts worldwide over the last 30 days (the UN and EU's disaster alerts; free, no key):
+    /// earthquakes, cyclones, floods, eruptions, wildfires and droughts. Nothing about home is sent.
+    public static func disastersURL(now: Date) -> URL? {
         let day = DateFormatter()
         day.locale = Locale(identifier: "en_US_POSIX")
         day.timeZone = TimeZone(identifier: "UTC")
         day.dateFormat = "yyyy-MM-dd"
         let from = day.string(from: now.addingTimeInterval(-30 * 86400)), to = day.string(from: now)
         let base = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH" // privacy-guard: allow-network GDACS, ADR-0024
-        return URL(string: base + "?eventlist=VO&fromDate=\(from)&toDate=\(to)")
+        return URL(string: base + "?eventlist=EQ;TC;FL;VO;WF;DR&fromDate=\(from)&toDate=\(to)")
     }
 
-    /// "Kanlaon, Philippines: an orange-alert eruption on 10 October, 4,800 km from home." for each eruption in the
-    /// region within the last `days`, nearest first. Empty data (GDACS answers 204 when there are none) is no eruptions;
-    /// nil when the answer can't be read.
-    public static func volcanoes(
-        _ data: Data, latitude: Double, longitude: Double, now: Date, days: Double, locale: Locale = .autoupdatingCurrent
-    ) -> [String]? {
+    /// "Kanlaon, Philippines: an orange-alert eruption on 10 October, 4,800 km from home." for each alert in the region
+    /// within the last `days`, nearest first; `only` keeps one GDACS type ("VO" for eruptions). Empty data (GDACS answers
+    /// 204 when there are none) is no alerts; nil when the answer can't be read.
+    public static func disasters(
+        _ data: Data, only: String? = nil, latitude: Double, longitude: Double, now: Date, days: Double,
+        locale: Locale = .autoupdatingCurrent
+    ) -> [Alert]? {
         struct List: Decodable {
             struct Feature: Decodable {
                 struct Geometry: Decodable {
@@ -101,6 +108,8 @@ public enum WorldAlerts {
                 }
 
                 struct Properties: Decodable {
+                    let eventtype: String?
+                    let eventid: Int?
                     let eventname: String?
                     let country: String?
                     let alertlevel: String?
@@ -124,19 +133,106 @@ public enum WorldAlerts {
         let speak = DateFormatter()
         speak.locale = locale
         speak.dateFormat = "d MMMM"
-        let found = list.features.compactMap { feature -> (Double, String)? in
-            guard let point = feature.geometry?.coordinates, point.count >= 2, let name = feature.properties.eventname,
-                  let date = feature.properties.todate.flatMap(parse.date(from:)), now.timeIntervalSince(date) <= days * 86400
+        let kinds = ["EQ": "earthquake", "TC": "tropical cyclone", "FL": "flood", "VO": "eruption", "WF": "wildfire", "DR": "drought"]
+        let found = list.features.compactMap { feature -> (Double, Alert)? in
+            let event = feature.properties
+            guard let type = event.eventtype, let kind = kinds[type], only == nil || only == type,
+                  let point = feature.geometry?.coordinates, point.count >= 2,
+                  let date = event.todate.flatMap(parse.date(from:)), now.timeIntervalSince(date) <= days * 86400
             else { return nil }
             let distance = kilometres(latitude, longitude, point[1], point[0])
-            guard distance <= volcanoRegionKm else { return nil }
-            let kind = feature.properties.alertlevel.map { $0.lowercased() + "-alert eruption" } ?? "eruption"
-            let article = "aeiou".contains(kind.prefix(1)) ? "an" : "a"
-            let country = feature.properties.country.map { ", " + $0 } ?? ""
+            let countries = (event.country ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            let place = countries.count > 2 ? "\(countries[0]), \(countries[1]) and \(countries.count - 2) more" : countries
+                .joined(separator: " and ")
+            // Volcanoes and cyclones have names; the rest are known by their place.
+            let title = [type == "VO" || type == "TC" ? event.eventname ?? "" : "", place].filter { !$0.isEmpty }.joined(separator: ", ")
+            guard distance <= regionKm, !title.isEmpty else { return nil }
+            let level = event.alertlevel.map { $0.lowercased() + "-alert " + kind } ?? kind
+            let article = "aeiou".contains(level.prefix(1)) ? "an" : "a"
             let away = (Int((distance / 100).rounded()) * 100).formatted(.number.locale(locale))
-            return (distance, "\(name)\(country): \(article) \(kind) on \(speak.string(from: date)), \(away) km from home.")
+            let key = "\(type)-\(event.eventid.map(String.init) ?? title)-\(event.alertlevel ?? "")"
+            return (distance, Alert(key: key, text: "\(title): \(article) \(level) on \(speak.string(from: date)), \(away) km from home."))
         }
         return found.sorted { $0.0 < $1.0 }.map(\.1)
+    }
+
+    // MARK: - Space weather
+
+    /// NOAA's planetary Kp index, observed and forecast in 3-hour steps (public, no key). Nothing about home is sent: home's
+    /// geomagnetic latitude is worked out here.
+    public static let spaceURL = URL(
+        string: "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json" // privacy-guard: allow-network NOAA, ADR-0024
+    )!
+
+    /// The answer to "any aurora tonight?" for the step under way and the next 24 hours, and an alert for the brief when a
+    /// storm may make aurora visible from home or is strong (G3+). Nil when the answer can't be read.
+    public static func space(
+        _ data: Data, latitude: Double, longitude: Double, now: Date, timeZone: TimeZone = .current,
+        locale: Locale = .autoupdatingCurrent
+    ) -> (answer: String, alert: Alert?)? {
+        struct Step: Decodable {
+            let timeTag: String
+            let kp: Double
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let steps = try? decoder.decode([Step].self, from: data) else { return nil }
+        let parse = DateFormatter()
+        parse.locale = Locale(identifier: "en_US_POSIX")
+        parse.timeZone = TimeZone(identifier: "UTC")
+        parse.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        let ahead = steps.compactMap { step -> (start: Date, step: Step)? in
+            guard let start = parse.date(from: step.timeTag), start > now.addingTimeInterval(-3 * 3600),
+                  start <= now.addingTimeInterval(86400)
+            else { return nil }
+            return (start, step)
+        }
+        guard let peak = ahead.max(by: { $0.step.kp < $1.step.kp }) else { return nil }
+        let kp = peak.step.kp
+        let scale = min(5, Int(kp.rounded()) - 4) // NOAA's G scale: Kp 5 is G1, Kp 9 is G5.
+        var answer: String
+        if scale >= 1 {
+            let words = ["minor", "moderate", "strong", "severe", "extreme"][scale - 1]
+            let speak = DateFormatter()
+            speak.locale = locale
+            speak.timeZone = timeZone
+            speak.dateFormat = "h a"
+            let when = peak.start <= now ? "is under way" : "is forecast around \(speak.string(from: peak.start).lowercased())"
+            answer = "\(words == "extreme" ? "An" : "A") \(words) geomagnetic storm (G\(scale)) \(when)."
+        } else {
+            answer = "No geomagnetic storm is forecast for the next day (Kp \(Int(kp.rounded())) at most)."
+        }
+        // shortcut: a rule of thumb (the auroral oval's edge by Kp, plus about 8° seen towards the horizon); NOAA's OVATION
+        // model is the upgrade if it misleads.
+        let visible = abs(geomagneticLatitude(latitude, longitude)) >= 58.5 - 2 * kp
+        answer += visible
+            ? " Aurora may be visible from home looking \(latitude < 0 ? "south" : "north"), away from city lights."
+            : " Aurora isn't likely to be seen from home."
+        let alert = scale >= 1 && (visible || scale >= 3) ? Alert(key: "space-G\(scale)-" + peak.step.timeTag.prefix(10), text: answer) :
+            nil
+        return (answer, alert)
+    }
+
+    /// Geomagnetic latitude on a dipole whose north pole is at 80.8° N, 72.6° W (IGRF, 2025).
+    static func geomagneticLatitude(_ latitude: Double, _ longitude: Double) -> Double {
+        let rad = Double.pi / 180, poleLat = 80.8 * rad, poleLon = -72.6 * rad
+        let lat = latitude * rad, lon = longitude * rad
+        return asin(sin(lat) * sin(poleLat) + cos(lat) * cos(poleLat) * cos(lon - poleLon)) / rad
+    }
+
+    // MARK: - What's new
+
+    /// Crucix's sweep delta, re-implemented (#115): a regional alert stays in the brief for 12 hours after it first appears,
+    /// or escalates (a new key), then drops out. Returns the alerts to show and the first-seen times, kept 30 days.
+    public static func fresh(_ alerts: [Alert], firstSeen: [String: Date], now: Date) -> (alerts: [Alert], firstSeen: [String: Date]) {
+        var seen = firstSeen.filter { now.timeIntervalSince($0.value) < 30 * 86400 }
+        let shown = alerts.filter { alert in
+            let first = seen[alert.key] ?? now
+            seen[alert.key] = first
+            return now.timeIntervalSince(first) < 12 * 3600
+        }
+        return (shown, seen)
     }
 
     // MARK: - Australian weather warnings

@@ -1,11 +1,12 @@
 import AegisKit
 import Foundation
 
-/// Air quality, eruptions and Bureau of Meteorology warnings around home (ADR-0024), for the brief and the owner's
-/// questions. Only the air-quality request carries a place, home rounded to about 10 km; eruptions and warnings are
-/// fetched whole and matched against home here.
+/// Air quality, eruptions and other disasters, space weather and Bureau of Meteorology warnings around home (ADR-0024),
+/// for the brief and the owner's questions. Only the air-quality request carries a place, home rounded to about 10 km;
+/// the rest are fetched whole and matched against home here.
 enum WorldFeeds {
-    /// The answer to "how's the air?", "any volcano alerts?" or "any weather warnings?".
+    /// The answer to "how's the air?", "any volcano alerts?", "any weather warnings?", "any aurora tonight?" or
+    /// "any disasters near me?".
     static func answer(_ kind: WorldAlerts.Kind) async -> String {
         // App tests run inside Aegis: they stay offline.
         guard !WorldSidecar.isTestHost else { return "That isn't checked while testing." }
@@ -14,9 +15,18 @@ enum WorldFeeds {
         case .air:
             return await air(home) ?? "I couldn't get the air quality just now."
         case .volcanoes:
-            guard let found = await volcanoes(home, days: 30) else { return "I couldn't get the eruption alerts just now." }
-            let region = Int(WorldAlerts.volcanoRegionKm).formatted()
-            return found.isEmpty ? "No major eruptions within \(region) km of home in the last month." : found.joined(separator: " ")
+            guard let found = await disasters(home, only: "VO", days: 30) else { return "I couldn't get the eruption alerts just now." }
+            let region = Int(WorldAlerts.regionKm).formatted()
+            return found.isEmpty ? "No major eruptions within \(region) km of home in the last month." : found.map(\.text)
+                .joined(separator: " ")
+        case .disasters:
+            guard let found = await disasters(home, days: 7) else { return "I couldn't get the disaster alerts just now." }
+            let region = Int(WorldAlerts.regionKm).formatted()
+            return found.isEmpty
+                ? "No orange or red disaster alerts within \(region) km of home this week."
+                : found.prefix(5).map(\.text).joined(separator: " ")
+        case .space:
+            return await space(home)?.answer ?? "I couldn't get NOAA's space weather just now."
         case .warnings:
             switch await warnings(home) {
             case .failed: return "I couldn't reach the Bureau of Meteorology just now."
@@ -28,20 +38,25 @@ enum WorldFeeds {
         }
     }
 
-    /// The brief's lines: the air, any warnings for home (three at most) and any eruption in the region this week.
+    /// The brief's lines: the air, any warnings for home (three at most), then what's new (#115): a storm that may show
+    /// aurora at home, and disasters in the region this week, each for 12 hours after it first appears.
     static func briefLines(_ home: WorldHome.Point) async -> [String] {
         async let airLine = air(home)
         async let warned = warnings(home)
-        async let erupted = volcanoes(home, days: 7)
+        async let regional = disasters(home, days: 7)
+        async let spaceWeather = space(home)
         var lines = await airLine.map { [$0] } ?? []
         if case let .found(found) = await warned {
             lines += found.prefix(3)
         }
-        let eruptions = await erupted ?? []
-        return lines + eruptions
+        let alerts = await [spaceWeather?.alert].compactMap(\.self) + (regional ?? [])
+        let seen = UserDefaults.aegis.dictionary(forKey: "worldAlertsSeen") as? [String: Date] ?? [:]
+        let fresh = WorldAlerts.fresh(alerts, firstSeen: seen, now: Date())
+        UserDefaults.aegis.set(fresh.firstSeen, forKey: "worldAlertsSeen")
+        return lines + fresh.alerts.map(\.text)
     }
 
-    private static let session = URLSession(configuration: .ephemeral) // privacy-guard: allow-network air and eruptions, ADR-0024
+    private static let session = URLSession(configuration: .ephemeral) // privacy-guard: allow-network air, disasters and Kp, ADR-0024
 
     private static func air(_ home: WorldHome.Point) async -> String? {
         guard let url = WorldAlerts.airURL(latitude: home.latitude, longitude: home.longitude),
@@ -50,11 +65,17 @@ enum WorldFeeds {
         return WorldAlerts.air(data, now: Date())
     }
 
-    private static func volcanoes(_ home: WorldHome.Point, days: Double) async -> [String]? {
-        guard let url = WorldAlerts.volcanoesURL(now: Date()), let (data, response) = try? await session.data(from: url),
+    private static func disasters(_ home: WorldHome.Point, only: String? = nil, days: Double) async -> [WorldAlerts.Alert]? {
+        guard let url = WorldAlerts.disastersURL(now: Date()), let (data, response) = try? await session.data(from: url),
               let status = (response as? HTTPURLResponse)?.statusCode, status == 200 || status == 204
         else { return nil }
-        return WorldAlerts.volcanoes(data, latitude: home.latitude, longitude: home.longitude, now: Date(), days: days)
+        return WorldAlerts.disasters(data, only: only, latitude: home.latitude, longitude: home.longitude, now: Date(), days: days)
+    }
+
+    private static func space(_ home: WorldHome.Point) async -> (answer: String, alert: WorldAlerts.Alert?)? {
+        guard let (data, response) = try? await session.data(from: WorldAlerts.spaceURL), (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return WorldAlerts.space(data, latitude: home.latitude, longitude: home.longitude, now: Date())
     }
 
     private enum Warnings {

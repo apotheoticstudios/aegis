@@ -89,6 +89,29 @@ Verified (Plaso's parser):
 
 None reads the macOS stores the way Aegis does. They are references for brief structure and triage categories, not for code.
 
+## World view: public-data dashboards (#115)
+
+Projects the owner shared on 2026-10-31 for ideas for the World view. Read on GitHub that day (README, licence, feature list); none was run.
+
+| Project | Licence | What it is |
+| --- | --- | --- |
+| [worldmonitor](https://github.com/koala73/worldmonitor) | AGPL-3.0-only | News and geopolitics dashboard (globe.gl and deck.gl), AI briefs from curated feeds, a Country Instability Index, finance variants, a Tauri desktop app. **Ideas only.** |
+| [OSIRIS](https://github.com/simplifaisoul/osiris) | MIT | Next.js and MapLibre OSINT map: flights, CCTV, quakes, fires, NASA EONET, NOAA space weather, news streams, a hand-kept conflict-zone list, plus a recon toolkit and crypto tracing. Code could be copied with attribution and an ADR, but none is: Aegis's versions are a few lines each. Its repo description carries a crypto token address, so treat its links and dependencies with care. MIT covers its code, not the data of the sources it lists. |
+| [Crucix](https://github.com/calesthio/Crucix) | AGPL-3.0 | Node "intelligence terminal": 27 public feeds swept every 15 minutes, a sweep delta (what's new, escalated or eased), FLASH/PRIORITY/ROUTINE alert tiers, Telegram and Discord bots. **Ideas only.** |
+
+What Aegis took (#115, all re-implemented):
+- **Space weather** (OSIRIS uses NOAA SWPC): NOAA's Kp forecast, with whether aurora may be seen from home.
+- **More disaster types** (all three aggregate disasters): Aegis's existing GDACS request now covers all its types.
+- **What's new** (Crucix's sweep delta): regional alerts leave the brief 12 hours after they first appear, unless they escalate.
+
+Next, by the owner's choice: world headlines pinned on the globe (worldmonitor's and Crucix's news layers; GDELT), as its own step.
+
+Left out:
+- **God's Eye View already has them:** flights, ships, satellites, quakes, fires, cameras, air quality, radio.
+- **Off-mission:** markets, trade ideas, crypto tracing, sanctions search, the port-scan and WHOIS toolkit.
+- **Against Aegis's rules:** scraping Telegram, Reddit or Bluesky; Telegram and Discord push alerts (Aegis is silent until opened); cloud AI keys.
+- **Not worth it:** the hand-kept conflict-zone list (political, goes stale), and radiation sensors (little value in Australia).
+
 ## Defending against instructions planted in collected text
 
 - **Spotlighting** (Microsoft, [arXiv 2403.14720](https://arxiv.org/abs/2403.14720)):
