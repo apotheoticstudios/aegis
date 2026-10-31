@@ -16,7 +16,7 @@ struct BeholderQueryPlannerView: View {
             HStack {
                 Text("RESEARCH PLANNER").hudType(.data)
                 Spacer()
-                Button("Done") { dismiss() }
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             Text("Prepare a precise public search").font(.title2)
             Text("This scratchpad stays on your Mac. Copy the query when ready to use it in a search service.")
@@ -24,7 +24,7 @@ struct BeholderQueryPlannerView: View {
             Picker("Input type", selection: $kind) {
                 ForEach(BeholderQueryPlanner.Kind.allCases) { Text($0.rawValue).tag($0) }
             }
-            TextField("Enter a " + kind.rawValue.lowercased(), text: $input).textFieldStyle(.roundedBorder)
+            TextField("Enter " + (kind == .email ? "an " : "a ") + kind.rawValue.lowercased(), text: $input).textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Research " + kind.rawValue.lowercased())
             if kind == .phone {
                 Picker("Phone format", selection: $region) {
@@ -44,7 +44,7 @@ struct BeholderQueryPlannerView: View {
                 Text(verbatim: plan.query).font(.system(.body, design: .monospaced)).textSelection(.enabled)
                     .padding(HUD.space3).frame(maxWidth: .infinity, alignment: .leading).background(HUD.surface)
                 Button(copied ? "Copied" : "Copy query") {
-                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.prepareForNewContents(with: .currentHostOnly)
                     copied = NSPasteboard.general.setString(plan.query, forType: .string)
                 }
                 ForEach(plan.notes, id: \.self) { Text($0).font(.caption).foregroundStyle(HUD.inkMuted) }

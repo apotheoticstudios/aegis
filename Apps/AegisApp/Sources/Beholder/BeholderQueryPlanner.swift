@@ -40,11 +40,12 @@ enum BeholderQueryPlanner {
     }
 
     enum Problem: Error, Equatable {
-        case input, scope
+        case input, scope, phoneFormat
         var message: String {
             switch self {
             case .input: "Enter a valid value for the selected input type. Quotes, hidden controls and search operators are not accepted."
             case .scope: "Use a domain such as example.com, without a URL, path, port or search operators."
+            case .phoneFormat: "Use + and a country code, or select Australia (AU) for a national number. Omit optional trunk prefixes such as (0)."
             }
         }
     }
@@ -53,8 +54,10 @@ enum BeholderQueryPlanner {
         input: String, kind: Kind, scope: String = "", document: DocumentKind = .any,
         region: PhoneRegion = .international
     ) -> Result<Plan, Problem> {
-        guard input.utf8.count <= 512, safe(input), safe(scope), scope.utf8.count <= 253,
-              let seed = normalize(input, kind: kind, region: region) else { return .failure(.input) }
+        guard input.utf8.count <= 512, safe(input), safe(scope), scope.utf8.count <= 253 else { return .failure(.input) }
+        guard let seed = normalize(input, kind: kind, region: region) else {
+            return .failure(kind == .phone ? .phoneFormat : .input)
+        }
         let trimmedScope = scope.trimmingCharacters(in: .whitespaces)
         let host = trimmedScope.isEmpty ? nil : domain(trimmedScope)
         guard trimmedScope.isEmpty || host != nil else { return .failure(.scope) }
@@ -71,6 +74,7 @@ enum BeholderQueryPlanner {
         ]
         if kind == .phone {
             notes.append("Phone formatting only; existence, ownership, carrier and location have not been checked.")
+            notes.append("An exact phone query can miss pages using national or spaced formatting.")
         }
         if host != nil {
             notes.append("The site filter may include subdomains; search engines decide how operators are interpreted.")
@@ -115,7 +119,8 @@ enum BeholderQueryPlanner {
         guard value.range(of: #"\A\+?[0-9 ().-]+\z"#, options: .regularExpression) != nil else { return nil }
         let digits = value.filter(\.isNumber)
         if value.hasPrefix("+") {
-            guard (7 ... 15).contains(digits.count), digits.first != "0" else { return nil }
+            guard (7 ... 15).contains(digits.count), digits.first != "0", !value.contains("(0)"),
+                  !(digits.hasPrefix("61") && digits.dropFirst(2).first == "0") else { return nil }
             return "+" + digits
         }
         guard region == .australia, digits.count == 10, digits.first == "0",

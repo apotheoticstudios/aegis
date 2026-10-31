@@ -68,6 +68,15 @@ final class BeholderQueryPlannerTests: XCTestCase {
         }
     }
 
+    func testInternationalTrunkPrefixesAreRejectedWithoutDroppingSignificantZeros() throws {
+        for value in ["+61 (0)4 0000 0001", "+61 0400 000 001", "+61 (0) 400000001"] {
+            XCTAssertThrowsError(try Planner.build(input: value, kind: .phone).get())
+        }
+        // A synthetic international-format string: zero after another country code is not stripped globally.
+        XCTAssertEqual(try Planner.build(input: "+39 00 0000 0000", kind: .phone).get().seed, "+390000000000")
+        XCTAssertEqual(Planner.build(input: "0400 000 001", kind: .phone), .failure(.phoneFormat))
+    }
+
     func testInvalidValuesDoNotProducePlans() {
         let cases: [(Planner.Kind, [String])] = [
             (.username, ["", "https://example.com", "a@example.com", "Example..Alex"]),
