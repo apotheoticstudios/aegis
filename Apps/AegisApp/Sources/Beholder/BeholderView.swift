@@ -24,6 +24,7 @@ struct BeholderDashboard: View {
     @State private var exporting = false
     @State private var document = BeholderDocument()
     @State private var exportProblem: String?
+    @State private var planning = false
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
     init(research: BeholderModel, followsPanel: Bool = false) {
@@ -56,6 +57,7 @@ struct BeholderDashboard: View {
             }
             HStack(spacing: HUD.space4) {
                 BeholderSourcePicker(selected: $research.selected)
+                Button("Research planner…") { planning = true }
                 Spacer()
                 Button("Export case…") { prepareExport() }.disabled(research.findings.isEmpty || research.searching)
             }
@@ -94,6 +96,7 @@ struct BeholderDashboard: View {
         }
         .foregroundStyle(HUD.ink).padding(HUD.space4)
         .environment(\.hudTheme, theme)
+        .sheet(isPresented: $planning) { BeholderQueryPlannerView().environment(\.hudTheme, theme) }
         .onDisappear { research.cancel() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {

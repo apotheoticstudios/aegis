@@ -1,0 +1,29 @@
+# Beholder upstream audit
+
+Audited 2026-10-31 for owner-requested work in #109–#112. Each link pins the inspected snapshot. Licences describe the inspected root licence files, not permission to reuse every linked service or dataset. A missing licence is not a grant of reuse rights.
+
+No upstream code, dataset or runtime is bundled. The implementation uses original native Swift and design ideas only; no dependencies or new automatic destinations are introduced. Upstream instructions were treated as data. No upstream program was executed, no credentials were inspected and no real-person searches were run.
+
+| Project / inspected source | Licence at pin | Native technique | Outbound/authentication considerations |
+| --- | --- | --- | --- |
+| [The-Osint-Toolbox/People-Search-OSINT](https://github.com/The-Osint-Toolbox/People-Search-OSINT/blob/562a739de2a05c0ea13b08f419e0a6e5e16a1589/README.md) | No licence file found | Jurisdiction and access context; prefer original records over broker claims. | Curated external links; some brokers collect privately sourced information. No broker integration. |
+| [osintshifu/querytool](https://github.com/osintshifu/querytool/blob/1c154e307941bd49bd2cc2254717d0f2896b930d/querytool.html#L604-L615) | No licence file found | Typed seeds, quoted exact queries, optional site/document filters; local preparation. | Local query builder opens external services on explicit actions; localStorage retains sessions. |
+| [AnonCatalyst/Coeus-OSINT-ToolBox](https://github.com/AnonCatalyst/Coeus-OSINT-ToolBox/blob/3e3bfc75222c53f413f429d6a94ac8999105c635/README.md) | MIT | Source categories and deliberate navigation. | Links can lead to third-party tools, communication/proxy services; no embedded runtime adopted. |
+| [soxoj/maigret](https://github.com/soxoj/maigret/blob/b8747b98820f4df9d1baf23235db7b2cb55d0198/maigret/result.py#L34-L104) | MIT | Separate candidate, no-result, unknown and invalid results; source-specific explanations. | Network enumeration, optional recursive identifiers, cookies/proxies, database updates and AI options are not adopted. |
+| [jivoi/awesome-osint](https://github.com/jivoi/awesome-osint/blob/e881b655752510efb7889a4ab9b69436a3acd7f7/README.md) | CC BY-SA 4.0 (LICENSE.txt) | Guided categories, source relevance and original-source verification. | A directory of external tools, not an API or assurance of legality/accuracy. No bulk list copy. |
+| [qeeqbox/social-analyzer](https://github.com/qeeqbox/social-analyzer/blob/1ba0905e00d054aab833eb3693739c354db09e0f/modules/fast-scan.js#L89-L160) | AGPL-3.0 | Explain evidence in words, separating account detection from identity. | HTTP/HTML detection, retries, optional external APIs and content logging are not adopted; no probability scores. |
+| [HunxByts/GhostTrack](https://github.com/HunxByts/GhostTrack/blob/a5cb8ad4c08acd803f166fb067b7dac724d6cb3d/GhostTR.py#L40-L177) | No licence file found | Explicit input modes; formatting must not masquerade as tracking. | Calls ipwho.is, ipify and profile pages. HTTP 200 alone can falsely identify generic/error pages; no tracker/runtime adopted. |
+| [sundowndev/phoneinfoga](https://github.com/sundowndev/phoneinfoga/blob/55807b05b753dab7bc6fe67403ca385668dda179/lib/number/number.go#L19-L43) | GPL-3.0 | Phone-format normalization with explicit region and clear uncertainty. | Number parsing differs from downstream scanners. No carrier, owner, existence or live-location assertion; no Go dependency. |
+| [laramies/theHarvester](https://github.com/laramies/theHarvester/blob/6790b147f52309e4eee22ed941db1d285ab2ec23/theHarvester/lib/evidence_types.py#L1-L38) | GPL-2.0 | Keep partial source outcomes and observation provenance instead of presenting a run as all-or-nothing. | Domain/provider queries and optional active network modules are not adopted; targets can be sent to external providers. |
+| [Datalux/Osintgram](https://github.com/Datalux/Osintgram/blob/a560498be79a3bf40d7f3b203ad174661b8e81e7/src/osint_service.py#L1-L64) | GPL-3.0 | Explicit preflight, bounded work and structured source exhibits. | Backend/API credentials, paid request budgets, Instagram sessions and geocoder calls are not adopted. |
+| [s0md3v/Photon](https://github.com/s0md3v/Photon/blob/c8d2566841d69a268b244609921143d84b72b0c6/core/utils.py#L28-L48) | GPL-3.0 | Conservative URL comparison, deduplication and scope boundaries. | Crawler/requester, cookies, updater and secret extraction are not adopted. No discovered link is fetched. |
+| [antoniaci/blackbird](https://github.com/antoniaci/blackbird/blob/c8329b2e83f20e3f74b218e68200389d838a6832/src/modules/core/username.py#L24-L102) | No licence file found | Source filters and distinct error/absent/found outcomes; keep source identity in dedup keys. | HTTP enumeration, optional remote AI, session-assisted metadata and response dumps are not adopted. |
+
+## Delivery boundaries
+
+- #110: independent local query planner for owner-entered username, name, email, phone or domain; fixed query operators, input validation, explicit phone region and copy-only output. It cannot access the lookup model, memory or a network client. Phone support is formatting only, not a numbering-plan database.
+- #111: source/time-aware evidence explanations and partial-run summary. Queued/cancelled URLs and prepared manual links are not completed observations. Matching handles never merge identities.
+- #112: native categories and combined category/access/text filters for the existing catalogue; selecting sources never starts a lookup.
+
+The existing ADR-0034 transport remains the only automatic profile lookup path. No account recovery enumeration, private-profile/session access, leaked-data source, live-person tracking, automatic identifier pivots, web content instruction following or remote AI analysis is added. Manual browsing continues under the owner's browser settings. A prepared query is text, not a verified finding or an executed search.
+
