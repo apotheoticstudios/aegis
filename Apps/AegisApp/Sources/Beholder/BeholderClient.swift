@@ -140,6 +140,11 @@ struct BeholderClient: BeholderSearching {
               provider == .hackerNews ? handle == username : handle.lowercased() == username.lowercased() else { return result }
         result.status = .candidate
         result.fields["Handle"] = handle
+        if provider == .github, let raw = object["email"] as? String,
+           let identifier = BeholderIdentifier(input: raw, kind: .email)
+        {
+            result.fields["Public email"] = identifier.value
+        }
         for (label, key) in [
             ("Display name", "name"), ("Bio", "bio"), ("Bio", "summary"), ("About", "about"),
             ("Account type", "type"), ("Account state", "state"),

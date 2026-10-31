@@ -20,12 +20,13 @@ struct BeholderScreen: View {
 
 struct BeholderDashboard: View {
     private enum Sheet: Identifiable {
-        case planner, people, sources, link(BeholderPeopleView.Target)
+        case planner, people, sources, evidence, link(BeholderPeopleView.Target)
         var id: String {
             switch self {
             case .planner: "planner"
             case .people: "people"
             case .sources: "sources"
+            case .evidence: "evidence"
             case let .link(target): target.id.uuidString
             }
         }
@@ -67,7 +68,7 @@ struct BeholderDashboard: View {
                     Button("Stop") { research.cancel() }
                 }
                 Button("Clear case") {
-                    if research.people.people.isEmpty {
+                    if research.people.people.isEmpty, research.correlation.accounts.isEmpty {
                         research.clear()
                     } else {
                         clearing = true
@@ -80,9 +81,11 @@ struct BeholderDashboard: View {
                 }.accessibilityLabel("Choose public sources").accessibilityValue(BeholderSources.summary(research.selected))
                 Button("Research planner…") { sheet = .planner }
                 Button("People (\(research.people.people.count))…") { sheet = .people }
+                Button("Evidence…") { sheet = .evidence }
                 Spacer()
                 Button("Export case…") { prepareExport() }
-                    .disabled((research.findings.isEmpty && research.people.people.isEmpty) || research.searching)
+                    .disabled((research.findings.isEmpty && research.people.people.isEmpty && research.correlation.accounts.isEmpty) ||
+                        research.searching)
             }
             Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
             if let problem = research.problem ?? exportProblem {
@@ -132,6 +135,7 @@ struct BeholderDashboard: View {
                 switch presented {
                 case .planner: BeholderQueryPlannerView()
                 case .people: BeholderPeopleView(research: research)
+                case .evidence: BeholderCorrelationView(research: research)
                 case .sources:
                     VStack(alignment: .leading, spacing: 0) {
                         HStack {

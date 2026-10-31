@@ -214,7 +214,7 @@ final class BeholderPeopleTests: XCTestCase {
         let person = try model.people.create("Example Alex")
         try attach(&model.people, person, "ExampleAlex", .github, .supported)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: model.export()) as? [String: Any])
-        XCTAssertEqual(json["schema"] as? Int, 3)
+        XCTAssertEqual(json["schema"] as? Int, 4)
         XCTAssertEqual((json["people"] as? [[String: Any]])?.count, 1)
         let people = try XCTUnwrap(json["people"] as? [[String: Any]])
         let links = try XCTUnwrap(people[0]["links"] as? [[String: Any]])

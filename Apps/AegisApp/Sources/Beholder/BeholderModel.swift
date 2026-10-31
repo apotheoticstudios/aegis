@@ -6,6 +6,7 @@ final class BeholderModel {
     var query = ""
     var selected = BeholderProvider.originalSources
     var people = BeholderPeople()
+    var correlation = BeholderCorrelation()
     static let parallelLimit = 4
     private(set) var username = ""
     private(set) var findings: [BeholderFinding] = []
@@ -42,6 +43,9 @@ final class BeholderModel {
         username = name
         problem = nil
         findings = providers.map { $0.manualFinding(name) ?? BeholderFinding(provider: $0, status: .queued, sourceURL: $0.endpoint(name)) }
+        for finding in findings {
+            archive(finding)
+        }
         let sources = providers.filter { !$0.isManual }
         searching = !sources.isEmpty
         guard searching else { return }
@@ -78,6 +82,7 @@ final class BeholderModel {
         guard generation == token else { return false }
         if let offset = findings.firstIndex(where: { $0.provider == finding.provider }) {
             findings[offset] = finding
+            archive(finding)
         }
         return true
     }
@@ -95,6 +100,7 @@ final class BeholderModel {
         searching = false
         for index in findings.indices where [.checking, .queued].contains(findings[index].status) {
             findings[index].status = .cancelled
+            archive(findings[index])
         }
     }
 
@@ -104,6 +110,7 @@ final class BeholderModel {
         username = ""
         findings = []
         people = BeholderPeople()
+        correlation = BeholderCorrelation()
         problem = nil
     }
 
@@ -111,7 +118,15 @@ final class BeholderModel {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        return try encoder.encode(Report(schema: 3, username: username, exportedAt: Date(), findings: findings, people: people.people))
+        return try encoder.encode(Report(
+            schema: 4, username: username, exportedAt: Date(), findings: findings, people: people.people, correlation: correlation
+        ))
+    }
+
+    private func archive(_ finding: BeholderFinding) {
+        if !correlation.observe(username: username, finding: finding) {
+            problem = "This case has reached its account limit. Export it before starting another."
+        }
     }
 
     private struct Report: Encodable {
@@ -121,5 +136,6 @@ final class BeholderModel {
         let warning = "Candidate accounts are not verified identities. Prepared manual links are unchecked. No public result does not prove absence."
         let findings: [BeholderFinding]
         let people: [BeholderPeople.Person]
+        let correlation: BeholderCorrelation
     }
 }
