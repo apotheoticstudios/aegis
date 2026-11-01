@@ -7,6 +7,8 @@ enum BeholderProfileLinks {
     static let maxLength = 2048
     /// Most inputs `deduplicate` reads; anything after is ignored, so work stays bounded.
     static let maxEntries = 500
+    /// Longest source label `deduplicate` keeps, in UTF-8 bytes.
+    static let maxSourceLength = 200
 
     /// How an entered address relates to a known source's profile address. Never an identity verdict.
     enum Relation: String, Sendable {
@@ -27,10 +29,12 @@ enum BeholderProfileLinks {
 
     /// Lowercases scheme and host, drops a default `:443` and the fragment (never sent to a server), and keeps
     /// everything else exactly: path case, trailing slashes, `www`, query order and percent-encoded delimiters.
-    /// Rejects anything that is not a plain public HTTPS address.
+    /// Rejects anything that is not a plain public HTTPS address. The byte bound and the control/format check apply to
+    /// the raw input; only ordinary spaces around it are then trimmed.
     static func canonical(_ input: String) -> URL? {
-        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.utf8.count <= maxLength, text.unicodeScalars.allSatisfy(allowed.contains),
+        guard input.utf8.count <= maxLength, visible(input) else { return nil }
+        let text = input.trimmingCharacters(in: CharacterSet(charactersIn: " "))
+        guard !text.isEmpty, text.unicodeScalars.allSatisfy(allowed.contains),
               // Strict parsing: Foundation would otherwise repair a malformed escape such as "%zz" into "%25zz".
               let parts = URLComponents(string: text, encodingInvalidCharacters: false), parts.scheme?.lowercased() == "https",
               parts.percentEncodedUser == nil, parts.percentEncodedPassword == nil, parts.port == nil || parts.port == 443,
@@ -56,12 +60,13 @@ enum BeholderProfileLinks {
     }
 
     /// Distinct valid addresses in first-seen order, each keeping its first spelling and source.
-    /// Invalid addresses are skipped; at most `maxEntries` inputs are read.
+    /// Invalid addresses, and empty, oversized or hidden-character source labels, are skipped; at most `maxEntries` inputs are read.
     static func deduplicate(_ links: [(link: String, source: String)]) -> [Entry] {
         var seen = Set<URL>()
         var entries: [Entry] = []
         for item in links.prefix(maxEntries) {
-            guard let url = canonical(item.link), seen.insert(url).inserted else { continue }
+            guard !item.source.isEmpty, item.source.utf8.count <= maxSourceLength, visible(item.source),
+                  let url = canonical(item.link), seen.insert(url).inserted else { continue }
             entries.append(Entry(canonical: url, original: item.link, source: item.source))
         }
         return entries
@@ -95,12 +100,14 @@ enum BeholderProfileLinks {
         return host
     }
 
+    /// No control (including newlines and tabs) or invisible format characters such as bidi overrides.
+    private static func visible(_ text: String) -> Bool {
+        text.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) && $0.properties.generalCategory != .format }
+    }
+
     /// Every `%` starts a valid escape, and the decoded text is UTF-8 without control or invisible format characters.
     private static func safeEncoding(_ component: String) -> Bool {
-        guard let decoded = component.removingPercentEncoding else { return false }
-        return decoded.unicodeScalars.allSatisfy {
-            !CharacterSet.controlCharacters.contains($0) && $0.properties.generalCategory != .format
-        }
+        component.removingPercentEncoding.map(visible) ?? false
     }
 
     /// `.` or `..` segments, plain or encoded, let a path read as one profile but resolve to another.

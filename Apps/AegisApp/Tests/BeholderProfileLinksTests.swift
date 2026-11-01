@@ -75,6 +75,34 @@ final class BeholderProfileLinksTests: XCTestCase {
         XCTAssertEqual(Links.relation("https://mastodon.social/@examplealex", provider: .mastodon, username: "ExampleAlex"), .exact)
     }
 
+    func testRawBoundAndHiddenCharactersApplyBeforeTrimming() {
+        let link = "https://example.com/alice"
+        XCTAssertEqual(canonical("   " + link + "   "), link, "Ordinary spaces are trimmed")
+        for wrapped in [
+            link + "\n", "\n" + link, "\r\n" + link + "\r\n", "\t" + link, link + "\t", "\u{200B}" + link, link + "\u{FEFF}",
+            "\u{202E}" + link, "\u{2028}" + link, "\u{00A0}" + link,
+        ] {
+            XCTAssertNil(Links.canonical(wrapped), wrapped.debugDescription)
+        }
+        let padding = String(repeating: " ", count: Links.maxLength)
+        XCTAssertNil(Links.canonical(padding + link), "Padding counts towards the raw byte bound")
+        XCTAssertNil(Links.canonical(link + padding))
+        let atLimit = String(repeating: " ", count: Links.maxLength - link.utf8.count) + link
+        XCTAssertEqual(canonical(atLimit), link)
+        XCTAssertTrue(Links.deduplicate([(link: padding + link, source: "owner")]).isEmpty)
+    }
+
+    func testDeduplicationSkipsUnboundedOrHiddenSourceLabels() {
+        let link = "https://example.com/alice"
+        let bad = ["", String(repeating: "s", count: Links.maxSourceLength + 1), "owner\n", "own\u{202E}er"]
+        XCTAssertTrue(Links.deduplicate(bad.map { (link: link, source: $0) }).isEmpty)
+        let kept = Links.deduplicate([
+            (link: link, source: "owner\n"),
+            (link: link, source: String(repeating: "s", count: Links.maxSourceLength)),
+        ])
+        XCTAssertEqual(kept.map(\.source), [String(repeating: "s", count: Links.maxSourceLength)], "A rejected label never claims the link")
+    }
+
     func testDeduplicationIsBoundedDeterministicAndKeepsFirstProvenance() {
         let input: [(link: String, source: String)] = [
             ("https://Example.com/Alice#bio", "github"), ("not a link", "owner"), ("https://example.com/Alice", "gitlab"),
