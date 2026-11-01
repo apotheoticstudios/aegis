@@ -8,7 +8,7 @@ final class BeholderDiscovery {
     var kind = BeholderCaseSearch.Kind.username {
         didSet {
             if oldValue != kind {
-                query = ""; clearResult(); research.cancel()
+                query = ""; clearResult()
                 ownerTypedInput = false
             }
         }
@@ -36,7 +36,7 @@ final class BeholderDiscovery {
     private(set) var ip: BeholderIPContext.Info?
     private var inputProblem: String?
     var problem: String? {
-        inputProblem ??
+        inputProblem ?? (kind == .username ? BeholderCaseSearch.usernameProblem(query) : nil) ??
             (cachedReport != nil && report == nil ? "Case evidence changed. Run this search again to see current matches." : nil)
     }
 
@@ -47,7 +47,7 @@ final class BeholderDiscovery {
     }
 
     var canSearch: Bool {
-        kind == .username ? BeholderProvider.username(query) != nil && !research.providers.isEmpty : !query.isEmpty
+        kind == .username ? BeholderCaseSearch.username(query) != nil && !research.providers.isEmpty : !query.isEmpty
     }
 
     var actionTitle: String {
@@ -57,11 +57,14 @@ final class BeholderDiscovery {
     func search() {
         clearResult()
         if kind == .username {
+            guard BeholderCaseSearch.username(query) != nil else {
+                inputProblem = BeholderCaseSearch.usernameProblem(query) ?? "Enter one valid username."
+                return
+            }
             research.query = query
             research.start()
             return
         }
-        research.cancel()
         if kind == .ip {
             ip = BeholderIPContext.inspect(query)
             if ip == nil {
@@ -133,9 +136,14 @@ struct BeholderCaseSearchView: View {
                             if let type = hit.account.finding.fields["Account type"] ?? hit.account.finding.fields["Profile type"] {
                                 Text("Account type: " + type).font(.caption).foregroundStyle(HUD.inkMuted)
                             }
-                            if let attempt = hit.account.latestAttempt {
+                            if hit.account.pending {
+                                Text("Re-check pending; showing earlier dated evidence.").foregroundStyle(HUD.inkMuted)
+                            } else if let attempt = hit.account.latestAttempt {
                                 Text("Latest attempt: " + attempt.finding.status.title + "; earlier dated evidence retained.")
                                     .foregroundStyle(HUD.inkMuted)
+                                if let date = attempt.finding.checkedAt {
+                                    Text("Attempt recorded " + date.formatted()).font(.caption).foregroundStyle(HUD.inkMuted)
+                                }
                             }
                             ForEach(hit.reasons) { reason in
                                 VStack(alignment: .leading, spacing: 3) {

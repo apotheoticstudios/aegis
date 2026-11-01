@@ -45,6 +45,37 @@ enum BeholderCaseSearch {
         }
     }
 
+    /// Reject identifier-shaped input before it can reach an automatic username source.
+    static func username(_ input: String) -> String? {
+        guard input.utf8.count <= 512, usernameProblem(input) == nil,
+              input.unicodeScalars.allSatisfy({
+                  !CharacterSet.controlCharacters.contains($0) && !CharacterSet.newlines.contains($0)
+                      && $0.properties.generalCategory != .format
+              }) else { return nil }
+        return BeholderProvider.username(input)
+    }
+
+    static func usernameProblem(_ input: String) -> String? {
+        var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("@") {
+            value.removeFirst()
+        }
+        if value.contains("@") {
+            return "This looks like an email address. Choose Email mode first."
+        }
+        if BeholderIPContext.inspect(value) != nil {
+            return "This looks like an IP address. Choose IP address mode first."
+        }
+        if value.lowercased().hasPrefix("tel:") {
+            value = String(value.dropFirst(4))
+        }
+        let digits = value.filter { $0.isASCII && $0.isNumber }
+        if (8 ... 15).contains(digits.count), value.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "+0123456789 ().-").contains) {
+            return "This looks like a phone number. Choose Phone mode first."
+        }
+        return nil
+    }
+
     /// Only structured profile names, explicit identifier evidence and supported owner links are searched.
     /// Biographies and arbitrary mentions cannot identify an account owner.
     static func compute(
@@ -96,7 +127,7 @@ enum BeholderCaseSearch {
         }
         let grouped = Dictionary(grouping: store.evidence, by: \.accountID)
         let hits = accounts.values.compactMap { account -> Hit? in
-            guard !account.pending, [.candidate, .manual, .noResult].contains(account.finding.status) else { return nil }
+            guard [.candidate, .manual, .noResult].contains(account.finding.status) else { return nil }
             var reasons = ownerReasons[account.id] ?? []
             if kind == .name, account.finding.status == .candidate,
                let name = account.finding.fields["Display name"], let order = nameMatch(query, name)
@@ -154,9 +185,10 @@ enum BeholderCaseSearch {
         }
         let a = left.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }.sorted()
         let b = right.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }.sorted()
+        guard !a.isEmpty, a.allSatisfy({ $0.count >= 2 }) else { return nil }
         if a.count > 1, a == b {
             return 1
         }
-        return !a.isEmpty && Set(a).isSubset(of: Set(b)) ? 2 : nil
+        return Set(a).isSubset(of: Set(b)) ? 2 : nil
     }
 }

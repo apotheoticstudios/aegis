@@ -148,6 +148,65 @@ final class BeholderCaseSearchTests: XCTestCase {
         XCTAssertNil(discovery.problem)
     }
 
+    @MainActor func testPhoneAndEmailInputsCannotStartAUsernameLookup() async {
+        let client = DiscoveryCountingClient()
+        let model = BeholderModel(client: client)
+        let discovery = BeholderDiscovery(model)
+        for value in [
+            "0400000001", "61400000001", "0400-000-001", "@0400000001", "tel:0400000001", "example@example.com", "203.0.113.1",
+        ] {
+            discovery.query = value
+            XCTAssertFalse(discovery.canSearch)
+            XCTAssertNotNil(discovery.problem)
+            discovery.search()
+            XCTAssertEqual(model.query, "")
+            XCTAssertFalse(model.searching)
+            model.query = value
+            model.start()
+            XCTAssertFalse(model.searching, "The model also rejects bypassing the discovery controls")
+            XCTAssertEqual(model.username, "")
+            model.query = ""
+        }
+        let count = await client.count()
+        XCTAssertEqual(count, 0)
+        XCTAssertEqual(BeholderCaseSearch.username("@ExampleAlex"), "ExampleAlex")
+        XCTAssertEqual(BeholderCaseSearch.username("Example123"), "Example123")
+        XCTAssertNil(BeholderCaseSearch.username("ExampleAlex\n"))
+        XCTAssertNil(BeholderCaseSearch.username("ExampleAlex\u{2028}"))
+    }
+
+    @MainActor func testLocalModesDoNotCancelAnExplicitUsernameSearch() {
+        let model = BeholderModel(client: DiscoveryCountingClient())
+        model.query = "ExampleAlex"; model.selected = [.github]; model.start()
+        defer { model.cancel() }
+        let generation = model.cancellationID
+        let discovery = BeholderDiscovery(model)
+        discovery.kind = .name
+        XCTAssertEqual(discovery.query, "")
+        discovery.query = "Example Alex"; discovery.search()
+        XCTAssertTrue(model.searching)
+        XCTAssertEqual(model.cancellationID, generation)
+        XCTAssertEqual(model.query, "ExampleAlex")
+        XCTAssertEqual(discovery.report?.total, 0)
+    }
+
+    func testRechecksRetainDatedMatchesAndInitialsDoNotCreateBroadNameMatches() throws {
+        var store = BeholderCorrelation()
+        store.observe(username: "example", finding: candidate("example", fields: ["Display name": "Example Alex"]))
+        store.observe(
+            username: "example",
+            finding: .init(provider: .github, status: .queued, sourceURL: BeholderProvider.github.endpoint("example"))
+        )
+        let report = try BeholderCaseSearch.compute(input: "Example Alex", kind: .name, store: store, people: .init())
+        XCTAssertEqual(report.total, 1)
+        XCTAssertTrue(try XCTUnwrap(report.hits.first).account.pending)
+        XCTAssertEqual(report.hits.first?.reasons.first?.date, date)
+        store.observe(username: "example-initials", finding: candidate("example-initials", fields: ["Display name": "Alex B Example"]))
+        XCTAssertEqual(try BeholderCaseSearch.compute(input: "A B", kind: .name, store: store, people: .init()).total, 0)
+        XCTAssertEqual(try BeholderCaseSearch.compute(input: "Alex B", kind: .name, store: store, people: .init()).total, 0)
+        XCTAssertEqual(try BeholderCaseSearch.compute(input: "Alex B Example", kind: .name, store: store, people: .init()).total, 1)
+    }
+
     func testManySavedReferencesAreBoundedPerAccount() throws {
         var people = BeholderPeople()
         let person = try people.create("Example Alex")
