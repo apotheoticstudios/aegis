@@ -130,6 +130,9 @@ struct BeholderCaseSearchView: View {
                             if hit.historical {
                                 Text("Historical evidence: the latest public check returned no matching record.").foregroundStyle(HUD.warn)
                             }
+                            if let type = hit.account.finding.fields["Account type"] ?? hit.account.finding.fields["Profile type"] {
+                                Text("Account type: " + type).font(.caption).foregroundStyle(HUD.inkMuted)
+                            }
                             if let attempt = hit.account.latestAttempt {
                                 Text("Latest attempt: " + attempt.finding.status.title + "; earlier dated evidence retained.")
                                     .foregroundStyle(HUD.inkMuted)
@@ -149,6 +152,12 @@ struct BeholderCaseSearchView: View {
                             if hit.totalReasons > hit.reasons.count {
                                 Text("Showing 20 of \(hit.totalReasons) saved references. Reference count is not identity confidence.")
                                     .font(.caption).foregroundStyle(HUD.inkMuted)
+                            }
+                            if let url = hit.account.finding.provider.profileURL(hit.account.username) {
+                                Link("Open saved profile address ↗", destination: url).font(.caption)
+                                    .help(
+                                        "Opens your browser using its current settings. The address does not prove ownership or current availability."
+                                    )
                             }
                         }.padding(HUD.space3).frame(maxWidth: .infinity, alignment: .leading).background(HUD.surface)
                     }
