@@ -7,6 +7,11 @@ enum BeholderCaseFile {
         + "not independently verified by Beholder. "
         + "Contains locally recorded phone/email identifiers. Candidate accounts are not verified identities. Prepared manual links are unchecked."
 
+    struct ImportProvenance: Codable, Equatable, Sendable {
+        let importedAt: Date
+        let sourceExportedAt: Date
+    }
+
     struct Snapshot: Equatable, Sendable {
         let schema: Int
         let username: String
@@ -14,6 +19,8 @@ enum BeholderCaseFile {
         let findings: [BeholderFinding]
         let people: BeholderPeople
         let correlation: BeholderCorrelation
+        let importedAt: Date
+        let importedFrom: ImportProvenance?
         var provenanceNote: String {
             BeholderCaseFile.provenanceNote
         }
@@ -38,9 +45,10 @@ enum BeholderCaseFile {
         let findings: [BeholderFinding]
         let people: [BeholderPeople.Person]
         let correlation: BeholderCorrelation?
+        let importedFrom: ImportProvenance?
     }
 
-    static func decode(_ data: Data) throws -> Snapshot {
+    static func decode(_ data: Data, now: Date = Date()) throws -> Snapshot {
         guard data.count <= byteLimit else { throw Problem.capacity }
         do {
             try preflight(data)
@@ -50,6 +58,11 @@ enum BeholderCaseFile {
             guard (report.username.isEmpty && report.findings.isEmpty)
                 || BeholderProvider.username(report.username) == report.username else { throw Problem.username }
             try validDate(report.exportedAt)
+            try validDate(now)
+            if let origin = report.importedFrom {
+                try validDate(origin.importedAt)
+                try validDate(origin.sourceExportedAt)
+            }
             guard Set(report.findings.map(\.provider)).count == report.findings.count else { throw Problem.finding }
             for finding in report.findings {
                 try validateFinding(finding, username: report.username)
@@ -66,7 +79,7 @@ enum BeholderCaseFile {
             }
             return Snapshot(
                 schema: report.schema, username: report.username, exportedAt: report.exportedAt,
-                findings: report.findings, people: people, correlation: correlation
+                findings: report.findings, people: people, correlation: correlation, importedAt: now, importedFrom: report.importedFrom
             )
         } catch let error as Problem {
             throw error
@@ -77,14 +90,14 @@ enum BeholderCaseFile {
 
     static func encode(
         username: String, findings: [BeholderFinding], people: BeholderPeople,
-        correlation: BeholderCorrelation, exportedAt: Date = Date()
+        correlation: BeholderCorrelation, exportedAt: Date = Date(), importedFrom: ImportProvenance? = nil
     ) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(Report(
             schema: 4, username: username, exportedAt: exportedAt, warning: provenanceNote,
-            findings: findings, people: people.people, correlation: correlation
+            findings: findings, people: people.people, correlation: correlation, importedFrom: importedFrom
         ))
         _ = try decode(data)
         return data
@@ -138,6 +151,27 @@ private extension BeholderCaseFile {
             try validDate(date)
         }
         let provider = finding.provider
+        var labels: Set<String> = provider.isManual ? ["Access"] : [
+            "Handle",
+            "Display name",
+            "Bio",
+            "About",
+            "Account type",
+            "Account state",
+        ]
+        if provider == .github {
+            labels.insert("Public email")
+        }
+        if provider == .writeAs {
+            labels.insert("Profile type")
+        }
+        if provider == .scratch {
+            labels.insert("Working on")
+        }
+        guard Set(finding.fields.keys).isSubset(of: labels) else { throw Problem.finding }
+        if let access = finding.fields["Access"], access != provider.manualFinding(username)?.fields["Access"] {
+            throw Problem.finding
+        }
         if provider.isManual {
             try validateManual(finding, username: username)
         } else {
@@ -179,7 +213,8 @@ private extension BeholderCaseFile {
         guard store.accounts.count <= 500, store.evidence.count <= 2000, store.hints.count <= 500 else { throw Problem.capacity }
         var accounts: [String: BeholderCorrelation.Account] = [:]
         for account in store.accounts {
-            guard account.id == BeholderCorrelation.key(account.finding.provider, account.username), accounts[account.id] == nil
+            guard [.candidate, .manual, .noResult].contains(account.finding.status),
+                  account.id == BeholderCorrelation.key(account.finding.provider, account.username), accounts[account.id] == nil
             else { throw Problem.reference }
             try validateFinding(account.finding, username: account.username)
             if let attempt = account.latestAttempt {
@@ -256,8 +291,11 @@ private extension BeholderCaseFile {
     private static func preflight(_ data: Data) throws {
         let root = try object(
             JSONSerialization.jsonObject(with: data),
-            keys: "schema username exportedAt warning findings people correlation"
+            keys: "schema username exportedAt warning findings people correlation importedFrom"
         )
+        if let value = root["importedFrom"], !(value is NSNull) {
+            _ = try object(value, keys: "importedAt sourceExportedAt")
+        }
         guard let schema = root["schema"] as? Int, [3, 4].contains(schema), !(root["schema"] is Bool) else { throw Problem.version }
         if let warning = root["warning"] as? String {
             try text(warning, limit: 2000)
