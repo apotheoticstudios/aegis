@@ -560,6 +560,8 @@ handle never proves a person's identity. Cases remain in memory with explicit cl
 the screen or closing the window cancels requests. No automatic memory writes, identity merging, background
 monitoring, uploads or linked-page crawling. Future sources and analysis need scoped issues.
 
+Screen (#138): one search line with the input type as design-system segments (Username, Name, Email, Phone, IP) and Return to search; a one-line request summary with the full destination preview under **What is sent**; the case as tabs (Results, People, Evidence, Planner) beside Open, Export and Clear; and username results grouped by what to do next (Found, Checking, Check by hand, Couldn't check, then folded No public result and Not checked). **Use all sources** selects every source without searching. Behaviour, requests and safeguards are unchanged.
+
 ## World view (God's Eye View)
 
 Aegis integrates [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view), an MIT-licensed open-source 3D globe of live public data, as an optional "World" view in the panel, using the same services God's Eye View itself needs.

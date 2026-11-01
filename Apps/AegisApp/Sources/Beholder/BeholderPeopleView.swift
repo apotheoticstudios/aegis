@@ -12,6 +12,8 @@ struct BeholderPeopleView: View {
     }
 
     let research: BeholderModel
+    /// Shown in the dashboard's People tab rather than a sheet: no Done button, full width.
+    var embedded = false
     @State private var selected: UUID?
     @State private var name = ""
     @State private var draft: Target?
@@ -21,8 +23,9 @@ struct BeholderPeopleView: View {
     @State private var problem: String?
     @Environment(\.dismiss) private var dismiss
 
-    init(research: BeholderModel, target: Target? = nil) {
+    init(research: BeholderModel, target: Target? = nil, embedded: Bool = false) {
         self.research = research
+        self.embedded = embedded
         let preferred = target?.preferredPersonID.flatMap { id in research.people.people.first { $0.id == id }?.id }
         _selected = State(initialValue: preferred ?? (research.people.people.count == 1 ? research.people.people.first?.id : nil))
         _draft = State(initialValue: target)
@@ -30,10 +33,12 @@ struct BeholderPeopleView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: HUD.space3) {
-            HStack {
-                Text("PEOPLE IN THIS CASE").hudType(.data)
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            if !embedded {
+                HStack {
+                    Text("PEOPLE IN THIS CASE").hudType(.data)
+                    Spacer()
+                    Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                }
             }
             Text("Group accounts using evidence you have reviewed. A matching handle alone does not establish who owns it.")
                 .foregroundStyle(HUD.inkMuted)
@@ -41,10 +46,10 @@ struct BeholderPeopleView: View {
                 Text(
                     "This case includes imported claims. Stored source checks and owner assessments have not been independently rechecked."
                 )
-                .font(.caption).foregroundStyle(HUD.warn)
+                .hudType(.caption).foregroundStyle(HUD.warn)
             }
             HStack {
-                TextField("Person label", text: $name).textFieldStyle(.roundedBorder)
+                TextField("Person label", text: $name).modifier(BeholderField())
                     .accessibilityLabel("New person label")
                 Button("Create person") {
                     perform { selected = try research.people.create(name); name = "" }
@@ -67,9 +72,9 @@ struct BeholderPeopleView: View {
                         ForEach(person.links) { link in
                             VStack(alignment: .leading, spacing: HUD.space2) {
                                 HStack {
-                                    Text(link.finding.provider.title + " · @" + link.username).font(.headline)
+                                    Text(link.finding.provider.title + " · @" + link.username).hudType(.label)
                                     Spacer()
-                                    Text(link.assessment.title).font(.caption).foregroundStyle(HUD.primary)
+                                    Text(link.assessment.title).hudType(.caption).foregroundStyle(HUD.primary)
                                 }
                                 Text(verbatim: link.reason).textSelection(.enabled)
                                 if let url = link.evidenceURL {
@@ -102,7 +107,7 @@ struct BeholderPeopleView: View {
                                     Button("Remove link") { research.people.remove(personID: person.id, linkID: link.id) }
                                 }
                             }
-                            .font(.caption).padding(HUD.space3).background(HUD.surface)
+                            .hudType(.caption).padding(HUD.space3).background(HUD.surface)
                         }
                     }
                 }.frame(maxHeight: 250)
@@ -111,10 +116,11 @@ struct BeholderPeopleView: View {
                 }
             }
             Text("Kept in memory only. Export the case before closing Aegis. Evidence URLs are stored, never fetched.")
-                .font(.caption).foregroundStyle(HUD.inkMuted)
+                .hudType(.caption).foregroundStyle(HUD.inkMuted)
         }
-        .padding(HUD.space4).frame(width: 680, alignment: .leading)
-        .foregroundStyle(HUD.ink).background(HUD.void)
+        .padding(embedded ? 0 : HUD.space4).frame(width: embedded ? nil : 680, alignment: .leading)
+        .frame(maxWidth: embedded ? .infinity : nil, alignment: .leading)
+        .foregroundStyle(HUD.ink).background(embedded ? AnyShapeStyle(.clear) : AnyShapeStyle(HUD.void)).beholderStyle()
         .onChange(of: selected) {
             if draft?.originalPersonID != nil {
                 draft = nil
@@ -127,14 +133,17 @@ struct BeholderPeopleView: View {
         VStack(alignment: .leading, spacing: HUD.space2) {
             Text("LINK " + target.finding.provider.title + " · @" + target.username).hudType(.data)
             Text("To: " + (research.people.people.first(where: { $0.id == selected })?.name ?? "Select a person"))
-                .font(.headline)
-            Picker("Assessment", selection: $assessment) {
-                ForEach(BeholderPeople.Assessment.allCases) { Text($0.title).tag($0) }
-            }
+                .hudType(.label)
+            HUDSegmented(
+                label: "Assessment",
+                options: BeholderPeople.Assessment.allCases.map { HUDOption(value: $0, label: $0.title) },
+                value: $assessment,
+                small: true
+            )
             TextField("Why do you link or rule out this account?", text: $reason)
-                .textFieldStyle(.roundedBorder)
+                .modifier(BeholderField())
                 .accessibilityLabel("Account link explanation")
-            TextField("Public evidence URL (required for support)", text: $evidence).textFieldStyle(.roundedBorder)
+            TextField("Public evidence URL (required for support)", text: $evidence).modifier(BeholderField())
                 .accessibilityLabel("Account link evidence URL")
             HStack {
                 Button("Save assessment") {

@@ -105,13 +105,13 @@ struct BeholderCaseSearchView: View {
             VStack(alignment: .leading, spacing: HUD.space3) {
                 if let ip = discovery.ip {
                     Text("IP ADDRESS CONTEXT").hudType(.data)
-                    Text(verbatim: ip.canonical).font(.title3).textSelection(.enabled)
+                    Text(verbatim: ip.canonical).hudType(.readout).textSelection(.enabled)
                     Text(ip.version + " · " + ip.category.replacingOccurrences(of: "-", with: " ").capitalized).foregroundStyle(HUD.primary)
                     Text(ip.explanation)
                 } else if let report = discovery.report {
                     Text("CASE MATCHES FOR " + report.query).hudType(.data).textSelection(.enabled)
                     Text("\(report.total) stored account match(es). Names and shared identifiers are leads, not verified identities.")
-                        .font(.caption).foregroundStyle(HUD.inkMuted)
+                        .hudType(.caption).foregroundStyle(HUD.inkMuted)
                     if report.hits.isEmpty {
                         Text(
                             "No matching evidence in this case. This does not mean no accounts exist; public searches can find additional pages to inspect."
@@ -121,7 +121,7 @@ struct BeholderCaseSearchView: View {
                     ForEach(report.hits) { hit in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(hit.account.finding.provider.title + " · @" + hit.account.username).font(.headline)
+                                Text(hit.account.finding.provider.title + " · @" + hit.account.username).hudType(.label)
                                 Spacer()
                                 if [.candidate, .manual].contains(hit.account.finding.status) {
                                     Button("Review account link…") { onReview(.init(
@@ -134,7 +134,7 @@ struct BeholderCaseSearchView: View {
                                 Text("Historical evidence: the latest public check returned no matching record.").foregroundStyle(HUD.warn)
                             }
                             if let type = hit.account.finding.fields["Account type"] ?? hit.account.finding.fields["Profile type"] {
-                                Text("Account type: " + type).font(.caption).foregroundStyle(HUD.inkMuted)
+                                Text("Account type: " + type).hudType(.caption).foregroundStyle(HUD.inkMuted)
                             }
                             if hit.account.pending {
                                 Text("Re-check pending; showing earlier dated evidence.").foregroundStyle(HUD.inkMuted)
@@ -142,7 +142,7 @@ struct BeholderCaseSearchView: View {
                                 Text("Latest attempt: " + attempt.finding.status.title + "; earlier dated evidence retained.")
                                     .foregroundStyle(HUD.inkMuted)
                                 if let date = attempt.finding.checkedAt {
-                                    Text("Attempt recorded " + date.formatted()).font(.caption).foregroundStyle(HUD.inkMuted)
+                                    Text("Attempt recorded " + date.formatted()).hudType(.caption).foregroundStyle(HUD.inkMuted)
                                 }
                             }
                             ForEach(hit.reasons) { reason in
@@ -155,14 +155,14 @@ struct BeholderCaseSearchView: View {
                                     if let date = reason.date {
                                         Text("Recorded " + date.formatted())
                                     }
-                                }.font(.caption)
+                                }.hudType(.caption)
                             }
                             if hit.totalReasons > hit.reasons.count {
                                 Text("Showing 20 of \(hit.totalReasons) saved references. Reference count is not identity confidence.")
-                                    .font(.caption).foregroundStyle(HUD.inkMuted)
+                                    .hudType(.caption).foregroundStyle(HUD.inkMuted)
                             }
                             if let url = hit.account.finding.provider.profileURL(hit.account.username) {
-                                Link("Open saved profile address ↗", destination: url).font(.caption)
+                                Link("Open saved profile address ↗", destination: url).hudType(.caption)
                                     .help(
                                         "Opens your browser using its current settings. The address does not prove ownership or current availability."
                                     )
@@ -172,7 +172,7 @@ struct BeholderCaseSearchView: View {
                     if report.total > report.hits
                         .count
                     {
-                        Text("Showing the first 100 matches. Refine the input to narrow this case.").font(.caption)
+                        Text("Showing the first 100 matches. Refine the input to narrow this case.").hudType(.caption)
                     }
                 } else {
                     Text(
@@ -184,5 +184,6 @@ struct BeholderCaseSearchView: View {
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
+        .beholderStyle()
     }
 }

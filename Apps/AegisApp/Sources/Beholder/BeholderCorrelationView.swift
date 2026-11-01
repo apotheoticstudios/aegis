@@ -4,6 +4,8 @@ import SwiftUI
 struct BeholderCorrelationView: View {
     let research: BeholderModel
     let onReview: (BeholderPeopleView.Target) -> Void
+    /// Shown in the dashboard's Evidence tab rather than a sheet: no Done button, fills the tab.
+    let embedded: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var personID: UUID?
     @State private var accountID: String?
@@ -14,10 +16,12 @@ struct BeholderCorrelationView: View {
         research: BeholderModel,
         personID: UUID? = nil,
         accountID: String? = nil,
+        embedded: Bool = false,
         onReview: @escaping (BeholderPeopleView.Target) -> Void = { _ in }
     ) {
         self.research = research
         self.onReview = onReview
+        self.embedded = embedded
         _personID = State(initialValue: personID)
         _accountID = State(initialValue: accountID)
         _tab = State(initialValue: accountID == nil ? 0 : 1)
@@ -33,28 +37,37 @@ struct BeholderCorrelationView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: HUD.space3) {
-            HStack {
-                Text("IDENTIFIER EVIDENCE").hudType(.data)
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            if !embedded {
+                HStack {
+                    Text("IDENTIFIER EVIDENCE").hudType(.data)
+                    Spacer()
+                    Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                }
             }
             Text("Compare already-held public evidence. Shared, recycled or business identifiers can belong to several people.")
-                .font(.caption).foregroundStyle(HUD.inkMuted)
+                .hudType(.caption).foregroundStyle(HUD.inkMuted)
             if research.includesImportedObservations {
                 Text("This case includes imported claims; source URLs and observation times have not been independently rechecked.")
-                    .font(.caption).foregroundStyle(HUD.warn)
+                    .hudType(.caption).foregroundStyle(HUD.warn)
             }
-            Picker("Evidence section", selection: $tab) {
-                Text("Person and leads").tag(0)
-                Text("Account archive (\(research.correlation.accounts.count))").tag(1)
-            }.pickerStyle(.segmented)
+            HUDSegmented(
+                label: "Evidence section",
+                options: [
+                    HUDOption(value: 0, label: "Person and leads"),
+                    HUDOption(value: 1, label: "Account archive", meta: "\(research.correlation.accounts.count)"),
+                ],
+                value: $tab
+            )
             if tab == 0 {
                 personEvidence
             } else {
                 accountEvidence
             }
         }
-        .padding(HUD.space4).frame(width: 760, height: 620).foregroundStyle(HUD.ink).background(HUD.void)
+        .padding(embedded ? 0 : HUD.space4)
+        .frame(width: embedded ? nil : 760, height: embedded ? nil : 620)
+        .frame(maxWidth: embedded ? .infinity : nil, maxHeight: embedded ? .infinity : nil, alignment: .topLeading)
+        .foregroundStyle(HUD.ink).background(embedded ? AnyShapeStyle(.clear) : AnyShapeStyle(HUD.void)).beholderStyle()
     }
 
     private var personEvidence: some View {
@@ -65,7 +78,7 @@ struct BeholderCorrelationView: View {
                     ForEach(research.people.people) { Text($0.name).tag(Optional($0.id)) }
                 }.padding(.top, HUD.space3)
                 if let person {
-                    Text("Known public identifiers for \(person.name)").font(.headline)
+                    Text("Known public identifiers for \(person.name)").hudType(.label)
                     BeholderIdentifierEditor { identifier, source in
                         try research.correlation.identify(personID: person.id, identifier: identifier, source: source)
                     }.id(person.id)
@@ -79,18 +92,18 @@ struct BeholderCorrelationView: View {
                     Text(
                         "Exact overlaps with your reference identifiers or supported account evidence. No automatic links. Email local-part case is preserved."
                     )
-                    .font(.caption).foregroundStyle(HUD.inkMuted)
+                    .hudType(.caption).foregroundStyle(HUD.inkMuted)
                     let leads = research.correlation.leads(for: person, people: research.people.people)
                     if leads.isEmpty {
                         Text(
                             "No matching account evidence yet. Record an identifier on an account in the archive, or search another username."
                         )
-                        .font(.caption)
+                        .hudType(.caption)
                     }
                     ForEach(leads) { lead in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(lead.account.finding.provider.title + " · @" + lead.account.username).font(.headline)
+                                Text(lead.account.finding.provider.title + " · @" + lead.account.username).hudType(.label)
                                 Spacer()
                                 Button("Review account link…") {
                                     onReview(.init(
@@ -100,7 +113,7 @@ struct BeholderCorrelationView: View {
                                     ))
                                 }
                             }
-                            Text("\(lead.identifierCount) exact identifier overlap(s); ownership is unverified.").font(.caption)
+                            Text("\(lead.identifierCount) exact identifier overlap(s); ownership is unverified.").hudType(.caption)
                             attemptNote(lead.account)
                             ForEach(lead.overlaps) { overlap in
                                 VStack(alignment: .leading, spacing: 3) {
@@ -110,13 +123,13 @@ struct BeholderCorrelationView: View {
                                     Text(
                                         "Account observed \(overlap.evidence.observedAt.formatted()); reference \(overlap.referenceDate.formatted())"
                                     )
-                                }.font(.caption).foregroundStyle(HUD.inkMuted)
+                                }.hudType(.caption).foregroundStyle(HUD.inkMuted)
                             }
                         }.padding(HUD.space3).background(HUD.surface)
                     }
                 } else {
                     Text("Create a person in People, then select them here. Possible and ruled-out links never seed new matches.")
-                        .font(.caption).foregroundStyle(HUD.inkMuted)
+                        .hudType(.caption).foregroundStyle(HUD.inkMuted)
                 }
             }.padding(HUD.space3)
         }
@@ -125,7 +138,7 @@ struct BeholderCorrelationView: View {
     private var accountEvidence: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: HUD.space3) {
-                TextField("Filter archived accounts", text: $filter).textFieldStyle(.roundedBorder)
+                TextField("Filter archived accounts", text: $filter).modifier(BeholderField())
                 Picker("Account", selection: $accountID) {
                     Text("Choose an account").tag(nil as String?)
                     ForEach(research.correlation.accounts.filter {
@@ -135,13 +148,13 @@ struct BeholderCorrelationView: View {
                     }
                 }
                 if let account {
-                    Text(account.finding.provider.title + " · @" + account.username).font(.headline)
+                    Text(account.finding.provider.title + " · @" + account.username).hudType(.label)
                     BeholderEvidenceExplanationView(finding: account.finding)
                     attemptNote(account)
                     Text(
                         "Record only an identifier explicitly published as this account's contact information. A mention in a post or biography may refer to someone else."
                     )
-                    .font(.caption).foregroundStyle(HUD.inkMuted)
+                    .hudType(.caption).foregroundStyle(HUD.inkMuted)
                     BeholderIdentifierEditor { identifier, source in
                         try research.correlation.record(accountID: account.id, identifier: identifier, source: source)
                     }.id(account.id)
@@ -161,7 +174,7 @@ struct BeholderCorrelationView: View {
             Text(
                 "Latest attempt: \(attempt.finding.status.title). Earlier dated evidence is retained; this attempt did not establish a change."
             )
-            .font(.caption).foregroundStyle(HUD.inkMuted)
+            .hudType(.caption).foregroundStyle(HUD.inkMuted)
         }
     }
 
@@ -177,7 +190,7 @@ struct BeholderCorrelationView: View {
                 Text(verbatim: identifier.value).textSelection(.enabled)
                 Text(label + " · " + date.formatted()).foregroundStyle(HUD.inkMuted)
                 Text(verbatim: url.absoluteString).textSelection(.enabled).foregroundStyle(HUD.inkMuted)
-            }.font(.caption)
+            }.hudType(.caption)
             Spacer()
             Button("Remove", action: remove)
         }
@@ -205,8 +218,8 @@ private struct BeholderIdentifierEditor: View {
                     }
                 }
             }
-            TextField(kind == .email ? "Public email" : "Complete phone number", text: $input)
-            TextField("Public HTTPS evidence URL", text: $source)
+            TextField(kind == .email ? "Public email" : "Complete phone number", text: $input).modifier(BeholderField())
+            TextField("Public HTTPS evidence URL", text: $source).modifier(BeholderField())
             Button("Record identifier locally") {
                 guard let identifier = BeholderIdentifier(input: input, kind: kind, region: region) else {
                     problem = BeholderCorrelation.Problem.input.message; return
@@ -217,8 +230,8 @@ private struct BeholderIdentifierEditor: View {
                 } catch { problem = (error as? BeholderCorrelation.Problem)?.message ?? "The evidence could not be recorded." }
             }.disabled(input.isEmpty || source.isEmpty)
             if let problem {
-                Text(problem).font(.caption).foregroundStyle(HUD.warn)
+                Text(problem).hudType(.caption).foregroundStyle(HUD.warn)
             }
-        }.textFieldStyle(.roundedBorder)
+        }
     }
 }

@@ -20,16 +20,17 @@ struct BeholderScreen: View {
 
 struct BeholderDashboard: View {
     private enum Sheet: Identifiable {
-        case planner, people, sources, evidence, link(BeholderPeopleView.Target)
+        case sources, link(BeholderPeopleView.Target)
         var id: String {
             switch self {
-            case .planner: "planner"
-            case .people: "people"
             case .sources: "sources"
-            case .evidence: "evidence"
             case let .link(target): target.id.uuidString
             }
         }
+    }
+
+    private enum CaseTab: Hashable {
+        case results, people, evidence, planner
     }
 
     @State private var research: BeholderModel
@@ -39,6 +40,8 @@ struct BeholderDashboard: View {
     @State private var document = BeholderDocument()
     @State private var exportProblem: String?
     @State private var sheet: Sheet?
+    @State private var tab = CaseTab.results
+    @State private var showingDetails = false
     @State private var clearing = false
     @State private var opening = false
     @State private var reviewingImport = false
@@ -56,130 +59,32 @@ struct BeholderDashboard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HUD.space4) {
-            HStack(spacing: HUD.space4) {
-                BeholderEmblem().frame(width: 84, height: 84)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("BEHOLDER").font(.system(size: 28, weight: .light, design: .monospaced))
-                    Text("Follow the evidence.").foregroundStyle(HUD.inkMuted)
-                }
-                Spacer()
-                Text(counter)
-                    .hudType(.data).foregroundStyle(HUD.primary)
-            }
-            HStack {
-                Picker("Find by", selection: $discovery.kind) {
-                    ForEach(BeholderCaseSearch.Kind.allCases) { Text($0.rawValue).tag($0) }
-                }.frame(width: 180)
-                TextField(discovery.kind.rawValue, text: $discovery.query)
-                    .textFieldStyle(.roundedBorder).onSubmit { discovery.search() }
-                    .accessibilityLabel("Research " + discovery.kind.rawValue.lowercased())
-                Button(discovery.actionTitle) { discovery.search() }.disabled(!discovery.canSearch)
-                if research.searching {
-                    Button("Stop") { research.cancel() }
-                }
-                Button("Clear case") {
-                    if research.people.people.isEmpty, research.correlation.accounts.isEmpty {
-                        discovery.clearCase()
-                    } else {
-                        clearing = true
-                    }
-                }
-            }
-            if discovery.kind == .phone {
-                Picker("Phone format", selection: $discovery.region) {
-                    ForEach(BeholderQueryPlanner.PhoneRegion.allCases) { Text($0.rawValue).tag($0) }
-                }.frame(width: 370)
-            }
-            HStack(spacing: HUD.space4) {
-                if discovery.kind == .username {
-                    Button { sheet = .sources } label: {
-                        Label(BeholderSources.summary(research.selected), systemImage: "line.3.horizontal.decrease.circle")
-                    }.accessibilityLabel("Choose public sources").accessibilityValue(BeholderSources.summary(research.selected))
-                }
-                Button("Research planner…") { sheet = .planner }
-                Button("People (\(research.people.people.count))…") { sheet = .people }
-                Button("Evidence…") { sheet = .evidence }
-                Spacer()
-                if reading {
-                    ProgressView().controlSize(.small)
-                    Button("Cancel opening") { cancelImport() }
-                }
-                Button("Open case…") { opening = true }.disabled(research.searching || reading)
-                Button("Export case…") { prepareExport() }
-                    .disabled((research.findings.isEmpty && research.people.people.isEmpty && research.correlation.accounts.isEmpty) ||
-                        research.searching)
-            }
-            if research.searching, discovery.kind != .username {
-                Text("Public sources are still checking @" + research.username + ". Use Stop to cancel that search.")
-                    .font(.caption).foregroundStyle(HUD.inkMuted)
-            }
-            Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
-            if discovery.kind != .ip {
-                BeholderPublicSearchView(
-                    input: .init(value: discovery.query, kind: discovery.kind, region: discovery.region),
-                    ownerTyped: discovery.ownerTypedInput
-                )
-            }
+        VStack(alignment: .leading, spacing: HUD.space3) {
+            header
+            searchBar
             if let problem = discovery.problem ?? (discovery.kind == .username ? research.problem : nil) ?? exportProblem {
-                Text(problem).foregroundStyle(HUD.warn)
+                Text(problem).hudType(.caption).foregroundStyle(HUD.warn)
             }
             if research.includesImportedObservations {
-                Text((research.importDescription ?? "") + " " + BeholderCaseFile.provenanceNote).font(.caption).foregroundStyle(HUD.warn)
+                Text((research.importDescription ?? "") + " " + BeholderCaseFile.provenanceNote).hudType(.caption).foregroundStyle(HUD.warn)
             }
-            Divider()
-            if discovery.kind != .username {
-                BeholderCaseSearchView(discovery: discovery) { sheet = .link($0) }
-            } else if research.findings.isEmpty {
-                VStack(spacing: HUD.space4) {
-                    BeholderEmblem().frame(width: 150, height: 150).opacity(0.6)
-                    Text("One handle. Several public sources.").font(.title3)
-                    Text("Choose sources and start a search. Link accounts to a person using evidence you have reviewed.")
-                        .foregroundStyle(HUD.inkMuted).multilineTextAlignment(.center)
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                HStack {
-                    Text("RESULTS FOR @" + research.username).hudType(.data)
-                    Spacer()
-                    if research.searching {
-                        ProgressView().controlSize(.small)
-                    }
-                }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: HUD.space3) {
-                        if research.searching {
-                            Text("Search in progress. Results appear as checks finish.")
-                                .font(.caption).foregroundStyle(HUD.inkMuted).frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            BeholderEvidenceSummaryView(findings: research.findings)
-                        }
-                        LazyVGrid(
-                            columns: [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)],
-                            alignment: .leading,
-                            spacing: HUD.space4
-                        ) {
-                            ForEach(research.findings) { finding in card(finding) }
-                        }
-                    }
-                }
-            }
-            Text("Case stays in memory until you export it.")
-                .font(.caption).foregroundStyle(HUD.inkMuted)
+            caseBar
+            tabContent.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Text("Case stays in memory until you export it. A matching handle is not proof of who owns it.")
+                .hudType(.caption).foregroundStyle(HUD.inkMuted)
         }
         .foregroundStyle(HUD.ink).padding(HUD.space4)
         .environment(\.hudTheme, theme)
         .sheet(item: $sheet) { presented in
             Group {
                 switch presented {
-                case .planner: BeholderQueryPlannerView()
-                case .people: BeholderPeopleView(research: research)
-                case .evidence: BeholderCorrelationView(research: research) { sheet = .link($0) }
                 case .sources:
                     VStack(alignment: .leading, spacing: 0) {
                         HStack {
                             Button("Original four") { research.selected = BeholderProvider.originalSources }
+                                .buttonStyle(HUDChipStyle(muted: true))
                             Spacer()
-                            Button("Done") { sheet = nil }.keyboardShortcut(.cancelAction)
+                            Button("Done") { sheet = nil }.keyboardShortcut(.cancelAction).buttonStyle(HUDChipStyle())
                         }.padding(.horizontal, HUD.space4).padding(.top, HUD.space3)
                         BeholderSourceGuideView(selected: $research.selected)
                     }.frame(width: 440).background(HUD.void)
@@ -248,79 +153,6 @@ struct BeholderDashboard: View {
         }
     }
 
-    private var counter: String {
-        if discovery.kind == .username {
-            return "\(research.candidates) " + (research.candidates == 1 ? "CANDIDATE" : "CANDIDATES")
-        }
-        if discovery.kind == .ip {
-            return "IP CONTEXT"
-        }
-        guard let report = discovery.report else { return "CASE SEARCH" }
-        return "\(report.total) " + (report.total == 1 ? "CASE MATCH" : "CASE MATCHES")
-    }
-
-    private var preview: String {
-        if discovery
-            .kind !=
-            .username
-        {
-            if discovery.kind == .ip {
-                return "IP inspection runs locally, without DNS or service requests."
-            }
-            return "Search this case runs locally. Public web lookups require a service choice and a separate browser-opening click."
-        }
-        guard let name = BeholderCaseSearch.username(discovery.query) else {
-            return BeholderCaseSearch.usernameProblem(discovery.query) ?? "Enter a username to preview where it will be sent."
-        }
-        let eligible = research.providers.filter { $0.supports(name) }
-        let hosts = eligible.filter { !$0.isManual && $0 != .bluesky }.map(\.host).joined(separator: ", ")
-        let manualCount = eligible.filter(\.isManual).count
-        let manualTotal = research.providers.filter(\.isManual).count
-        var targets: [String] = []
-        if !hosts.isEmpty {
-            targets.append("“\(name)” to \(hosts) (case may be normalised)")
-        }
-        if eligible.contains(.bluesky) {
-            targets.append("“\(BeholderProvider.bluesky.lookupHandle(name))” to \(BeholderProvider.bluesky.host)")
-        }
-        let destination = targets.isEmpty ? "Search sends no automatic requests." : "Search sends " + targets.joined(separator: "; ") + "."
-        let automatic = targets.isEmpty ? "" : " Automatic sources receive your IP address and the Aegis-Beholder/1.0 app identifier."
-        let manual = manualTotal == 0 ? "" : " \(manualCount) of \(manualTotal) manual sources have prepared links. "
-            + "Search does not contact manual sources. Open a prepared link in your browser to inspect it."
-        return destination + automatic + manual
-    }
-
-    private func card(_ finding: BeholderFinding) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(finding.provider.title).font(.headline)
-                Spacer()
-                if finding.status.title != BeholderEvidence.outcome(finding).title {
-                    Text(finding.status.title).font(.caption).foregroundStyle(HUD.inkMuted)
-                }
-            }
-            ForEach(finding.fields.keys.sorted(), id: \.self) { label in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(label.uppercased()).font(.caption2).foregroundStyle(HUD.inkMuted)
-                    Text(verbatim: finding.fields[label] ?? "").textSelection(.enabled)
-                }
-            }
-            BeholderEvidenceExplanationView(finding: finding)
-            if finding.status == .manual, let url = finding.preparedProfileURL {
-                Link("Open unchecked profile ↗", destination: url).font(.caption)
-                    .help("This link has not been checked. Opens using your browser's privacy and sign-in settings.")
-            } else if finding.status == .candidate, let url = finding.provider.profileURL(research.username) {
-                Link("Open public profile ↗", destination: url).font(.caption)
-                    .help("Opens your browser; the website receives the visit under your browser's settings.")
-            }
-            if finding.status == .candidate || finding.status == .manual {
-                Button("Link to person…") { sheet = .link(.init(username: research.username, finding: finding)) }.font(.caption)
-            }
-        }
-        .padding(HUD.space4).frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(HUD.surface).overlay(Rectangle().stroke(HUD.line, lineWidth: 1))
-    }
-
     private func prepareExport() {
         do {
             document = try BeholderDocument(data: research.export())
@@ -370,6 +202,245 @@ struct BeholderDashboard: View {
         importGeneration = UUID()
         importJob?.cancel(); importJob = nil
         reading = false
+    }
+}
+
+/// The dashboard's parts: header, search line, case bar and tab content.
+extension BeholderDashboard {
+    private var counter: String {
+        if discovery.kind == .username {
+            return "\(research.candidates) " + (research.candidates == 1 ? "CANDIDATE" : "CANDIDATES")
+        }
+        if discovery.kind == .ip {
+            return "IP CONTEXT"
+        }
+        guard let report = discovery.report else { return "CASE SEARCH" }
+        return "\(report.total) " + (report.total == 1 ? "CASE MATCH" : "CASE MATCHES")
+    }
+
+    private var preview: String {
+        if discovery
+            .kind !=
+            .username
+        {
+            if discovery.kind == .ip {
+                return "IP inspection runs locally, without DNS or service requests."
+            }
+            return "Search this case runs locally. Public web lookups require a service choice and a separate browser-opening click."
+        }
+        guard let name = BeholderCaseSearch.username(discovery.query) else {
+            return BeholderCaseSearch.usernameProblem(discovery.query) ?? "Enter a username to preview where it will be sent."
+        }
+        let eligible = research.providers.filter { $0.supports(name) }
+        let hosts = eligible.filter { !$0.isManual && $0 != .bluesky }.map(\.host).joined(separator: ", ")
+        let manualCount = eligible.filter(\.isManual).count
+        let manualTotal = research.providers.filter(\.isManual).count
+        var targets: [String] = []
+        if !hosts.isEmpty {
+            targets.append("“\(name)” to \(hosts) (case may be normalised)")
+        }
+        if eligible.contains(.bluesky) {
+            targets.append("“\(BeholderProvider.bluesky.lookupHandle(name))” to \(BeholderProvider.bluesky.host)")
+        }
+        let destination = targets.isEmpty ? "Search sends no automatic requests." : "Search sends " + targets.joined(separator: "; ") + "."
+        let automatic = targets.isEmpty ? "" : " Automatic sources receive your IP address and the Aegis-Beholder/1.0 app identifier."
+        let manual = manualTotal == 0 ? "" : " \(manualCount) of \(manualTotal) manual sources have prepared links. "
+            + "Search does not contact manual sources. Open a prepared link in your browser to inspect it."
+        return destination + automatic + manual
+    }
+
+    private var header: some View {
+        HStack(spacing: HUD.space3) {
+            BeholderEmblem().frame(width: 52, height: 52)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Beholder").hudType(.title).foregroundStyle(HUD.ink).hudBloom()
+                Text("Follow the evidence.").hudType(.caption).foregroundStyle(HUD.inkMuted)
+            }
+            Spacer()
+            HUDTag(word: counter, tone: research.searching ? HUD.primary : research.candidates > 0 ? HUD.ok : HUD.inkMuted)
+        }
+    }
+
+    private var searchBar: some View {
+        VStack(alignment: .leading, spacing: HUD.space2) {
+            HStack(spacing: HUD.space3) {
+                Text("Find by").hudType(.label).foregroundStyle(HUD.inkMuted)
+                HUDSegmented(
+                    label: "Find by",
+                    options: BeholderCaseSearch.Kind.allCases.map { HUDOption(value: $0, label: $0 == .ip ? "IP" : $0.rawValue) },
+                    value: $discovery.kind
+                )
+                if discovery.kind == .phone {
+                    HUDSegmented(
+                        label: "Phone format",
+                        options: BeholderQueryPlanner.PhoneRegion.allCases.map {
+                            HUDOption(value: $0, label: $0 == .international ? "International +" : "Australia")
+                        },
+                        value: $discovery.region,
+                        small: true
+                    )
+                }
+                Spacer()
+            }
+            HStack(alignment: .top, spacing: HUD.space3) {
+                HUDTermInput(
+                    prompt: (discovery.kind == .ip ? "ip" : discovery.kind.rawValue.lowercased()) + " >",
+                    text: $discovery.query,
+                    placeholder: placeholder,
+                    hint: "⏎ " + (discovery.kind == .username ? "search" : discovery.kind == .ip ? "inspect" : "search case")
+                )
+                .onSubmit { runSearch() }
+                .accessibilityLabel("Research " + discovery.kind.rawValue.lowercased())
+                Button(discovery.actionTitle) { runSearch() }
+                    .buttonStyle(HUDPlateStyle(kind: .primary)).fixedSize().disabled(!discovery.canSearch)
+                if research.searching {
+                    Button("Stop") { research.cancel() }.buttonStyle(HUDPlateStyle(kind: .critical)).fixedSize()
+                }
+            }
+            if discovery.kind == .username {
+                HStack(spacing: HUD.space2) {
+                    Button("Sources · " + BeholderSources.summary(research.selected)) { sheet = .sources }
+                        .buttonStyle(HUDChipStyle())
+                        .accessibilityLabel("Choose public sources").accessibilityValue(BeholderSources.summary(research.selected))
+                    if research.selected.count < BeholderProvider.allCases.count {
+                        // Selecting never searches: the owner still presses Search after seeing the summary.
+                        Button("Use all sources") { research.selected = Set(BeholderProvider.allCases) }
+                            .buttonStyle(HUDChipStyle(muted: true))
+                    }
+                    Text(requestSummary).hudType(.caption).foregroundStyle(HUD.inkMuted).lineLimit(1)
+                    Button(showingDetails ? "Hide details" : "What is sent") { showingDetails.toggle() }
+                        .buttonStyle(HUDChipStyle(muted: true))
+                    Spacer()
+                }
+                if showingDetails {
+                    Text(preview).hudType(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text(preview).hudType(.caption).foregroundStyle(HUD.inkMuted)
+            }
+            if research.searching, discovery.kind != .username {
+                Text("Public sources are still checking @" + research.username + ". Use Stop to cancel that search.")
+                    .hudType(.caption).foregroundStyle(HUD.inkMuted)
+            }
+            if discovery.kind != .ip {
+                BeholderPublicSearchView(
+                    input: .init(value: discovery.query, kind: discovery.kind, region: discovery.region),
+                    ownerTyped: discovery.ownerTypedInput
+                )
+                .hudType(.caption)
+            }
+        }
+    }
+
+    private var caseBar: some View {
+        HStack(spacing: HUD.space2) {
+            HUDSegmented(
+                label: "Case",
+                options: [
+                    HUDOption(value: CaseTab.results, label: "Results", meta: resultsMeta),
+                    HUDOption(value: CaseTab.people, label: "People", meta: "\(research.people.people.count)"),
+                    HUDOption(value: CaseTab.evidence, label: "Evidence", meta: "\(research.correlation.accounts.count)"),
+                    HUDOption(value: CaseTab.planner, label: "Planner"),
+                ],
+                value: $tab
+            )
+            Spacer()
+            if reading {
+                ProgressView().controlSize(.small)
+                Button("Cancel opening") { cancelImport() }.buttonStyle(HUDChipStyle(muted: true))
+            }
+            Button("Open case…") { opening = true }.buttonStyle(HUDChipStyle()).disabled(research.searching || reading)
+            Button("Export case…") { prepareExport() }.buttonStyle(HUDChipStyle())
+                .disabled((research.findings.isEmpty && research.people.people.isEmpty && research.correlation.accounts.isEmpty) ||
+                    research.searching)
+            Button("Clear case") {
+                if research.people.people.isEmpty, research.correlation.accounts.isEmpty {
+                    discovery.clearCase()
+                } else {
+                    clearing = true
+                }
+            }
+            .buttonStyle(HUDChipStyle(muted: true))
+        }
+        .padding(.top, HUD.space3)
+        .overlay(alignment: .top) { HUDRule() }
+    }
+
+    @ViewBuilder private var tabContent: some View {
+        switch tab {
+        case .results:
+            if discovery.kind != .username {
+                BeholderCaseSearchView(discovery: discovery) { sheet = .link($0) }
+            } else if research.findings.isEmpty {
+                emptyState
+            } else {
+                BeholderResultsView(findings: research.findings, username: research.username, searching: research.searching) {
+                    sheet = .link(.init(username: research.username, finding: $0))
+                }
+            }
+        case .people: ScrollView { BeholderPeopleView(research: research, embedded: true) }
+        case .evidence: BeholderCorrelationView(research: research, embedded: true) { sheet = .link($0) }
+        case .planner: ScrollView { BeholderQueryPlannerView(embedded: true).frame(maxWidth: .infinity, alignment: .leading) }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: HUD.space6) {
+            BeholderEmblem().frame(width: 120, height: 120).opacity(0.6)
+            Text("One handle. Many public sources.").hudType(.bodyStrong).foregroundStyle(HUD.ink)
+            HStack(alignment: .top, spacing: HUD.space6) {
+                step("01", "Search", "Type a handle and press Return. Only the sources you chose are asked.")
+                step("02", "Check", "Open found profiles, and the check-by-hand links, in your browser.")
+                step("03", "Link", "Link an account to a person once you've reviewed evidence.")
+            }
+            .frame(maxWidth: 720)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func step(_ number: String, _ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: HUD.space1) {
+            HStack(spacing: HUD.space2) {
+                Text(number).hudType(.data).foregroundStyle(HUD.primary)
+                Text(title).hudType(.label).foregroundStyle(HUD.ink)
+            }
+            Text(text).hudType(.caption).foregroundStyle(HUD.inkMuted).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func runSearch() {
+        tab = .results
+        discovery.search()
+    }
+
+    private var placeholder: String {
+        switch discovery.kind {
+        case .username: "Handle, e.g. ExampleAlex"
+        case .name: "A name already in this case"
+        case .email: "An email already in this case"
+        case .phone: "A phone number already in this case"
+        case .ip: "One IPv4 or IPv6 address"
+        }
+    }
+
+    private var resultsMeta: String? {
+        if discovery.kind == .username {
+            return research.findings.isEmpty ? nil : "\(research.findings.count)"
+        }
+        return discovery.report.map { "\($0.total)" }
+    }
+
+    /// The short form of `preview`: how many sources are asked automatically and how many are browser links.
+    private var requestSummary: String {
+        guard let name = BeholderCaseSearch.username(discovery.query) else {
+            return "Asks \(research.providers.filter { !$0.isManual }.count) sites automatically · "
+                + "\(research.providers.filter(\.isManual).count) to check by hand"
+        }
+        let eligible = research.providers.filter { $0.supports(name) }
+        return "Sends “\(name)” to \(eligible.filter { !$0.isManual }.count) sites · "
+            + "\(eligible.filter(\.isManual).count) to check by hand"
     }
 }
 

@@ -9,9 +9,9 @@ struct BeholderEvidenceSummaryView: View {
         VStack(alignment: .leading, spacing: HUD.space2) {
             Text(summary.headline).hudType(.data).foregroundStyle(HUD.primary)
             if let note = summary.partialNote {
-                Label(note, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(HUD.warn)
+                Label(note, systemImage: "exclamationmark.triangle").hudType(.caption).foregroundStyle(HUD.warn)
             }
-            Text(BeholderEvidence.identityNote).font(.caption).foregroundStyle(HUD.inkMuted)
+            Text(BeholderEvidence.identityNote).hudType(.caption).foregroundStyle(HUD.inkMuted)
         }
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -29,10 +29,10 @@ struct BeholderEvidenceExplanationView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: HUD.space1) {
-            Text(explanation.outcome.title.uppercased()).font(.caption2).foregroundStyle(tint)
-            Text(verbatim: explanation.reason).font(.caption)
+            Text(explanation.outcome.title).hudCaps(9).foregroundStyle(tint)
+            Text(verbatim: explanation.reason).hudType(.caption)
             ForEach(explanation.provenance, id: \.self) { line in
-                Text(verbatim: line).font(.caption2).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
+                Text(verbatim: line).hudType(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
             }
         }
         .fixedSize(horizontal: false, vertical: true)
