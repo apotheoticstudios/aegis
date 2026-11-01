@@ -8,8 +8,17 @@ enum BeholderPublicSearch {
             rawValue
         }
 
+        // privacy-guard: allow-network ADR-0036 fixed destinations for explicit browser searches only
         var host: String {
             self == .github ? "github.com" : "duckduckgo.com"
+        }
+
+        func supports(_ kind: BeholderCaseSearch.Kind) -> Bool {
+            switch kind {
+            case .username, .name, .email: true
+            case .phone: self == .duckDuckGo
+            case .ip: false
+            }
         }
     }
 
@@ -36,10 +45,11 @@ enum BeholderPublicSearch {
 
     /// Primary references: DuckDuckGo help/settings/params and GitHub docs/searching-users (ADR-0036).
     static func prepare(_ input: Input, service: Service) -> Plan? {
+        guard service.supports(input.kind) else { return nil }
         let seed: String
         switch input.kind {
         case .username:
-            guard let value = BeholderProvider.username(input.value) else { return nil }; seed = value
+            guard let value = BeholderCaseSearch.username(input.value) else { return nil }; seed = value
         case .name:
             guard case let .success(plan) = BeholderQueryPlanner.build(input: input.value, kind: .name)
             else { return nil }; seed = plan.seed

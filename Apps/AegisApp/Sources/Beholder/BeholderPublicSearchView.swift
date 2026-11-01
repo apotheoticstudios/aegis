@@ -13,11 +13,13 @@ struct BeholderPublicSearchView: View {
     }
 
     var body: some View {
-        DisclosureGroup("Public lookup in your browser") {
+        DisclosureGroup("Open a public search in your browser") {
             VStack(alignment: .leading, spacing: 8) {
                 Picker("Public service", selection: service) {
                     Text("Choose a service").tag(nil as BeholderPublicSearch.Service?)
-                    ForEach(BeholderPublicSearch.Service.allCases) { Text($0.rawValue).tag(Optional($0)) }
+                    ForEach(BeholderPublicSearch.Service.allCases.filter { $0.supports(input.kind) }) {
+                        Text($0.rawValue).tag(Optional($0))
+                    }
                 }.disabled(!ownerTyped || input.value.isEmpty)
                 if !ownerTyped {
                     Text("Type the identifier yourself to prepare a public lookup. Imported records and case evidence are not sent.")
@@ -30,7 +32,12 @@ struct BeholderPublicSearchView: View {
                         "Opening sends this query to \(plan.host). Your browser exposes your IP address and uses its current cookies and sign-in settings; the service may log the query."
                     )
                     .font(.caption).foregroundStyle(HUD.inkMuted)
+                    // privacy-guard: allow-network ADR-0036 separate owner click after the exact query/destination preview
                     Link("Open selected public search ↗", destination: plan.destination)
+                    if input.kind == .phone {
+                        Text("This query uses the international phone format. Pages may use other spellings or spacing.")
+                            .font(.caption).foregroundStyle(HUD.inkMuted)
+                    }
                     Text(
                         "Inspect results in the browser. Indexed pages can be incomplete or mistaken; a search hit is not proof of account ownership."
                     )

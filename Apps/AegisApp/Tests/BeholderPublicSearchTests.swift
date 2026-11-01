@@ -72,6 +72,22 @@ final class BeholderPublicSearchTests: XCTestCase {
         }
     }
 
+    func testServiceChoicesMatchSupportedInputTypesAndUsernameRejectsOtherIdentifiers() {
+        for kind in BeholderCaseSearch.Kind.allCases {
+            let services = Search.Service.allCases.filter { $0.supports(kind) }
+            switch kind {
+            case .username, .name, .email: XCTAssertEqual(services, [.duckDuckGo, .github])
+            case .phone: XCTAssertEqual(services, [.duckDuckGo])
+            case .ip: XCTAssertTrue(services.isEmpty)
+            }
+        }
+        for value in ["0400000001", "61400000001", "example@example.com", "203.0.113.1"] {
+            for service in Search.Service.allCases {
+                XCTAssertNil(Search.prepare(.init(value: value, kind: .username, region: .international), service: service))
+            }
+        }
+    }
+
     @MainActor func testImportedOrRestoredInputIsNotMarkedAsOwnerTyped() {
         let model = BeholderModel()
         model.query = "ExampleAlex"
