@@ -64,7 +64,7 @@ struct BeholderDashboard: View {
                     Text("Follow the evidence.").foregroundStyle(HUD.inkMuted)
                 }
                 Spacer()
-                Text(discovery.kind == .username ? "\(research.candidates) CANDIDATES" : "\(discovery.report?.total ?? 0) CASE MATCHES")
+                Text(counter)
                     .hudType(.data).foregroundStyle(HUD.primary)
             }
             HStack {
@@ -236,6 +236,17 @@ struct BeholderDashboard: View {
                 exportProblem = "The case could not be exported. Choose another destination and try again."
             }
         }
+    }
+
+    private var counter: String {
+        if discovery.kind == .username {
+            return "\(research.candidates) " + (research.candidates == 1 ? "CANDIDATE" : "CANDIDATES")
+        }
+        if discovery.kind == .ip {
+            return "IP CONTEXT"
+        }
+        guard let report = discovery.report else { return "CASE SEARCH" }
+        return "\(report.total) " + (report.total == 1 ? "CASE MATCH" : "CASE MATCHES")
     }
 
     private var preview: String {

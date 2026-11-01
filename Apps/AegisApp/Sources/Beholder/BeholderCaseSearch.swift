@@ -21,6 +21,7 @@ enum BeholderCaseSearch {
     struct Hit: Identifiable {
         let account: BeholderCorrelation.Account
         let reasons: [Reason]
+        let totalReasons: Int
         var id: String {
             account.id
         }
@@ -103,7 +104,7 @@ enum BeholderCaseSearch {
                 reasons.append(.init(
                     id: "profile-name",
                     label: order == 0 ? "Profile display name matches" : order == 1 ? "Profile name words match" :
-                        "Partial name-word match; verify manually",
+                        "Partial name match; verify manually",
                     value: name,
                     source: account.finding.sourceURL,
                     date: account.finding.checkedAt,
@@ -126,7 +127,7 @@ enum BeholderCaseSearch {
                 }
             }
             reasons.sort { ($0.order, $0.id) < ($1.order, $1.id) }
-            return reasons.isEmpty ? nil : Hit(account: account, reasons: reasons)
+            return reasons.isEmpty ? nil : Hit(account: account, reasons: Array(reasons.prefix(20)), totalReasons: reasons.count)
         }.sorted {
             let lhs = ($0.historical ? 1 : 0, $0.reasons.first?.order ?? 0, $0.id)
             let rhs = ($1.historical ? 1 : 0, $1.reasons.first?.order ?? 0, $1.id)

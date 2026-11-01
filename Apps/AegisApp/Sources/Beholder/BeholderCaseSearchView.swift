@@ -27,9 +27,19 @@ final class BeholderDiscovery {
         didSet { clearResult() }
     }
 
-    private(set) var report: BeholderCaseSearch.Report?
+    private var cachedReport: BeholderCaseSearch.Report?
+    private var searchedRevision: UInt64?
+    var report: BeholderCaseSearch.Report? {
+        searchedRevision == research.caseRevision ? cachedReport : nil
+    }
+
     private(set) var ip: BeholderIPContext.Info?
-    private(set) var problem: String?
+    private var inputProblem: String?
+    var problem: String? {
+        inputProblem ??
+            (cachedReport != nil && report == nil ? "Case evidence changed. Run this search again to see current matches." : nil)
+    }
+
     private(set) var ownerTypedInput = false
 
     init(_ research: BeholderModel) {
@@ -55,17 +65,19 @@ final class BeholderDiscovery {
         if kind == .ip {
             ip = BeholderIPContext.inspect(query)
             if ip == nil {
-                problem = "Enter one numeric IPv4 or IPv6 address, without a URL, port, prefix or zone."
+                inputProblem = "Enter one numeric IPv4 or IPv6 address, without a URL, port, prefix or zone."
             }
             return
         }
-        do { report = try BeholderCaseSearch.compute(
+        do { cachedReport = try BeholderCaseSearch.compute(
             input: query,
             kind: kind,
             region: region,
             store: research.correlation,
             people: research.people
-        ) } catch { problem = (error as? BeholderCaseSearch.Problem)?.message ?? "The case search could not be completed." }
+        )
+        searchedRevision = research.caseRevision
+        } catch { inputProblem = (error as? BeholderCaseSearch.Problem)?.message ?? "The case search could not be completed." }
     }
 
     func clearCase() {
@@ -77,7 +89,7 @@ final class BeholderDiscovery {
     }
 
     private func clearResult() {
-        report = nil; ip = nil; problem = nil
+        cachedReport = nil; searchedRevision = nil; ip = nil; inputProblem = nil
     }
 }
 
@@ -133,6 +145,10 @@ struct BeholderCaseSearchView: View {
                                         Text("Recorded " + date.formatted())
                                     }
                                 }.font(.caption)
+                            }
+                            if hit.totalReasons > hit.reasons.count {
+                                Text("Showing 20 of \(hit.totalReasons) saved references. Reference count is not identity confidence.")
+                                    .font(.caption).foregroundStyle(HUD.inkMuted)
                             }
                         }.padding(HUD.space3).frame(maxWidth: .infinity, alignment: .leading).background(HUD.surface)
                     }
