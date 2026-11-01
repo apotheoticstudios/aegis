@@ -110,6 +110,10 @@ struct BeholderDashboard: View {
                     .disabled((research.findings.isEmpty && research.people.people.isEmpty && research.correlation.accounts.isEmpty) ||
                         research.searching)
             }
+            if research.searching, discovery.kind != .username {
+                Text("Public sources are still checking @" + research.username + ". Use Stop to cancel that search.")
+                    .font(.caption).foregroundStyle(HUD.inkMuted)
+            }
             Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
             if let problem = discovery.problem ?? (discovery.kind == .username ? research.problem : nil) ?? exportProblem {
                 Text(problem).foregroundStyle(HUD.warn)
@@ -256,7 +260,9 @@ struct BeholderDashboard: View {
         {
             return "This search runs locally against saved case evidence. It sends no name, phone, email or IP to a service."
         }
-        guard let name = BeholderProvider.username(discovery.query) else { return "Enter a username to preview where it will be sent." }
+        guard let name = BeholderCaseSearch.username(discovery.query) else {
+            return BeholderCaseSearch.usernameProblem(discovery.query) ?? "Enter a username to preview where it will be sent."
+        }
         let eligible = research.providers.filter { $0.supports(name) }
         let hosts = eligible.filter { !$0.isManual && $0 != .bluesky }.map(\.host).joined(separator: ", ")
         let manualCount = eligible.filter(\.isManual).count

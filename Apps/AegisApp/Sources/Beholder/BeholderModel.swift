@@ -45,7 +45,7 @@ final class BeholderModel {
     }
 
     var preparedUsername: String? {
-        BeholderProvider.username(query)
+        BeholderCaseSearch.username(query)
     }
 
     /// Also changes when the standalone window closes, so view-owned reads cancel with lookups.
@@ -59,7 +59,8 @@ final class BeholderModel {
 
     func start() {
         guard let name = preparedUsername, !providers.isEmpty else {
-            problem = "Enter one username using letters, numbers, dots, dashes or underscores, and choose at least one source."
+            problem = BeholderCaseSearch.usernameProblem(query) ??
+                "Enter one username using letters, numbers, dots, dashes or underscores, and choose at least one source."
             return
         }
         cancel()
