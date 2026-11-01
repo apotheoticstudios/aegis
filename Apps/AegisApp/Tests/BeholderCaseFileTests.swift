@@ -7,11 +7,11 @@ final class BeholderCaseFileTests: XCTestCase {
 
     func testSchema4RoundtripPreservesUUIDsAndOriginalSnapshots() throws {
         let data = try fixture()
-        let original = try BeholderCaseFile.decode(data)
+        let original = try BeholderCaseFile.decode(data, now: date)
         let second = try BeholderCaseFile.decode(BeholderCaseFile.encode(
             username: original.username, findings: original.findings, people: original.people,
             correlation: original.correlation, exportedAt: original.exportedAt
-        ))
+        ), now: date)
         XCTAssertEqual(original, second)
         XCTAssertEqual(second.schema, 4)
         XCTAssertEqual(second.correlation.accounts.count, 1)
@@ -19,7 +19,7 @@ final class BeholderCaseFileTests: XCTestCase {
         XCTAssertEqual(second.correlation.hints.count, 1)
         XCTAssertTrue(second.provenanceNote.contains("claims in a file"))
         XCTAssertTrue(second.provenanceNote.contains("not independently verified"))
-        XCTAssertEqual(try BeholderCaseFile.decode(data), second)
+        XCTAssertEqual(try BeholderCaseFile.decode(data, now: date), second)
         let json = try object(data)
         XCTAssertEqual(json["warning"] as? String, BeholderCaseFile.provenanceNote)
     }
@@ -38,6 +38,32 @@ final class BeholderCaseFileTests: XCTestCase {
         XCTAssertTrue(snapshot.correlation.accounts.isEmpty)
         XCTAssertTrue(snapshot.correlation.evidence.isEmpty)
         XCTAssertTrue(snapshot.correlation.hints.isEmpty)
+    }
+
+    func testImportProvenanceSurvivesExportAndCannotInventProviderFields() throws {
+        let original = try BeholderCaseFile.decode(fixture(), now: date)
+        let origin = BeholderCaseFile.ImportProvenance(importedAt: original.importedAt, sourceExportedAt: original.exportedAt)
+        let data = try BeholderCaseFile.encode(
+            username: original.username,
+            findings: original.findings,
+            people: original.people,
+            correlation: original.correlation,
+            exportedAt: date.addingTimeInterval(600),
+            importedFrom: origin
+        )
+        let reopened = try BeholderCaseFile.decode(data, now: date.addingTimeInterval(1200))
+        XCTAssertEqual(reopened.importedFrom, origin)
+        XCTAssertEqual(reopened.importedAt, date.addingTimeInterval(1200))
+        for label in ["Verified owner", "Access", "Profile type", "Working on"] {
+            var json = try object(fixture())
+            var findings = try XCTUnwrap(json["findings"] as? [[String: Any]])
+            findings[0]["fields"] = [label: "yes"]
+            json["findings"] = findings
+            XCTAssertThrowsError(try decode(json))
+        }
+        var json = try object(data)
+        json["importedFrom"] = ["importedAt": "not a date", "sourceExportedAt": "2027-01-15T08:00:00Z"]
+        XCTAssertThrowsError(try decode(json))
     }
 
     func testPeopleOnlyCaseBeforeFirstSearch() throws {
