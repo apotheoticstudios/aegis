@@ -111,6 +111,12 @@ struct BeholderDashboard: View {
                         research.searching)
             }
             Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
+            if discovery.kind != .ip {
+                BeholderPublicSearchView(
+                    input: .init(value: discovery.query, kind: discovery.kind, region: discovery.region),
+                    ownerTyped: discovery.ownerTypedInput
+                )
+            }
             if let problem = discovery.problem ?? (discovery.kind == .username ? research.problem : nil) ?? exportProblem {
                 Text(problem).foregroundStyle(HUD.warn)
             }
