@@ -251,7 +251,7 @@ extension BeholderDashboard {
 
     private var header: some View {
         HStack(spacing: HUD.space3) {
-            BeholderEmblem().frame(width: 52, height: 52)
+            BeholderEmblem().frame(width: 76, height: 76)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Beholder").hudType(.title).foregroundStyle(HUD.ink).hudBloom()
                 Text("Follow the evidence.").hudType(.caption).foregroundStyle(HUD.inkMuted)
@@ -386,8 +386,9 @@ extension BeholderDashboard {
     }
 
     private var emptyState: some View {
-        VStack(spacing: HUD.space6) {
-            BeholderEmblem().frame(width: 120, height: 120).opacity(0.6)
+        VStack(spacing: HUD.space4) {
+            // Shrinks in a short window so the steps below stay in view.
+            BeholderEmblem().aspectRatio(1, contentMode: .fit).frame(minWidth: 96, maxWidth: 240, minHeight: 96, maxHeight: 240)
             Text("One handle. Many public sources.").hudType(.bodyStrong).foregroundStyle(HUD.ink)
             HStack(alignment: .top, spacing: HUD.space6) {
                 step("01", "Search", "Type a handle and press Return. Only the sources you chose are asked.")
@@ -483,37 +484,74 @@ struct BeholderDocument: FileDocument {
     }
 }
 
-/// Original vector artwork: a central eye, toothed orb and ten eye stalks. No external artwork or network assets.
+/// The Beholder mark in density-ramp characters, like the design system's other character art: an original floating
+/// eye creature with ten eyestalks, mirrored left to right. Baked from Aegis's own drawing; no external artwork.
 struct BeholderEmblem: View {
-    @Environment(\.hudTheme) private var theme
-
     var body: some View {
-        Canvas { context, size in
-            let ink = theme.color(.primary)
-            let scale = min(size.width, size.height) / 100
-            context.scaleBy(x: scale, y: scale)
-            for index in 0 ..< 10 {
-                let angle = Double(index) * .pi / 9 + .pi
-                let tip = CGPoint(x: 50 + cos(angle) * 43, y: 49 + sin(angle) * 40)
-                var stalk = Path()
-                stalk.move(to: CGPoint(x: 50 + cos(angle) * 22, y: 48 + sin(angle) * 19))
-                stalk.addQuadCurve(to: tip, control: CGPoint(x: tip.x, y: 42))
-                context.stroke(stalk, with: .color(ink.opacity(0.75)), lineWidth: 1.5)
-                context.stroke(Path(ellipseIn: CGRect(x: tip.x - 4, y: tip.y - 3, width: 8, height: 6)), with: .color(ink), lineWidth: 1)
-                context.fill(Path(ellipseIn: CGRect(x: tip.x - 1, y: tip.y - 2, width: 2, height: 4)), with: .color(ink))
-            }
-            context.stroke(Path(ellipseIn: CGRect(x: 23, y: 29, width: 54, height: 57)), with: .color(ink), lineWidth: 1.5)
-            context.stroke(Path(ellipseIn: CGRect(x: 31, y: 40, width: 38, height: 25)), with: .color(ink), lineWidth: 1.5)
-            context.fill(Path(ellipseIn: CGRect(x: 45, y: 42, width: 10, height: 21)), with: .color(ink))
-            var mouth = Path()
-            mouth.move(to: CGPoint(x: 34, y: 72))
-            for index in 0 ..< 9 {
-                mouth.addLine(to: CGPoint(x: 34 + index * 4, y: index.isMultiple(of: 2) ? 72 : 78))
-            }
-            context.stroke(mouth, with: .color(ink), lineWidth: 1.2)
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            let lines = side < 90 ? Self.small : Self.large
+            HUDAsciiText(
+                lines: lines,
+                cols: lines.count * 2,
+                size: side / CGFloat(lines.count),
+                tone: HUD.primary,
+                aspect: HUDAscii.artAspect
+            )
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .accessibilityLabel("Beholder: a floating eye with ten eye stalks")
+        .accessibilityElement()
+        .accessibilityLabel("Beholder: a floating eye creature with ten eyestalks")
+        .accessibilityAddTraits(.isImage)
     }
+
+    /// 24 rows of 48 characters, for the empty state and larger.
+    static let large = [
+        "",
+        "",
+        "                  .*%#=  =#%*.",
+        "                  .*%#=  =#%*.",
+        "         .    .==:  *=    =*  :==.    .",
+        "       =#%*.  #*#%  +*    *+  %#*#  .*%#=",
+        "       -#@#.  .=@-  :%    %:  -@=.  .#@#-",
+        "         :#=.   :#=.:%*++*%:.=#:   .=#:",
+        "      .+*= :+*=:-*@@@@@@@@@@@@*-:=*+: =*+.",
+        "      +*@@*+-.+@@@@@@@@@@@@@@@@@@+.-+*@@*+",
+        "  --::.--. .=@@@@@@@@#*++*#@@@@@@@@=. .--.::--",
+        " **%%+=+++++%@@@@@*-.=#++#=.-*@@@@@%+++++=+%%**",
+        " .++=      +@@@@*.  *@@::@@*  .*@@@@+      =++.",
+        "           %@@@@*:  +@@::@@+  :*@@@@%",
+        "           #@@@@@@#-.=#++#=.-#@@@@@@#",
+        "           +@@@@@@@@@%****%@@@@@@@@@+",
+        "            #@@@%#%@@@@@@@@@@%#%@@@#",
+        "            .*@@@#- .:----:. -#@@@*.",
+        "              -#@@@%+-.  .-+%@@@#-",
+        "                :+#@@@@@@@@@@#+:",
+        "                    :--==--:",
+        "",
+        "",
+        "",
+    ]
+
+    /// 16 rows of 32 characters, for the header and smaller.
+    static let small = [
+        "",
+        "            :+=  =+:",
+        "            :#+  +#:",
+        "    .++: =#* =-  -= *#= :++.",
+        "     =#: .=* .*  *. *=. :#=",
+        "    :=:==-:+%#@@@@#%+:-==:=:",
+        "    =#*==*@@@@@@@@@@@@*==*#=",
+        ".*#+-==-#@@@#=+==+=#@@@#-==-+#*.",
+        " --.   =@@%: =@==@= :%@@=   .--",
+        "       +@@@#=:*++*:=#@@@+",
+        "       -@@@@@@%##%@@@@@@-",
+        "        =@@#===++===#@@=",
+        "         .*@@#=--=#@@*.",
+        "            :=++++=:",
+        "",
+        "",
+    ]
 }
 
 @MainActor

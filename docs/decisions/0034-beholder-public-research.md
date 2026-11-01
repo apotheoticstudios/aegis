@@ -59,7 +59,7 @@ Contacts/memory writes, uploads, identifier pivots, name/photo matching or new n
 The case does not assert exhaustive coverage or independent verification of the owner's conclusions.
 
 Sherlock's cross-site discovery and Hunchly's source/time provenance informed the design. No upstream code,
-site dataset or artwork is copied or bundled; the multi-eyed emblem is original SwiftUI vector drawing. Each
+site dataset or artwork is copied or bundled; the multi-eyed emblem is original character art (#138), baked from Aegis's own drawing. Each
 additional code integration must review its actual licence and outbound behavior first.
 
 - https://github.com/sherlock-project/sherlock (MIT)

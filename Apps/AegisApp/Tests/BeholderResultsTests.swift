@@ -40,6 +40,18 @@ final class BeholderResultsTests: XCTestCase {
         }
     }
 
+    func testEmblemArtIsSquareAndMirrored() {
+        for (art, rows) in [(BeholderEmblem.large, 24), (BeholderEmblem.small, 16)] {
+            XCTAssertEqual(art.count, rows)
+            for line in art {
+                XCTAssertLessThanOrEqual(line.count, rows * 2)
+                let padded = Array(line.padding(toLength: rows * 2, withPad: " ", startingAt: 0))
+                XCTAssertEqual(padded, padded.reversed(), line)
+                XCTAssertTrue(line.allSatisfy(HUDAscii.ramp.contains), line)
+            }
+        }
+    }
+
     @MainActor func testEmptyDashboardAndEmbeddedTabsRender() throws {
         guard ProcessInfo.processInfo.environment["RENDER_BEHOLDER"] == "1" else {
             throw XCTSkip("Opt-in native window capture: RENDER_BEHOLDER=1 on an unlocked Mac.")
@@ -52,6 +64,9 @@ final class BeholderResultsTests: XCTestCase {
             ("tab-people", CGSize(width: 868, height: 420), AnyView(BeholderPeopleView(research: model, embedded: true))),
             ("tab-evidence", CGSize(width: 868, height: 420), AnyView(BeholderCorrelationView(research: model, embedded: true))),
             ("tab-planner", CGSize(width: 868, height: 420), AnyView(BeholderQueryPlannerView(embedded: true))),
+            ("emblem", CGSize(width: 520, height: 260), AnyView(HStack(alignment: .bottom, spacing: 24) {
+                ForEach([240.0, 120, 76], id: \.self) { BeholderEmblem().frame(width: $0, height: $0) }
+            })),
         ]
         for (name, size, view) in views {
             let host = NSHostingView(rootView: view
