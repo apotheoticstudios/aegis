@@ -12,7 +12,15 @@ final class BeholderModel {
     private(set) var findings: [BeholderFinding] = []
     private(set) var searching = false
     private(set) var problem: String?
-    private(set) var includesImportedObservations = false
+    private(set) var importProvenance: BeholderCaseFile.ImportProvenance?
+    var includesImportedObservations: Bool {
+        importProvenance != nil
+    }
+
+    var importDescription: String? {
+        importProvenance.map { "Imported \($0.importedAt.formatted()); source file exported \($0.sourceExportedAt.formatted())." }
+    }
+
     private var generation = UUID()
     private var job: Task<Void, Never>?
     private let client: any BeholderSearching
@@ -116,12 +124,18 @@ final class BeholderModel {
         findings = []
         people = BeholderPeople()
         correlation = BeholderCorrelation()
-        includesImportedObservations = false
+        importProvenance = nil
         problem = nil
     }
 
     func export() throws -> Data {
-        try BeholderCaseFile.encode(username: username, findings: findings, people: people, correlation: correlation)
+        try BeholderCaseFile.encode(
+            username: username,
+            findings: findings,
+            people: people,
+            correlation: correlation,
+            importedFrom: importProvenance
+        )
     }
 
     /// Validate the entire immutable input before cancelling work or replacing any active case value.
@@ -133,7 +147,7 @@ final class BeholderModel {
         findings = snapshot.findings
         people = snapshot.people
         correlation = snapshot.correlation
-        includesImportedObservations = true
+        importProvenance = .init(importedAt: snapshot.importedAt, sourceExportedAt: snapshot.exportedAt)
         problem = nil
     }
 

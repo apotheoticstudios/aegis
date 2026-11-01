@@ -33,6 +33,13 @@ final class BeholderCaseIntegrationTests: XCTestCase {
         XCTAssertEqual(requests, 2)
         let again = try BeholderCaseFile.decode(restored.export())
         XCTAssertEqual(again.people, restored.people)
+        // ISO timestamps have whole-second precision in the exported document.
+        XCTAssertEqual(again.importedFrom?.sourceExportedAt, restored.importProvenance?.sourceExportedAt)
+        XCTAssertEqual(
+            again.importedFrom?.importedAt.timeIntervalSince1970,
+            restored.importProvenance?.importedAt.timeIntervalSince1970.rounded(.down)
+        )
+        XCTAssertNotNil(restored.importDescription)
         XCTAssertTrue(again.provenanceNote.contains("phone/email"))
         restored.clear()
         XCTAssertFalse(restored.includesImportedObservations)

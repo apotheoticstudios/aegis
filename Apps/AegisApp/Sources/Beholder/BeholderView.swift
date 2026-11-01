@@ -97,7 +97,7 @@ struct BeholderDashboard: View {
                 Text(problem).foregroundStyle(HUD.warn)
             }
             if research.includesImportedObservations {
-                Text(BeholderCaseFile.provenanceNote).font(.caption).foregroundStyle(HUD.warn)
+                Text((research.importDescription ?? "") + " " + BeholderCaseFile.provenanceNote).font(.caption).foregroundStyle(HUD.warn)
             }
             Divider()
             if research.findings.isEmpty {
@@ -274,6 +274,7 @@ struct BeholderDashboard: View {
             }
         }
         do {
+            guard url.isFileURL else { throw BeholderCaseFile.Problem.malformed }
             let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
             let data = try handle.read(upToCount: BeholderCaseFile.byteLimit + 1) ?? Data()
