@@ -249,7 +249,10 @@ struct BeholderDashboard: View {
             .kind !=
             .username
         {
-            return discovery.kind == .ip ? "IP inspection runs locally, without DNS or service requests." : "Search this case runs locally. Public web lookups require a service choice and a separate browser-opening click."
+            if discovery.kind == .ip {
+                return "IP inspection runs locally, without DNS or service requests."
+            }
+            return "Search this case runs locally. Public web lookups require a service choice and a separate browser-opening click."
         }
         guard let name = BeholderProvider.username(discovery.query) else { return "Enter a username to preview where it will be sent." }
         let eligible = research.providers.filter { $0.supports(name) }
