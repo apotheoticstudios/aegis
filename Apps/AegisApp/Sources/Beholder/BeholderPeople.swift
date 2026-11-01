@@ -62,6 +62,14 @@ struct BeholderPeople: Codable, Equatable, Sendable {
 
     private(set) var people: [Person] = []
 
+    /// Restores validated records, preserving UUIDs and immutable original observations.
+    static func restoring(_ records: [Person]) throws -> Self {
+        try BeholderCaseFile.validatePeople(records)
+        var restored = Self()
+        restored.people = records
+        return restored
+    }
+
     @discardableResult mutating func create(_ name: String) throws -> UUID {
         guard let label = Self.text(name, range: 1 ... 80) else { throw Problem.label }
         guard people.count < 50 else { throw Problem.capacity }
