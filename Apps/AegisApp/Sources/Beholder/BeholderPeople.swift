@@ -154,6 +154,7 @@ struct BeholderPeople: Codable, Equatable, Sendable {
         guard BeholderProfileLinks.canonical(input) != nil, input.utf8.count <= 2048, safe(input), !input.contains(" "),
               let parts = URLComponents(string: input), parts.scheme == "https", parts.user == nil, parts.password == nil,
               parts.port == nil || parts.port == 443, let host = parts.host, BeholderQueryPlanner.domain(host) != nil,
+              parts.percentEncodedFragment.map({ $0.removingPercentEncoding.map(safe) ?? false }) ?? true,
               !["local", "localhost", "internal", "invalid", "test", "onion", "lan", "home", "localdomain"]
               .contains(host.lowercased().split(separator: ".").last.map(String.init) ?? "")
         else { return nil }

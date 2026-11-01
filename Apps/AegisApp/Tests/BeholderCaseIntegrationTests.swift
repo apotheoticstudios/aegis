@@ -80,9 +80,78 @@ final class BeholderCaseIntegrationTests: XCTestCase {
             BeholderPeople.evidenceURL("https://example.com/author#contact")?.absoluteString,
             "https://example.com/author#contact"
         )
-        for address in ["https://example.com/a%0Ab", "https://example.com/a%zz", "https://example.com/a/../other"] {
+        for address in [
+            "https://example.com/a%0Ab",
+            "https://example.com/a%zz",
+            "https://example.com/a/../other",
+            "https://example.com/author#%0A",
+            "https://example.com/author#%E2%80%AE",
+        ] {
             XCTAssertNil(BeholderPeople.evidenceURL(address))
         }
+    }
+
+    @MainActor func testAllSourceCasesRemainExportableAfterStopAndRateLimit() async throws {
+        let client = FullCaseClient()
+        let model = BeholderModel(client: client)
+        model.selected = Set(BeholderProvider.allCases)
+        model.query = "ExampleAlex"; model.start()
+        try await finished(model)
+        XCTAssertEqual(model.findings.count, 72)
+        for source in [BeholderProvider.github, .bluesky, .mastodon] {
+            XCTAssertEqual(model.findings.first { $0.provider == source }?.status, .candidate)
+        }
+        let person = try model.people.create("Example Alex")
+        let github = try XCTUnwrap(model.findings.first { $0.provider == .github })
+        try model.people.link(
+            personID: person,
+            username: model.username,
+            finding: github,
+            assessment: .supported,
+            reason: "Example author page links to this account",
+            evidence: "https://example.com/author#accounts",
+            now: .init(timeIntervalSince1970: 1_800_000_030)
+        )
+        try model.correlation.identify(
+            personID: person,
+            identifier: XCTUnwrap(BeholderIdentifier(input: "0400 000 001", kind: .phone, region: .australia)),
+            source: "https://example.com/contact"
+        )
+        let original = try BeholderCaseFile.decode(model.export())
+        XCTAssertEqual(original.findings.count, 72)
+        XCTAssertEqual(original.people.people[0].links[0].assessment, .supported)
+        XCTAssertTrue(original.correlation.evidence.contains { $0.origin == .publicField })
+        await client.setSlow(true)
+        model.start()
+        model.cancel()
+        let stopped = try BeholderCaseFile.decode(model.export())
+        XCTAssertTrue(stopped.findings.filter { !$0.provider.isManual }.allSatisfy { $0.status == .cancelled })
+        XCTAssertEqual(stopped.correlation.evidence, original.correlation.evidence)
+        await client.setLimited()
+        model.start(); try await finished(model)
+        let limited = try BeholderCaseFile.decode(model.export())
+        XCTAssertTrue(limited.findings.filter { !$0.provider.isManual }.allSatisfy { $0.status == .limited })
+        XCTAssertEqual(limited.correlation.evidence, original.correlation.evidence)
+        model.query = "Ex"; model.selected = [.youtube]; model.start()
+        XCTAssertEqual(model.findings[0].status, .unsupported)
+        let unsupported = try BeholderCaseFile.decode(model.export())
+        XCTAssertEqual(unsupported.findings[0].status, .unsupported)
+        let reopened = BeholderModel(client: client)
+        try reopened.importCase(model.export())
+        let firstSource = try XCTUnwrap(reopened.importProvenance?.sourceExportedAt)
+        let twice = BeholderModel(client: client)
+        try twice.importCase(reopened.export())
+        XCTAssertEqual(twice.importProvenance?.sourceExportedAt, firstSource)
+    }
+
+    func testSelectedFileReaderEnforcesByteCapBeforeParsing() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Beholder-Example-" + UUID().uuidString + ".json")
+        let data = Data("Example synthetic case input".utf8)
+        try data.write(to: url, options: .withoutOverwriting)
+        defer { try? FileManager.default.removeItem(at: url) }
+        XCTAssertEqual(try BeholderCaseInput.read(url), data)
+        try Data(repeating: 32, count: BeholderCaseFile.byteLimit + 1).write(to: url)
+        XCTAssertThrowsError(try BeholderCaseInput.read(url))
     }
 
     @MainActor private func finished(_ model: BeholderModel) async throws {
@@ -91,6 +160,40 @@ final class BeholderCaseIntegrationTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(5))
         }
         XCTAssertFalse(model.searching)
+    }
+}
+
+private actor FullCaseClient: BeholderSearching {
+    private var slow = false
+    private var limited = false
+    func setSlow(_ value: Bool) {
+        slow = value
+    }
+
+    func setLimited() {
+        slow = false; limited = true
+    }
+
+    func lookup(_ provider: BeholderProvider, username: String) async -> BeholderFinding {
+        if slow {
+            try? await Task.sleep(for: .seconds(1))
+        }
+        let status: BeholderFinding.Status = Task.isCancelled ? .cancelled : limited ? .limited
+            : [.github, .bluesky, .mastodon].contains(provider) ? .candidate : .unavailable
+        var fields: [String: String] = [:]
+        if status == .candidate {
+            fields["Handle"] = provider.lookupHandle(username)
+            if provider == .github {
+                fields["Public email"] = "example@example.com"
+            }
+        }
+        return BeholderFinding(
+            provider: provider,
+            status: status,
+            checkedAt: .init(timeIntervalSince1970: 1_800_000_000),
+            sourceURL: provider.endpoint(username),
+            fields: fields
+        )
     }
 }
 

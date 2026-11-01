@@ -18,7 +18,7 @@ final class BeholderModel {
     }
 
     var importDescription: String? {
-        importProvenance.map { "Imported \($0.importedAt.formatted()); source file exported \($0.sourceExportedAt.formatted())." }
+        importProvenance.map { "Imported \($0.importedAt.formatted()); original source exported \($0.sourceExportedAt.formatted())." }
     }
 
     private var generation = UUID()
@@ -147,7 +147,8 @@ final class BeholderModel {
         findings = snapshot.findings
         people = snapshot.people
         correlation = snapshot.correlation
-        importProvenance = .init(importedAt: snapshot.importedAt, sourceExportedAt: snapshot.exportedAt)
+        let sourceDate = min(snapshot.importedFrom?.sourceExportedAt ?? snapshot.exportedAt, snapshot.exportedAt)
+        importProvenance = .init(importedAt: snapshot.importedAt, sourceExportedAt: sourceDate)
         problem = nil
     }
 

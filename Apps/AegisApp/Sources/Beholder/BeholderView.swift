@@ -43,6 +43,9 @@ struct BeholderDashboard: View {
     @State private var reviewingImport = false
     @State private var pendingImport: Data?
     @State private var importPreview = ""
+    @State private var reading = false
+    @State private var importJob: Task<Void, Never>?
+    @State private var importGeneration = UUID()
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
     init(research: BeholderModel, followsPanel: Bool = false) {
@@ -87,7 +90,11 @@ struct BeholderDashboard: View {
                 Button("People (\(research.people.people.count))…") { sheet = .people }
                 Button("Evidence…") { sheet = .evidence }
                 Spacer()
-                Button("Open case…") { opening = true }.disabled(research.searching)
+                if reading {
+                    ProgressView().controlSize(.small)
+                    Button("Cancel opening") { cancelImport() }
+                }
+                Button("Open case…") { opening = true }.disabled(research.searching || reading)
                 Button("Export case…") { prepareExport() }
                     .disabled((research.findings.isEmpty && research.people.people.isEmpty && research.correlation.accounts.isEmpty) ||
                         research.searching)
@@ -174,14 +181,22 @@ struct BeholderDashboard: View {
                 } catch { exportProblem = "The case could not be opened. The current case was kept." }
                 pendingImport = nil
             }
-            Button("Export current case first…") { pendingImport = nil; prepareExport() }
-                .disabled(!research.hasCase)
+            Button("Export current case first…") {
+                pendingImport = nil
+                Task { @MainActor in
+                    await Task.yield()
+                    if !followsPanel || HUDPresence.shared.open {
+                        prepareExport()
+                    }
+                }
+            }
+            .disabled(!research.hasCase)
             Button("Keep current case", role: .cancel) { pendingImport = nil }
         } message: {
             Text(importPreview +
                 " Imported claims are unverified. This replaces the current session; export first to keep it, then reopen the import.")
         }
-        .onDisappear { research.cancel() }
+        .onDisappear { research.cancel(); cancelImport() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
                 research.cancel()
@@ -191,9 +206,11 @@ struct BeholderDashboard: View {
                 opening = false
                 reviewingImport = false
                 pendingImport = nil
+                cancelImport()
             }
         }
         .fileImporter(isPresented: $opening, allowedContentTypes: [.json]) { result in
+            guard !followsPanel || HUDPresence.shared.open else { return }
             switch result {
             case let .success(url): prepareImport(url)
             case .failure: exportProblem = "The case could not be opened. The current case was kept."
@@ -262,32 +279,66 @@ struct BeholderDashboard: View {
             document = try BeholderDocument(data: research.export())
             exportProblem = nil
             exporting = true
-        } catch { exportProblem = "The case could not be prepared for export." }
+        } catch { exportProblem = (error as? BeholderCaseFile.Problem)?.message ?? "The case could not be prepared for export." }
     }
 
-    /// Reads only the owner's selected file, with a byte cap before parsing. No URL from its contents is opened.
+    /// Starts a bounded background read. Old or cancelled completions cannot replace a later preview.
     private func prepareImport(_ url: URL) {
+        cancelImport()
+        let generation = importGeneration
+        reading = true
+        importJob = Task { @MainActor in
+            let reader = Task.detached(priority: .userInitiated) { try BeholderCaseInput.read(url) }
+            do {
+                let data = try await withTaskCancellationHandler(operation: { try await reader.value }, onCancel: { reader.cancel() })
+                try Task.checkCancellation()
+                guard generation == importGeneration, !followsPanel || HUDPresence.shared.open else { return }
+                let snapshot = try BeholderCaseFile.decode(data)
+                let name = snapshot.username.isEmpty ? "No username" : "@" + snapshot.username
+                importPreview = "\(name) · exported \(snapshot.exportedAt.formatted()). "
+                    + (snapshot.importedFrom == nil ? "" : "Previously imported. ")
+                    + "\(snapshot.findings.count) findings, \(snapshot.people.people.count) people, "
+                    + "\(snapshot.correlation.accounts.count) accounts and \(snapshot.correlation.evidence.count) identifier observations."
+                pendingImport = data
+                exportProblem = nil
+                reviewingImport = true
+            } catch is CancellationError {
+                // Closing the panel or cancelling a read keeps the active case unchanged.
+            } catch {
+                guard generation == importGeneration else { return }
+                pendingImport = nil
+                exportProblem = (error as? BeholderCaseFile.Problem)?.message ?? "The case could not be opened. The current case was kept."
+            }
+            if generation == importGeneration {
+                reading = false; importJob = nil
+            }
+        }
+    }
+
+    private func cancelImport() {
+        importGeneration = UUID()
+        importJob?.cancel(); importJob = nil
+        reading = false
+    }
+}
+
+/// Reads only a selected local file, away from the main actor; no URL from file contents is followed.
+enum BeholderCaseInput {
+    static func read(_ url: URL) throws -> Data {
+        try Task.checkCancellation()
+        guard url.isFileURL else { throw BeholderCaseFile.Problem.malformed }
         let access = url.startAccessingSecurityScopedResource()
         defer {
             if access {
                 url.stopAccessingSecurityScopedResource()
             }
         }
-        do {
-            guard url.isFileURL else { throw BeholderCaseFile.Problem.malformed }
-            let handle = try FileHandle(forReadingFrom: url)
-            defer { try? handle.close() }
-            let data = try handle.read(upToCount: BeholderCaseFile.byteLimit + 1) ?? Data()
-            let snapshot = try BeholderCaseFile.decode(data)
-            importPreview = "Case preview: \(snapshot.findings.count) current findings, \(snapshot.people.people.count) people, "
-                + "\(snapshot.correlation.accounts.count) archived accounts and \(snapshot.correlation.evidence.count) identifier observations."
-            pendingImport = data
-            exportProblem = nil
-            reviewingImport = true
-        } catch {
-            pendingImport = nil
-            exportProblem = (error as? BeholderCaseFile.Problem)?.message ?? "The case could not be opened. The current case was kept."
-        }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let data = try handle.read(upToCount: BeholderCaseFile.byteLimit + 1) ?? Data()
+        try Task.checkCancellation()
+        guard data.count <= BeholderCaseFile.byteLimit else { throw BeholderCaseFile.Problem.capacity }
+        return data
     }
 }
 
