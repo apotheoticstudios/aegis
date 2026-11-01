@@ -39,6 +39,10 @@ struct BeholderDashboard: View {
     @State private var exportProblem: String?
     @State private var sheet: Sheet?
     @State private var clearing = false
+    @State private var opening = false
+    @State private var reviewingImport = false
+    @State private var pendingImport: Data?
+    @State private var importPreview = ""
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
     init(research: BeholderModel, followsPanel: Bool = false) {
@@ -83,6 +87,7 @@ struct BeholderDashboard: View {
                 Button("People (\(research.people.people.count))…") { sheet = .people }
                 Button("Evidence…") { sheet = .evidence }
                 Spacer()
+                Button("Open case…") { opening = true }.disabled(research.searching)
                 Button("Export case…") { prepareExport() }
                     .disabled((research.findings.isEmpty && research.people.people.isEmpty && research.correlation.accounts.isEmpty) ||
                         research.searching)
@@ -90,6 +95,9 @@ struct BeholderDashboard: View {
             Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
             if let problem = research.problem ?? exportProblem {
                 Text(problem).foregroundStyle(HUD.warn)
+            }
+            if research.includesImportedObservations {
+                Text(BeholderCaseFile.provenanceNote).font(.caption).foregroundStyle(HUD.warn)
             }
             Divider()
             if research.findings.isEmpty {
@@ -156,6 +164,23 @@ struct BeholderDashboard: View {
         } message: {
             Text("People, account links and evidence will be removed from this session. Export first to keep a copy.")
         }
+        .confirmationDialog("Open imported case?", isPresented: $reviewingImport, titleVisibility: .visible) {
+            Button("Open and replace current case") {
+                do {
+                    if let data = pendingImport {
+                        try research.importCase(data)
+                    }
+                    exportProblem = nil
+                } catch { exportProblem = "The case could not be opened. The current case was kept." }
+                pendingImport = nil
+            }
+            Button("Export current case first…") { pendingImport = nil; prepareExport() }
+                .disabled(!research.hasCase)
+            Button("Keep current case", role: .cancel) { pendingImport = nil }
+        } message: {
+            Text(importPreview +
+                " Imported claims are unverified. This replaces the current session; export first to keep it, then reopen the import.")
+        }
         .onDisappear { research.cancel() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
@@ -163,6 +188,15 @@ struct BeholderDashboard: View {
                 sheet = nil
                 clearing = false
                 exporting = false
+                opening = false
+                reviewingImport = false
+                pendingImport = nil
+            }
+        }
+        .fileImporter(isPresented: $opening, allowedContentTypes: [.json]) { result in
+            switch result {
+            case let .success(url): prepareImport(url)
+            case .failure: exportProblem = "The case could not be opened. The current case was kept."
             }
         }
         .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: "Beholder-case") { result in
@@ -229,6 +263,30 @@ struct BeholderDashboard: View {
             exportProblem = nil
             exporting = true
         } catch { exportProblem = "The case could not be prepared for export." }
+    }
+
+    /// Reads only the owner's selected file, with a byte cap before parsing. No URL from its contents is opened.
+    private func prepareImport(_ url: URL) {
+        let access = url.startAccessingSecurityScopedResource()
+        defer {
+            if access {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let data = try handle.read(upToCount: BeholderCaseFile.byteLimit + 1) ?? Data()
+            let snapshot = try BeholderCaseFile.decode(data)
+            importPreview = "Case preview: \(snapshot.findings.count) current findings, \(snapshot.people.people.count) people, "
+                + "\(snapshot.correlation.accounts.count) archived accounts and \(snapshot.correlation.evidence.count) identifier observations."
+            pendingImport = data
+            exportProblem = nil
+            reviewingImport = true
+        } catch {
+            pendingImport = nil
+            exportProblem = (error as? BeholderCaseFile.Problem)?.message ?? "The case could not be opened. The current case was kept."
+        }
     }
 }
 

@@ -12,6 +12,7 @@ final class BeholderModel {
     private(set) var findings: [BeholderFinding] = []
     private(set) var searching = false
     private(set) var problem: String?
+    private(set) var includesImportedObservations = false
     private var generation = UUID()
     private var job: Task<Void, Never>?
     private let client: any BeholderSearching
@@ -22,6 +23,10 @@ final class BeholderModel {
 
     var candidates: Int {
         findings.filter { $0.status == .candidate }.count
+    }
+
+    var hasCase: Bool {
+        !findings.isEmpty || !people.people.isEmpty || !correlation.accounts.isEmpty || !correlation.hints.isEmpty
     }
 
     var preparedUsername: String? {
@@ -111,32 +116,30 @@ final class BeholderModel {
         findings = []
         people = BeholderPeople()
         correlation = BeholderCorrelation()
+        includesImportedObservations = false
         problem = nil
     }
 
     func export() throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        return try encoder.encode(Report(
-            schema: 4, username: username, exportedAt: Date(), findings: findings, people: people.people, correlation: correlation
-        ))
+        try BeholderCaseFile.encode(username: username, findings: findings, people: people, correlation: correlation)
+    }
+
+    /// Validate the entire immutable input before cancelling work or replacing any active case value.
+    func importCase(_ data: Data) throws {
+        let snapshot = try BeholderCaseFile.decode(data)
+        cancel()
+        query = snapshot.username
+        username = snapshot.username
+        findings = snapshot.findings
+        people = snapshot.people
+        correlation = snapshot.correlation
+        includesImportedObservations = true
+        problem = nil
     }
 
     private func archive(_ finding: BeholderFinding) {
         if correlation.observe(username: username, finding: finding) == .capacity {
             problem = "This case has reached its account limit. Export it before starting another."
         }
-    }
-
-    private struct Report: Encodable {
-        let schema: Int
-        let username: String
-        let exportedAt: Date
-        let warning = "Contains locally recorded phone/email identifiers and source evidence. Candidate accounts are not verified identities. "
-            + "Prepared manual links are unchecked. No public result does not prove absence."
-        let findings: [BeholderFinding]
-        let people: [BeholderPeople.Person]
-        let correlation: BeholderCorrelation
     }
 }

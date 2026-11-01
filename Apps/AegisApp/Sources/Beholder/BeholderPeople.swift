@@ -151,7 +151,7 @@ struct BeholderPeople: Codable, Equatable, Sendable {
     }
 
     static func evidenceURL(_ input: String) -> URL? {
-        guard input.utf8.count <= 2048, safe(input), !input.contains(" "),
+        guard BeholderProfileLinks.canonical(input) != nil, input.utf8.count <= 2048, safe(input), !input.contains(" "),
               let parts = URLComponents(string: input), parts.scheme == "https", parts.user == nil, parts.password == nil,
               parts.port == nil || parts.port == 443, let host = parts.host, BeholderQueryPlanner.domain(host) != nil,
               !["local", "localhost", "internal", "invalid", "test", "onion", "lan", "home", "localdomain"]

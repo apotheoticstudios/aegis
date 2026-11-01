@@ -37,6 +37,12 @@ struct BeholderPeopleView: View {
             }
             Text("Group accounts using evidence you have reviewed. A matching handle alone does not establish who owns it.")
                 .foregroundStyle(HUD.inkMuted)
+            if research.includesImportedObservations {
+                Text(
+                    "This case includes imported claims. Stored source checks and owner assessments have not been independently rechecked."
+                )
+                .font(.caption).foregroundStyle(HUD.warn)
+            }
             HStack {
                 TextField("Person label", text: $name).textFieldStyle(.roundedBorder)
                     .accessibilityLabel("New person label")

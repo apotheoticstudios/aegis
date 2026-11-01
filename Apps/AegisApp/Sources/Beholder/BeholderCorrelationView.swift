@@ -40,6 +40,10 @@ struct BeholderCorrelationView: View {
             }
             Text("Compare already-held public evidence. Shared, recycled or business identifiers can belong to several people.")
                 .font(.caption).foregroundStyle(HUD.inkMuted)
+            if research.includesImportedObservations {
+                Text("This case includes imported claims; source URLs and observation times have not been independently rechecked.")
+                    .font(.caption).foregroundStyle(HUD.warn)
+            }
             Picker("Evidence section", selection: $tab) {
                 Text("Person and leads").tag(0)
                 Text("Account archive (\(research.correlation.accounts.count))").tag(1)

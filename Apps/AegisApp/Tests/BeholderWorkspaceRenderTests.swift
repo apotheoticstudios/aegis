@@ -37,6 +37,9 @@ final class BeholderWorkspaceRenderTests: XCTestCase {
         ] {
             try capture(model, size: size, name: name, panel: panel)
         }
+        let imported = BeholderModel(client: WorkspaceFixtures())
+        try imported.importCase(model.export())
+        try capture(imported, size: CGSize(width: 900, height: 650), name: "workspace-imported")
         let running = BeholderModel(client: WorkspaceFixtures())
         running.query = "ExamplePending"; running.selected = Set(BeholderProvider.allCases); running.start()
         XCTAssertTrue(running.searching)
