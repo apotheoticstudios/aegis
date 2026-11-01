@@ -12,7 +12,17 @@ struct BeholderIdentifier: Codable, Hashable, Sendable, Comparable {
     /// Email domains fold case; local parts and plus-addresses remain distinct.
     /// National phone numbers require an explicit region; short codes are not identity evidence.
     init?(input: String, kind: Kind, region: BeholderQueryPlanner.PhoneRegion = .international) {
+        guard input.utf8.count <= 512, input.unicodeScalars.allSatisfy({
+            !CharacterSet.controlCharacters.contains($0) && !CharacterSet.newlines.contains($0)
+                && $0.properties.generalCategory != .format
+        }) else { return nil }
         var raw = input
+        if kind == .phone {
+            raw = raw.trimmingCharacters(in: .whitespaces)
+            if raw.lowercased().hasPrefix("tel:") {
+                raw = String(raw.dropFirst(4))
+            }
+        }
         if kind == .phone, region == .australia {
             let trimmed = raw.trimmingCharacters(in: .whitespaces)
             let digits = trimmed.filter { $0.isASCII && $0.isNumber }

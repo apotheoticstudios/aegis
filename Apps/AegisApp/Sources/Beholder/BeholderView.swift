@@ -33,6 +33,7 @@ struct BeholderDashboard: View {
     }
 
     @State private var research: BeholderModel
+    @State private var discovery: BeholderDiscovery
     var followsPanel = false
     @State private var exporting = false
     @State private var document = BeholderDocument()
@@ -50,6 +51,7 @@ struct BeholderDashboard: View {
 
     init(research: BeholderModel, followsPanel: Bool = false) {
         _research = State(initialValue: research)
+        _discovery = State(initialValue: BeholderDiscovery(research))
         self.followsPanel = followsPanel
     }
 
@@ -62,30 +64,39 @@ struct BeholderDashboard: View {
                     Text("Follow the evidence.").foregroundStyle(HUD.inkMuted)
                 }
                 Spacer()
-                Text("\(research.candidates) " + (research.candidates == 1 ? "CANDIDATE" : "CANDIDATES"))
+                Text(discovery.kind == .username ? "\(research.candidates) CANDIDATES" : "\(discovery.report?.total ?? 0) CASE MATCHES")
                     .hudType(.data).foregroundStyle(HUD.primary)
             }
             HStack {
-                TextField("Username", text: $research.query)
-                    .textFieldStyle(.roundedBorder).onSubmit { research.start() }
-                    .accessibilityLabel("Public username to research")
-                Button("Search public sources") { research.start() }
-                    .disabled(research.preparedUsername == nil || research.providers.isEmpty)
+                Picker("Find by", selection: $discovery.kind) {
+                    ForEach(BeholderCaseSearch.Kind.allCases) { Text($0.rawValue).tag($0) }
+                }.frame(width: 180)
+                TextField(discovery.kind.rawValue, text: $discovery.query)
+                    .textFieldStyle(.roundedBorder).onSubmit { discovery.search() }
+                    .accessibilityLabel("Research " + discovery.kind.rawValue.lowercased())
+                Button(discovery.actionTitle) { discovery.search() }.disabled(!discovery.canSearch)
                 if research.searching {
                     Button("Stop") { research.cancel() }
                 }
                 Button("Clear case") {
                     if research.people.people.isEmpty, research.correlation.accounts.isEmpty {
-                        research.clear()
+                        discovery.clearCase()
                     } else {
                         clearing = true
                     }
                 }
             }
+            if discovery.kind == .phone {
+                Picker("Phone format", selection: $discovery.region) {
+                    ForEach(BeholderQueryPlanner.PhoneRegion.allCases) { Text($0.rawValue).tag($0) }
+                }.frame(width: 370)
+            }
             HStack(spacing: HUD.space4) {
-                Button { sheet = .sources } label: {
-                    Label(BeholderSources.summary(research.selected), systemImage: "line.3.horizontal.decrease.circle")
-                }.accessibilityLabel("Choose public sources").accessibilityValue(BeholderSources.summary(research.selected))
+                if discovery.kind == .username {
+                    Button { sheet = .sources } label: {
+                        Label(BeholderSources.summary(research.selected), systemImage: "line.3.horizontal.decrease.circle")
+                    }.accessibilityLabel("Choose public sources").accessibilityValue(BeholderSources.summary(research.selected))
+                }
                 Button("Research planner…") { sheet = .planner }
                 Button("People (\(research.people.people.count))…") { sheet = .people }
                 Button("Evidence…") { sheet = .evidence }
@@ -100,14 +111,16 @@ struct BeholderDashboard: View {
                         research.searching)
             }
             Text(preview).font(.caption).foregroundStyle(HUD.inkMuted).textSelection(.enabled)
-            if let problem = research.problem ?? exportProblem {
+            if let problem = discovery.problem ?? (discovery.kind == .username ? research.problem : nil) ?? exportProblem {
                 Text(problem).foregroundStyle(HUD.warn)
             }
             if research.includesImportedObservations {
                 Text((research.importDescription ?? "") + " " + BeholderCaseFile.provenanceNote).font(.caption).foregroundStyle(HUD.warn)
             }
             Divider()
-            if research.findings.isEmpty {
+            if discovery.kind != .username {
+                BeholderCaseSearchView(discovery: discovery) { sheet = .link($0) }
+            } else if research.findings.isEmpty {
                 VStack(spacing: HUD.space4) {
                     BeholderEmblem().frame(width: 150, height: 150).opacity(0.6)
                     Text("One handle. Several public sources.").font(.title3)
@@ -166,7 +179,7 @@ struct BeholderDashboard: View {
         }
         .confirmationDialog("Clear this case?", isPresented: $clearing, titleVisibility: .visible) {
             Button("Export case…") { prepareExport() }.disabled(research.searching)
-            Button("Clear case", role: .destructive) { research.clear() }
+            Button("Clear case", role: .destructive) { discovery.clearCase() }
             Button("Keep case", role: .cancel) {}
         } message: {
             Text("People, account links and evidence will be removed from this session. Export first to keep a copy.")
@@ -176,6 +189,7 @@ struct BeholderDashboard: View {
                 do {
                     if let data = pendingImport {
                         try research.importCase(data)
+                        discovery.resetAfterImport()
                     }
                     exportProblem = nil
                 } catch { exportProblem = "The case could not be opened. The current case was kept." }
@@ -225,7 +239,13 @@ struct BeholderDashboard: View {
     }
 
     private var preview: String {
-        guard let name = research.preparedUsername else { return "Enter a username to preview where it will be sent." }
+        if discovery
+            .kind !=
+            .username
+        {
+            return "This search runs locally against saved case evidence. It sends no name, phone, email or IP to a service."
+        }
+        guard let name = BeholderProvider.username(discovery.query) else { return "Enter a username to preview where it will be sent." }
         let eligible = research.providers.filter { $0.supports(name) }
         let hosts = eligible.filter { !$0.isManual && $0 != .bluesky }.map(\.host).joined(separator: ", ")
         let manualCount = eligible.filter(\.isManual).count
