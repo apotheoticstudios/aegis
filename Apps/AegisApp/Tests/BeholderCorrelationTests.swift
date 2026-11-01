@@ -38,7 +38,7 @@ final class BeholderCorrelationTests: XCTestCase {
         let finding = BeholderClient.parse(.init(data: data, status: 200), provider: .github, username: "example", now: date)
         XCTAssertEqual(finding.fields["Public email"], "example@example.com")
         var store = BeholderCorrelation()
-        XCTAssertTrue(store.observe(username: "example", finding: finding))
+        XCTAssertEqual(store.observe(username: "example", finding: finding), .recorded)
         XCTAssertEqual(store.evidence.count, 1)
         XCTAssertEqual(store.evidence.first?.identifier.value, "example@example.com")
         XCTAssertEqual(store.evidence.first?.origin, .publicField)
@@ -54,7 +54,7 @@ final class BeholderCorrelationTests: XCTestCase {
         let phone = try XCTUnwrap(BeholderIdentifier(input: "+61 400 000 001", kind: .phone))
         let mail = try XCTUnwrap(BeholderIdentifier(input: "example@example.com", kind: .email))
         for name in ["example-one", "example-two", "example-three"] {
-            XCTAssertTrue(store.observe(username: name, finding: candidate(name)))
+            XCTAssertEqual(store.observe(username: name, finding: candidate(name)), .recorded)
             try store.record(accountID: "github:" + name, identifier: phone, source: "https://example.com/" + name, now: date)
         }
         try store.record(accountID: "github:example-two", identifier: mail, source: "https://example.com/contact", now: date)
@@ -78,7 +78,7 @@ final class BeholderCorrelationTests: XCTestCase {
         let id = try people.create("Example Person")
         let identifier = try XCTUnwrap(BeholderIdentifier(input: "example@example.com", kind: .email))
         for name in ["example-one", "example-two", "example-three"] {
-            XCTAssertTrue(store.observe(username: name, finding: candidate(name)))
+            XCTAssertEqual(store.observe(username: name, finding: candidate(name)), .recorded)
             try store.record(accountID: "github:" + name, identifier: identifier, source: "https://example.com/" + name)
         }
         try people.link(
@@ -110,27 +110,69 @@ final class BeholderCorrelationTests: XCTestCase {
         XCTAssertEqual(store.leads(for: people.people[0]).map(\.id), ["github:example-three"])
     }
 
-    func testRefreshRevokesStructuredEvidenceAndUnsuccessfulChecksCannotProduceLeads() throws {
+    func testOnlyDefiniteRefreshReplacesDatedEvidence() throws {
         var store = BeholderCorrelation()
         let identifier = try XCTUnwrap(BeholderIdentifier(input: "example@example.com", kind: .email))
         let person = BeholderPeople.Person(id: UUID(), name: "Example Person")
         try store.identify(personID: person.id, identifier: identifier, source: "https://example.com/person", now: date)
         var finding = candidate("example")
         finding.fields["Public email"] = identifier.value
-        XCTAssertTrue(store.observe(username: "example", finding: finding))
+        XCTAssertEqual(store.observe(username: "example", finding: finding), .recorded)
         XCTAssertEqual(store.leads(for: person).count, 1)
         finding.status = .queued; finding.checkedAt = nil
-        XCTAssertTrue(store.observe(username: "example", finding: finding))
+        XCTAssertEqual(store.observe(username: "example", finding: finding), .recorded)
         XCTAssertTrue(store.leads(for: person).isEmpty)
-        XCTAssertTrue(store.evidence.isEmpty)
+        XCTAssertEqual(store.evidence.count, 1)
+        let originalEvidence = store.evidence
+        for status in [BeholderFinding.Status.cancelled, .limited, .unavailable] {
+            finding.status = status; finding.checkedAt = date.addingTimeInterval(60)
+            XCTAssertEqual(store.observe(username: "example", finding: finding), .recorded)
+            XCTAssertEqual(store.evidence, originalEvidence)
+            XCTAssertEqual(store.accounts.first?.finding.status, .candidate)
+            XCTAssertEqual(store.accounts.first?.latestAttempt?.finding.status, status)
+            XCTAssertEqual(store.leads(for: person).count, 1)
+        }
         finding = candidate("example")
-        XCTAssertTrue(store.observe(username: "example", finding: finding))
+        XCTAssertEqual(store.observe(username: "example", finding: finding), .recorded)
         XCTAssertTrue(store.leads(for: person).isEmpty)
         try store.record(accountID: "github:example", identifier: identifier, source: "https://example.com/recorded", now: date)
         finding.status = .noResult
-        XCTAssertTrue(store.observe(username: "example", finding: finding))
+        XCTAssertEqual(store.observe(username: "example", finding: finding), .recorded)
         XCTAssertEqual(store.evidence.count, 1) // The owner's dated observation is preserved, but inactive.
         XCTAssertTrue(store.leads(for: person).isEmpty)
+    }
+
+    func testAnAccountSupportedUnderAnotherPersonIsNotSuggested() throws {
+        var store = BeholderCorrelation()
+        var people = BeholderPeople()
+        let first = try people.create("Example Alex")
+        let other = try people.create("Example Sam")
+        let identifier = try XCTUnwrap(BeholderIdentifier(input: "example@example.com", kind: .email))
+        store.observe(username: "example", finding: candidate("example"))
+        try store.record(accountID: "github:example", identifier: identifier, source: "https://example.com/company")
+        try store.identify(personID: first, identifier: identifier, source: "https://example.com/company")
+        try people.link(
+            personID: other,
+            username: "example",
+            finding: candidate("example"),
+            assessment: .supported,
+            reason: "Example reviewed source",
+            evidence: "https://example.com/source"
+        )
+        XCTAssertTrue(store.leads(for: people.people[0], people: people.people).isEmpty)
+    }
+
+    @MainActor func testUnsupportedHandleDoesNotReportCapacity() async throws {
+        let model = BeholderModel(client: CorrelationClient())
+        model.selected = [.github, .instagram]
+        for name in ["Example_Alex", "Example.Alex"] {
+            model.query = name; model.start()
+            for _ in 0 ..< 100 where model.searching {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            XCTAssertNil(model.problem)
+            XCTAssertEqual(model.findings.first { $0.provider == .github }?.status, .unsupported)
+        }
     }
 
     func testCapsDedupAndEvidenceRemoval() throws {
@@ -138,10 +180,10 @@ final class BeholderCorrelationTests: XCTestCase {
         let identifier = try XCTUnwrap(BeholderIdentifier(input: "example@example.com", kind: .email))
         for index in 0 ..< BeholderCorrelation.accountLimit {
             let name = "example-\(index)"
-            XCTAssertTrue(store.observe(username: name, finding: candidate(name)))
+            XCTAssertEqual(store.observe(username: name, finding: candidate(name)), .recorded)
         }
-        XCTAssertFalse(store.observe(username: "example-over", finding: candidate("example-over")))
-        XCTAssertTrue(store.observe(username: "example-0", finding: candidate("example-0")))
+        XCTAssertEqual(store.observe(username: "example-over", finding: candidate("example-over")), .capacity)
+        XCTAssertEqual(store.observe(username: "example-0", finding: candidate("example-0")), .recorded)
         for _ in 0 ..< 2 {
             try store.record(accountID: "github:example-0", identifier: identifier, source: "https://example.com/evidence")
         }
@@ -158,8 +200,8 @@ final class BeholderCorrelationTests: XCTestCase {
 
     func testCaseInsensitiveRefreshRetainsConsistentAccountSpelling() {
         var store = BeholderCorrelation()
-        XCTAssertTrue(store.observe(username: "Example", finding: candidate("Example")))
-        XCTAssertTrue(store.observe(username: "example", finding: candidate("example")))
+        XCTAssertEqual(store.observe(username: "Example", finding: candidate("Example")), .recorded)
+        XCTAssertEqual(store.observe(username: "example", finding: candidate("example")), .recorded)
         XCTAssertEqual(store.accounts.count, 1)
         XCTAssertEqual(store.accounts[0].username, "example")
         XCTAssertEqual(store.accounts[0].finding.sourceURL, BeholderProvider.github.endpoint(store.accounts[0].username))
@@ -225,11 +267,12 @@ final class BeholderCorrelationTests: XCTestCase {
 
 private struct CorrelationClient: BeholderSearching {
     func lookup(_ provider: BeholderProvider, username: String) async -> BeholderFinding {
-        BeholderFinding(
+        guard let endpoint = provider.endpoint(username) else { return BeholderFinding(provider: provider, status: .unsupported) }
+        return BeholderFinding(
             provider: provider,
             status: .candidate,
             checkedAt: Date(),
-            sourceURL: provider.endpoint(username),
+            sourceURL: endpoint,
             fields: ["Public email": "example@example.com"]
         )
     }

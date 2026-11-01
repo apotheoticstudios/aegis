@@ -135,7 +135,7 @@ struct BeholderDashboard: View {
                 switch presented {
                 case .planner: BeholderQueryPlannerView()
                 case .people: BeholderPeopleView(research: research)
-                case .evidence: BeholderCorrelationView(research: research)
+                case .evidence: BeholderCorrelationView(research: research) { sheet = .link($0) }
                 case .sources:
                     VStack(alignment: .leading, spacing: 0) {
                         HStack {

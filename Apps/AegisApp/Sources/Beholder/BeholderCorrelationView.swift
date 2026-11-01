@@ -3,15 +3,21 @@ import SwiftUI
 /// Evidence stays in the current case. No field here participates in a network request.
 struct BeholderCorrelationView: View {
     let research: BeholderModel
+    let onReview: (BeholderPeopleView.Target) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var personID: UUID?
     @State private var accountID: String?
     @State private var filter = ""
-    @State private var target: BeholderPeopleView.Target?
     @State private var tab: Int
 
-    init(research: BeholderModel, personID: UUID? = nil, accountID: String? = nil) {
+    init(
+        research: BeholderModel,
+        personID: UUID? = nil,
+        accountID: String? = nil,
+        onReview: @escaping (BeholderPeopleView.Target) -> Void = { _ in }
+    ) {
         self.research = research
+        self.onReview = onReview
         _personID = State(initialValue: personID)
         _accountID = State(initialValue: accountID)
         _tab = State(initialValue: accountID == nil ? 0 : 1)
@@ -34,13 +40,17 @@ struct BeholderCorrelationView: View {
             }
             Text("Compare already-held public evidence. Shared, recycled or business identifiers can belong to several people.")
                 .font(.caption).foregroundStyle(HUD.inkMuted)
-            TabView(selection: $tab) {
-                personEvidence.tabItem { Text("Person and leads") }.tag(0)
-                accountEvidence.tabItem { Text("Account archive (\(research.correlation.accounts.count))") }.tag(1)
+            Picker("Evidence section", selection: $tab) {
+                Text("Person and leads").tag(0)
+                Text("Account archive (\(research.correlation.accounts.count))").tag(1)
+            }.pickerStyle(.segmented)
+            if tab == 0 {
+                personEvidence
+            } else {
+                accountEvidence
             }
         }
         .padding(HUD.space4).frame(width: 760, height: 620).foregroundStyle(HUD.ink).background(HUD.void)
-        .sheet(item: $target) { BeholderPeopleView(research: research, target: $0) }
     }
 
     private var personEvidence: some View {
@@ -66,7 +76,7 @@ struct BeholderCorrelationView: View {
                         "Exact overlaps with your reference identifiers or supported account evidence. No automatic links. Email local-part case is preserved."
                     )
                     .font(.caption).foregroundStyle(HUD.inkMuted)
-                    let leads = research.correlation.leads(for: person)
+                    let leads = research.correlation.leads(for: person, people: research.people.people)
                     if leads.isEmpty {
                         Text(
                             "No matching account evidence yet. Record an identifier on an account in the archive, or search another username."
@@ -79,10 +89,15 @@ struct BeholderCorrelationView: View {
                                 Text(lead.account.finding.provider.title + " · @" + lead.account.username).font(.headline)
                                 Spacer()
                                 Button("Review account link…") {
-                                    target = .init(username: lead.account.username, finding: lead.account.finding)
+                                    onReview(.init(
+                                        username: lead.account.username,
+                                        finding: lead.account.finding,
+                                        preferredPersonID: person.id
+                                    ))
                                 }
                             }
                             Text("\(lead.identifierCount) exact identifier overlap(s); ownership is unverified.").font(.caption)
+                            attemptNote(lead.account)
                             ForEach(lead.overlaps) { overlap in
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(verbatim: overlap.evidence.identifier.value).textSelection(.enabled)
@@ -118,6 +133,7 @@ struct BeholderCorrelationView: View {
                 if let account {
                     Text(account.finding.provider.title + " · @" + account.username).font(.headline)
                     BeholderEvidenceExplanationView(finding: account.finding)
+                    attemptNote(account)
                     Text(
                         "Record only an identifier explicitly published as this account's contact information. A mention in a post or biography may refer to someone else."
                     )
@@ -133,6 +149,15 @@ struct BeholderCorrelationView: View {
                     }
                 }
             }.padding(HUD.space3)
+        }
+    }
+
+    @ViewBuilder private func attemptNote(_ account: BeholderCorrelation.Account) -> some View {
+        if let attempt = account.latestAttempt {
+            Text(
+                "Latest attempt: \(attempt.finding.status.title). Earlier dated evidence is retained; this attempt did not establish a change."
+            )
+            .font(.caption).foregroundStyle(HUD.inkMuted)
         }
     }
 

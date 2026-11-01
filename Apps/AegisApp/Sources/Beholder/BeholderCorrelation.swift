@@ -6,6 +6,16 @@ struct BeholderCorrelation: Codable, Equatable, Sendable {
         let id: String
         let username: String
         var finding: BeholderFinding
+        var latestAttempt: Attempt?
+
+        var pending: Bool {
+            latestAttempt.map { [.queued, .checking].contains($0.finding.status) } ?? false
+        }
+    }
+
+    struct Attempt: Codable, Equatable, Sendable {
+        let username: String
+        let finding: BeholderFinding
     }
 
     struct Evidence: Codable, Equatable, Sendable, Identifiable {
@@ -68,18 +78,27 @@ struct BeholderCorrelation: Codable, Equatable, Sendable {
         provider.rawValue + ":" + (provider.isManual ? username : provider.lookupHandle(username))
     }
 
-    /// A refresh replaces structured fields, so removed or stale public fields cannot keep producing leads.
-    @discardableResult mutating func observe(username: String, finding: BeholderFinding) -> Bool {
-        guard BeholderProvider.username(username) == username, finding.provider.supports(username) else { return false }
+    enum ObservationResult: Equatable { case recorded, ignored, capacity }
+
+    /// Only a definite answer replaces previous evidence. Failed attempts remain separately dated.
+    @discardableResult mutating func observe(username: String, finding: BeholderFinding) -> ObservationResult {
+        guard BeholderProvider.username(username) == username, finding.provider.supports(username) else { return .ignored }
         let id = Self.key(finding.provider, username)
         let existing = accounts.firstIndex { $0.id == id }
         let eligible = finding.status == .candidate || finding.status == .manual
-        guard eligible || existing != nil else { return true }
-        guard eligible ? validAccount(username, finding) : finding.sourceURL == finding.provider.endpoint(username) else { return false }
+        guard eligible || existing != nil else { return .ignored }
+        guard eligible ? validAccount(username, finding) : finding.sourceURL == finding.provider.endpoint(username) else { return .ignored }
+        let definite = eligible || (finding.status == .noResult && finding.checkedAt != nil)
+        if !definite {
+            if let existing {
+                accounts[existing].latestAttempt = Attempt(username: username, finding: finding)
+            }
+            return .recorded
+        }
         if let existing {
             accounts[existing] = Account(id: id, username: username, finding: finding)
         } else {
-            guard accounts.count < Self.accountLimit else { return false }
+            guard accounts.count < Self.accountLimit else { return .capacity }
             accounts.append(Account(id: id, username: username, finding: finding))
         }
         evidence.removeAll { $0.accountID == id && $0.origin == .publicField }
@@ -97,7 +116,7 @@ struct BeholderCorrelation: Codable, Equatable, Sendable {
                 origin: .publicField
             ))
         }
-        return true
+        return .recorded
     }
 
     mutating func record(accountID: String, identifier: BeholderIdentifier, source: String, now: Date = Date()) throws {
@@ -131,7 +150,7 @@ struct BeholderCorrelation: Codable, Equatable, Sendable {
     }
 
     /// Only owner-entered person references and supported accounts seed matches. Possible links never reinforce themselves.
-    func leads(for person: BeholderPeople.Person) -> [Lead] {
+    func leads(for person: BeholderPeople.Person, people: [BeholderPeople.Person] = []) -> [Lead] {
         var references: [BeholderIdentifier: (URL, Date)] = [:]
         for hint in hints where hint.personID == person.id {
             if references[hint.identifier] == nil {
@@ -139,17 +158,20 @@ struct BeholderCorrelation: Codable, Equatable, Sendable {
             }
         }
         let supported = Set(person.links.filter { $0.assessment == .supported }.map(\.accountKey))
+        let active = Set(accounts.filter { !$0.pending && [.candidate, .manual].contains($0.finding.status) }.map(\.id))
         for item in evidence where supported.contains(item.accountID) {
-            guard accounts.contains(where: { $0.id == item.accountID && [.candidate, .manual].contains($0.finding.status) })
-            else { continue }
+            guard active.contains(item.accountID) else { continue }
             if references[item.identifier] == nil {
                 references[item.identifier] = (item.source, item.observedAt)
             }
         }
         let excluded = Set(person.links.map(\.accountKey))
+        let otherSupport = Set(people.filter { $0.id != person.id }.flatMap(\.links).filter { $0.assessment == .supported }
+            .map(\.supportKey))
         let grouped = Dictionary(grouping: evidence, by: \.accountID)
         return accounts.compactMap { account -> Lead? in
-            guard !excluded.contains(account.id), [.candidate, .manual].contains(account.finding.status) else { return nil }
+            let supportKey = account.finding.provider.isManual ? account.id.lowercased() : account.id
+            guard !excluded.contains(account.id), !otherSupport.contains(supportKey), active.contains(account.id) else { return nil }
             let overlaps = (grouped[account.id] ?? []).compactMap { item -> Overlap? in
                 guard let reference = references[item.identifier] else { return nil }
                 return Overlap(evidence: item, referenceURL: reference.0, referenceDate: reference.1)

@@ -124,7 +124,7 @@ final class BeholderModel {
     }
 
     private func archive(_ finding: BeholderFinding) {
-        if !correlation.observe(username: username, finding: finding) {
+        if correlation.observe(username: username, finding: finding) == .capacity {
             problem = "This case has reached its account limit. Export it before starting another."
         }
     }
@@ -133,7 +133,8 @@ final class BeholderModel {
         let schema: Int
         let username: String
         let exportedAt: Date
-        let warning = "Candidate accounts are not verified identities. Prepared manual links are unchecked. No public result does not prove absence."
+        let warning = "Contains locally recorded phone/email identifiers and source evidence. Candidate accounts are not verified identities. "
+            + "Prepared manual links are unchecked. No public result does not prove absence."
         let findings: [BeholderFinding]
         let people: [BeholderPeople.Person]
         let correlation: BeholderCorrelation

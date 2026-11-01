@@ -8,6 +8,7 @@ struct BeholderPeopleView: View {
         let finding: BeholderFinding
         var originalPersonID: UUID?
         var originalLinkID: UUID?
+        var preferredPersonID: UUID?
     }
 
     let research: BeholderModel
@@ -22,7 +23,8 @@ struct BeholderPeopleView: View {
 
     init(research: BeholderModel, target: Target? = nil) {
         self.research = research
-        _selected = State(initialValue: research.people.people.count == 1 ? research.people.people.first?.id : nil)
+        let preferred = target?.preferredPersonID.flatMap { id in research.people.people.first { $0.id == id }?.id }
+        _selected = State(initialValue: preferred ?? (research.people.people.count == 1 ? research.people.people.first?.id : nil))
         _draft = State(initialValue: target)
     }
 

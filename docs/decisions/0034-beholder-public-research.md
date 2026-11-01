@@ -163,4 +163,19 @@ directory target. Such a URL is not request provenance: `sourceURL` and `checked
 findings. Automatic findings retain actual request provenance and time. New findings also encode a fixed `access` mode
 (`automatic` or `manual`), including Unsupported results. Legacy JSON can omit it. Provider-reported Mastodon
 suspension, limitation and moved-profile flags are displayed without following their destination URLs. Old finding JSON with the optional
-field absent still decodes. There is no change to AegisKit or IPC contracts, no import path or persistent case store.
+field absent still decodes. There is no change to AegisKit or IPC contracts.
+
+## Local identifier evidence (#124)
+
+The case may retain up to 500 public account observations across owner-started searches. The GitHub adapter
+keeps its explicit public email field from the already allowed response; no additional request is made.
+The owner may record phone/email identifiers with public source URLs and observation dates for accounts or
+person references. These values remain in the local research case and explicit JSON exports, never in request
+URLs, model prompts, Aegis memory, Contacts or other collected-data stores. Export warnings mention identifiers.
+
+Exact identifier overlap is a reviewable lead, never an automatic identity merge or probability. Only supported
+account links and explicit person references seed matches; possible and ruled-out links cannot reinforce them.
+Email local-part case and plus-addresses remain distinct. Phone formatting requires an explicit region.
+An unknown refresh preserves previous dated evidence and records its separate attempt; a definite candidate
+or no-result response can replace it. Pending checks hide leads temporarily. Case-file provenance and explicit
+reopening are further specified by ADR-0035; no automatic disk storage or network expansion is introduced.
