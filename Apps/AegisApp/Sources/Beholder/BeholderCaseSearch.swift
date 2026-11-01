@@ -102,7 +102,8 @@ enum BeholderCaseSearch {
             {
                 reasons.append(.init(
                     id: "profile-name",
-                    label: order == 0 ? "Profile display name matches" : "Profile name words match",
+                    label: order == 0 ? "Profile display name matches" : order == 1 ? "Profile name words match" :
+                        "Partial name-word match; verify manually",
                     value: name,
                     source: account.finding.sourceURL,
                     date: account.finding.checkedAt,
@@ -152,6 +153,9 @@ enum BeholderCaseSearch {
         }
         let a = left.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }.sorted()
         let b = right.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }.sorted()
-        return a.count > 1 && a == b ? 1 : nil
+        if a.count > 1, a == b {
+            return 1
+        }
+        return !a.isEmpty && Set(a).isSubset(of: Set(b)) ? 2 : nil
     }
 }
