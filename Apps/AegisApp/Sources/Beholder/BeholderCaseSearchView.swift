@@ -91,12 +91,8 @@ struct BeholderCaseSearchView: View {
                 if let ip = discovery.ip {
                     Text("IP ADDRESS CONTEXT").hudType(.data)
                     Text(verbatim: ip.canonical).font(.title3).textSelection(.enabled)
-                    Text(ip.version + " · " + ip.category).foregroundStyle(HUD.primary)
+                    Text(ip.version + " · " + ip.category.replacingOccurrences(of: "-", with: " ").capitalized).foregroundStyle(HUD.primary)
                     Text(ip.explanation)
-                    Text(
-                        "An IP address does not reveal a person's email or accounts. Registry contacts describe network operators, not subscribers."
-                    )
-                    .font(.caption).foregroundStyle(HUD.inkMuted)
                 } else if let report = discovery.report {
                     Text("CASE MATCHES FOR " + report.query).hudType(.data).textSelection(.enabled)
                     Text("\(report.total) stored account match(es). Names and shared identifiers are leads, not verified identities.")

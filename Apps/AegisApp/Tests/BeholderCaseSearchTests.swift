@@ -18,6 +18,9 @@ final class BeholderCaseSearchTests: XCTestCase {
         XCTAssertEqual(report.hits.map(\.id), ["github:example-one", "github:example-two"])
         XCTAssertEqual(report.hits[0].reasons[0].source, BeholderProvider.github.endpoint("example-one"))
         XCTAssertEqual(report.hits[1].reasons[0].order, 1)
+        let partial = try BeholderCaseSearch.compute(input: "Alex", kind: .name, store: store, people: .init())
+        XCTAssertEqual(partial.hits.map(\.id), ["github:example-one", "github:example-two"])
+        XCTAssertTrue(partial.hits.allSatisfy { $0.reasons[0].label.contains("Partial") })
     }
 
     func testEmailExactAndCaseVariantRemainExplainedAndPlusAddressesDistinct() throws {
