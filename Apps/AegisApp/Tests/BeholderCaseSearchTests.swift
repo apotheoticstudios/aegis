@@ -133,6 +133,43 @@ final class BeholderCaseSearchTests: XCTestCase {
         XCTAssertNil(discovery.report, "Editing input cannot leave stale results visible")
     }
 
+    @MainActor func testEditingEvidenceInvalidatesSavedMatchesImmediately() throws {
+        let model = BeholderModel(client: DiscoveryCountingClient())
+        model.correlation.observe(username: "example", finding: candidate("example", fields: ["Public email": "example@example.com"]))
+        let discovery = BeholderDiscovery(model)
+        discovery.kind = .email; discovery.query = "example@example.com"; discovery.search()
+        XCTAssertEqual(discovery.report?.total, 1)
+        let id = try XCTUnwrap(model.correlation.evidence.first?.id)
+        model.correlation.removeEvidence(id)
+        XCTAssertNil(discovery.report)
+        XCTAssertTrue(discovery.problem?.contains("changed") == true)
+        discovery.search()
+        XCTAssertEqual(discovery.report?.total, 0)
+        XCTAssertNil(discovery.problem)
+    }
+
+    func testManySavedReferencesAreBoundedPerAccount() throws {
+        var people = BeholderPeople()
+        let person = try people.create("Example Alex")
+        try people.link(
+            personID: person,
+            username: "example",
+            finding: candidate("example"),
+            assessment: .supported,
+            reason: "Example explicit author link",
+            evidence: "https://example.com/source",
+            now: date
+        )
+        var store = BeholderCorrelation()
+        let email = try XCTUnwrap(BeholderIdentifier(input: "example@example.com", kind: .email))
+        for index in 0 ..< 100 {
+            try store.identify(personID: person, identifier: email, source: "https://example.com/contact/\(index)", now: date)
+        }
+        let report = try BeholderCaseSearch.compute(input: email.value, kind: .email, store: store, people: people)
+        XCTAssertEqual(report.hits.first?.totalReasons, 100)
+        XCTAssertEqual(report.hits.first?.reasons.count, 20)
+    }
+
     private func candidate(_ username: String, fields: [String: String] = [:]) -> BeholderFinding {
         BeholderFinding(
             provider: .github,

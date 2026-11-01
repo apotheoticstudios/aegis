@@ -5,8 +5,15 @@ import Observation
 final class BeholderModel {
     var query = ""
     var selected = BeholderProvider.originalSources
-    var people = BeholderPeople()
-    var correlation = BeholderCorrelation()
+    var people = BeholderPeople() {
+        didSet { caseRevision &+= 1 }
+    }
+
+    var correlation = BeholderCorrelation() {
+        didSet { caseRevision &+= 1 }
+    }
+
+    private(set) var caseRevision: UInt64 = 0
     static let parallelLimit = 4
     private(set) var username = ""
     private(set) var findings: [BeholderFinding] = []
