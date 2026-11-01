@@ -197,6 +197,7 @@ struct BeholderDashboard: View {
                 " Imported claims are unverified. This replaces the current session; export first to keep it, then reopen the import.")
         }
         .onDisappear { research.cancel(); cancelImport() }
+        .onChange(of: research.cancellationID) { _, _ in cancelImport() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
                 research.cancel()
@@ -286,13 +287,20 @@ struct BeholderDashboard: View {
     private func prepareImport(_ url: URL) {
         cancelImport()
         let generation = importGeneration
+        let lookupGeneration = research.cancellationID
         reading = true
         importJob = Task { @MainActor in
+            defer {
+                if generation == importGeneration {
+                    reading = false; importJob = nil
+                }
+            }
             let reader = Task.detached(priority: .userInitiated) { try BeholderCaseInput.read(url) }
             do {
                 let data = try await withTaskCancellationHandler(operation: { try await reader.value }, onCancel: { reader.cancel() })
                 try Task.checkCancellation()
-                guard generation == importGeneration, !followsPanel || HUDPresence.shared.open else { return }
+                guard generation == importGeneration, lookupGeneration == research.cancellationID,
+                      !followsPanel || HUDPresence.shared.open else { return }
                 let snapshot = try BeholderCaseFile.decode(data)
                 let name = snapshot.username.isEmpty ? "No username" : "@" + snapshot.username
                 importPreview = "\(name) · exported \(snapshot.exportedAt.formatted()). "
@@ -308,9 +316,6 @@ struct BeholderDashboard: View {
                 guard generation == importGeneration else { return }
                 pendingImport = nil
                 exportProblem = (error as? BeholderCaseFile.Problem)?.message ?? "The case could not be opened. The current case was kept."
-            }
-            if generation == importGeneration {
-                reading = false; importJob = nil
             }
         }
     }

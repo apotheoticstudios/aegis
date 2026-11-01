@@ -41,6 +41,11 @@ final class BeholderModel {
         BeholderProvider.username(query)
     }
 
+    /// Also changes when the standalone window closes, so view-owned reads cancel with lookups.
+    var cancellationID: UUID {
+        generation
+    }
+
     var providers: [BeholderProvider] {
         BeholderProvider.allCases.filter { selected.contains($0) }
     }
