@@ -51,8 +51,11 @@ struct BeholderResultsView: View {
     let findings: [BeholderFinding]
     let username: String
     let searching: Bool
+    var research: BeholderModel?
     let onLink: (BeholderFinding) -> Void
     @State private var unfolded: Set<BeholderResultGroup> = []
+    @State private var savingPerson: UUID?
+    @State private var saveProblem: String?
 
     var body: some View {
         ScrollView {
@@ -67,6 +70,18 @@ struct BeholderResultsView: View {
                 if !searching {
                     BeholderEvidenceSummaryView(findings: findings)
                 }
+                if let research {
+                    Picker("Save possible accounts for", selection: $savingPerson) {
+                        Text("Choose a person").tag(nil as UUID?)
+                        ForEach(research.people.people) { Text(verbatim: $0.name).tag(Optional($0.id)) }
+                    }
+                    if research.people.people.isEmpty {
+                        Text("Create a person in People to collect possible accounts for that investigation.").hudType(.caption)
+                    }
+                }
+                if let saveProblem {
+                    Text(saveProblem).hudType(.caption).foregroundStyle(HUD.warn)
+                }
                 ForEach(BeholderResultGroup.allCases, id: \.self) { group in
                     let members = findings.filter { BeholderResultGroup.of($0) == group }
                     if !members.isEmpty {
@@ -75,6 +90,16 @@ struct BeholderResultsView: View {
                 }
             }
             .padding(.trailing, HUD.space2)
+        }
+        .onAppear {
+            if research?.people.people.count == 1 {
+                savingPerson = research?.people.people.first?.id
+            }
+        }
+        .onChange(of: research?.people.people.map(\.id)) { _, ids in
+            if let savingPerson, ids?.contains(savingPerson) != true {
+                self.savingPerson = nil
+            }
         }
     }
 
@@ -138,6 +163,7 @@ struct BeholderResultsView: View {
                 }
                 Button("Link to person…") { onLink(finding) }.buttonStyle(HUDChipStyle(muted: true))
             }
+            saveButton(finding)
         }
         .padding(HUD.space3)
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -146,26 +172,51 @@ struct BeholderResultsView: View {
 
     private func row(_ finding: BeholderFinding, _ group: BeholderResultGroup) -> some View {
         let explanation = BeholderEvidence.explain(finding)
-        return HStack(spacing: HUD.space2) {
-            Text(finding.provider.title).hudType(.label).foregroundStyle(HUD.ink).lineLimit(1)
-                .frame(width: 150, alignment: .leading)
-            Text(verbatim: detail(finding, group, explanation)).hudType(.caption).foregroundStyle(HUD.inkMuted).lineLimit(1)
-            Spacer(minLength: HUD.space1)
-            if group == .manual {
-                if let url = finding.preparedProfileURL {
-                    Link("Open ↗", destination: url).buttonStyle(HUDChipStyle()).fixedSize()
-                        .help("This link has not been checked. Opens using your browser's privacy and sign-in settings.")
-                }
-                if finding.status == .manual {
-                    Button("Link…") { onLink(finding) }.buttonStyle(HUDChipStyle(muted: true)).fixedSize()
-                        .accessibilityLabel("Link \(finding.provider.title) to a person")
+        return VStack(alignment: .leading, spacing: HUD.space1) {
+            HStack(spacing: HUD.space2) {
+                Text(finding.provider.title).hudType(.label).foregroundStyle(HUD.ink).lineLimit(1)
+                    .frame(width: 150, alignment: .leading)
+                Text(verbatim: detail(finding, group, explanation)).hudType(.caption).foregroundStyle(HUD.inkMuted).lineLimit(1)
+                Spacer(minLength: HUD.space1)
+                if group == .manual {
+                    if let url = finding.preparedProfileURL {
+                        Link("Open ↗", destination: url).buttonStyle(HUDChipStyle()).fixedSize()
+                            .help("This link has not been checked. Opens using your browser's privacy and sign-in settings.")
+                    }
+                    if finding.status == .manual {
+                        Button("Link…") { onLink(finding) }.buttonStyle(HUDChipStyle(muted: true)).fixedSize()
+                            .accessibilityLabel("Link \(finding.provider.title) to a person")
+                    }
                 }
             }
+            .frame(minHeight: 30)
+            if group == .manual, finding.status == .manual {
+                saveButton(finding)
+            }
         }
-        .frame(height: 30)
         .overlay(alignment: .bottom) { Rectangle().fill(HUD.glassEdge).frame(height: 1) }
         .help(([explanation.reason] + explanation.provenance).joined(separator: "\n"))
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private func saveButton(_ finding: BeholderFinding) -> some View {
+        if let research, let person = research.people.people.first(where: { $0.id == savingPerson }) {
+            let key = BeholderCorrelation.key(finding.provider, username)
+            let supportKey = finding.provider.isManual ? key.lowercased() : key
+            if let link = person.links.first(where: { $0.supportKey == supportKey }) {
+                Text(link.assessment.title + " for " + person.name).hudType(.caption).foregroundStyle(HUD.inkMuted)
+            } else if let other = research.people.people.first(where: {
+                $0.id != person.id && $0.links.contains { $0.supportKey == supportKey && $0.assessment == .supported }
+            }) {
+                Text("Supported under " + other.name + ". Use Link to person to review the conflict.")
+                    .hudType(.caption).foregroundStyle(HUD.warn)
+            } else {
+                Button("Save as possible for " + person.name) {
+                    do { try research.savePossible(personID: person.id, username: username, finding: finding); saveProblem = nil }
+                    catch { saveProblem = (error as? BeholderPeople.Problem)?.message ?? "The account could not be saved." }
+                }.buttonStyle(HUDChipStyle(muted: true))
+            }
+        }
     }
 
     private func detail(_ finding: BeholderFinding, _ group: BeholderResultGroup, _ explanation: BeholderEvidence.Explanation) -> String {

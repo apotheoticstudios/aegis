@@ -94,7 +94,7 @@ struct BeholderDashboard: View {
         }
         .confirmationDialog("Clear this case?", isPresented: $clearing, titleVisibility: .visible) {
             Button("Export case…") { prepareExport() }.disabled(research.searching)
-            Button("Clear case", role: .destructive) { discovery.clearCase() }
+            Button("Clear case", role: .destructive) { clearCase() }
             Button("Keep case", role: .cancel) {}
         } message: {
             Text("People, account links and evidence will be removed from this session. Export first to keep a copy.")
@@ -105,6 +105,7 @@ struct BeholderDashboard: View {
                     if let data = pendingImport {
                         try research.importCase(data)
                         discovery.resetAfterImport()
+                        tab = .results
                     }
                     exportProblem = nil
                 } catch { exportProblem = "The case could not be opened. The current case was kept." }
@@ -159,6 +160,11 @@ struct BeholderDashboard: View {
             exportProblem = nil
             exporting = true
         } catch { exportProblem = (error as? BeholderCaseFile.Problem)?.message ?? "The case could not be prepared for export." }
+    }
+
+    private func clearCase() {
+        discovery.clearCase()
+        tab = .results
     }
 
     /// Starts a bounded background read. Old or cancelled completions cannot replace a later preview.
@@ -323,7 +329,7 @@ extension BeholderDashboard {
                 Text("Public sources are still checking @" + research.username + ". Use Stop to cancel that search.")
                     .hudType(.caption).foregroundStyle(HUD.inkMuted)
             }
-            if discovery.kind != .ip {
+            if discovery.kind != .ip, tab == .results {
                 BeholderPublicSearchView(
                     input: .init(value: discovery.query, kind: discovery.kind, region: discovery.region),
                     ownerTyped: discovery.ownerTypedInput
@@ -356,7 +362,7 @@ extension BeholderDashboard {
                     research.searching)
             Button("Clear case") {
                 if research.people.people.isEmpty, research.correlation.accounts.isEmpty {
-                    discovery.clearCase()
+                    clearCase()
                 } else {
                     clearing = true
                 }
@@ -375,11 +381,16 @@ extension BeholderDashboard {
             } else if research.findings.isEmpty {
                 emptyState
             } else {
-                BeholderResultsView(findings: research.findings, username: research.username, searching: research.searching) {
+                BeholderResultsView(
+                    findings: research.findings,
+                    username: research.username,
+                    searching: research.searching,
+                    research: research
+                ) {
                     sheet = .link(.init(username: research.username, finding: $0))
                 }
             }
-        case .people: ScrollView { BeholderPeopleView(research: research, embedded: true) }
+        case .people: BeholderPeopleView(research: research, embedded: true)
         case .evidence: BeholderCorrelationView(research: research, embedded: true) { sheet = .link($0) }
         case .planner: ScrollView { BeholderQueryPlannerView(embedded: true).frame(maxWidth: .infinity, alignment: .leading) }
         }
@@ -389,11 +400,16 @@ extension BeholderDashboard {
         VStack(spacing: HUD.space4) {
             // Shrinks in a short window so the steps below stay in view.
             BeholderEmblem().aspectRatio(1, contentMode: .fit).frame(minWidth: 96, maxWidth: 240, minHeight: 96, maxHeight: 240)
-            Text("One handle. Many public sources.").hudType(.bodyStrong).foregroundStyle(HUD.ink)
+            Text("Start with what you know.").hudType(.bodyStrong).foregroundStyle(HUD.ink)
+            Button("Start a person investigation") { tab = .people }.buttonStyle(HUDChipStyle())
             HStack(alignment: .top, spacing: HUD.space6) {
-                step("01", "Search", "Type a handle and press Return. Only the sources you chose are asked.")
-                step("02", "Check", "Open found profiles, and the check-by-hand links, in your browser.")
-                step("03", "Link", "Link an account to a person once you've reviewed evidence.")
+                step(
+                    "01",
+                    "Find",
+                    "Choose Username, Name, Email or Phone above. Public browser searches and saved-case matches are separate."
+                )
+                step("02", "Collect", "Create a person in People. Save promising accounts as possible without committing to an identity.")
+                step("03", "Verify", "Compare sources and dates on the person page, then support or rule out each account.")
             }
             .frame(maxWidth: 720)
         }
@@ -419,9 +435,9 @@ extension BeholderDashboard {
     private var placeholder: String {
         switch discovery.kind {
         case .username: "Handle, e.g. ExampleAlex"
-        case .name: "A name already in this case"
-        case .email: "An email already in this case"
-        case .phone: "A phone number already in this case"
+        case .name: "Name to research, e.g. Example Alex"
+        case .email: "Email to research, e.g. example@example.com"
+        case .phone: "Phone to research, including its country code"
         case .ip: "One IPv4 or IPv6 address"
         }
     }
