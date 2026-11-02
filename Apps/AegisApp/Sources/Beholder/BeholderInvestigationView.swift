@@ -90,9 +90,7 @@ struct BeholderInvestigationView: View {
                         }
                         Text("\(lead.identifierCount) distinct identifier overlap(s); ownership remains unverified.").hudType(.caption)
                         ForEach(Array(lead.overlaps.prefix(5))) { overlap in
-                            Text(overlap.evidence.identifier.value + " · account: " + overlap.evidence.source.absoluteString +
-                                " (" + overlap.evidence.observedAt.formatted() + ") · reference: " + overlap.referenceURL.absoluteString +
-                                " (" + overlap.referenceDate.formatted() + ")").hudType(.caption).textSelection(.enabled)
+                            Text(verbatim: overlapDescription(overlap)).hudType(.caption).textSelection(.enabled)
                         }
                         if lead.overlaps.count > 5 {
                             Text("Showing 5 of \(lead.overlaps.count) references; see Evidence for all.").hudType(.caption)
@@ -104,5 +102,15 @@ struct BeholderInvestigationView: View {
                 }
             }
         }.beholderStyle()
+    }
+
+    private func overlapDescription(_ overlap: BeholderCorrelation.Overlap) -> String {
+        let value = overlap.evidence.identifier.value
+        let account = overlap.evidence.source.absoluteString
+        let observed = overlap.evidence.observedAt.formatted()
+        let reference = overlap.referenceURL.absoluteString
+        let recorded = overlap.referenceDate.formatted()
+        let lines: [String] = [value, "Account: \(account) · \(observed)", "Reference: \(reference) · \(recorded)"]
+        return lines.joined(separator: "\n")
     }
 }
