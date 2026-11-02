@@ -133,7 +133,7 @@ struct BeholderDashboard: View {
                 " Imported claims are unverified. This replaces the current session; export first to keep it, then reopen the import.")
         }
         .onDisappear { research.cancel(); cancelImport(); github.reset() }
-        .onChange(of: research.cancellationID) { _, _ in cancelImport(); github.reset() }
+        .onChange(of: research.cancellationID) { _, _ in cancelImport() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
                 research.cancel()
@@ -311,7 +311,7 @@ extension BeholderDashboard {
                 Button(discovery.actionTitle) { runSearch() }
                     .buttonStyle(HUDPlateStyle(kind: .primary)).fixedSize().disabled(!discovery.canSearch)
                 if research.searching {
-                    Button("Stop") { research.cancel() }.buttonStyle(HUDPlateStyle(kind: .critical)).fixedSize()
+                    Button("Stop") { research.stopLookup() }.buttonStyle(HUDPlateStyle(kind: .critical)).fixedSize()
                 }
             }
             if discovery.kind == .username {

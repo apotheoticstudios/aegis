@@ -30,7 +30,7 @@ enum BeholderGitHubDiscovery {
             case .unavailable: "GitHub could not be reached. No search result was established."
             case .limited: "GitHub refused or rate-limited this request. Try again later; nothing retries automatically."
             case .response: "GitHub's response could not be validated. This is not evidence that no accounts exist."
-            case .context: "The case changed. Inspect the result again in the current case."
+            case .context: "This research session changed. Inspect the result again in the current case."
             case .profile: "The profile could not be validated or added to this case."
             }
         }
@@ -195,6 +195,12 @@ final class BeholderGitHubResearch {
         value = ""; kind = .name; invalidate()
     }
 
+    /// Cancel the current request without discarding a page already returned by an explicit Search.
+    func stop() {
+        generation = UUID(); job?.cancel(); job = nil
+        searching = false; inspecting = nil; inspected = nil; inspectedLogin = nil; problem = nil
+    }
+
     func chooseGitHub() {
         invalidate(); prepared = BeholderGitHubDiscovery.prepare(input)
         if prepared == nil {
@@ -223,13 +229,13 @@ final class BeholderGitHubResearch {
         guard let page, page.request == prepared, page.hits.contains(hit), BeholderGitHubDiscovery.validLogin(hit.login) else { return }
         job?.cancel(); generation = UUID(); searching = false; inspecting = hit.login
         inspected = nil; inspectedLogin = nil; problem = nil
-        let token = generation, caseToken = model.cancellationID, client = client
+        let token = generation, caseToken = model.discoveryContextID, client = client
         job = Task { [weak self] in
             guard !Task.isCancelled else { return }
             let finding = await client.inspect(hit.login)
             guard let self, generation == token, !Task.isCancelled else { return }
             inspecting = nil; job = nil
-            guard model.cancellationID == caseToken else { problem = .context; return }
+            guard model.discoveryContextID == caseToken else { problem = .context; return }
             guard model.recordGitHubInspection(login: hit.login, finding: finding) else { problem = .profile; return }
             inspected = finding; inspectedLogin = hit.login
         }

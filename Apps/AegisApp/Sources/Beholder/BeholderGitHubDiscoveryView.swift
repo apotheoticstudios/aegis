@@ -33,7 +33,7 @@ struct BeholderGitHubDiscoveryView: View {
                             .buttonStyle(HUDPlateStyle(kind: .primary)).disabled(discovery.searching || discovery.inspecting != nil)
                         if discovery.searching || discovery.inspecting != nil {
                             ProgressView().controlSize(.small)
-                            Button("Stop") { discovery.invalidate() }.buttonStyle(HUDChipStyle(muted: true))
+                            Button("Stop") { discovery.stop() }.buttonStyle(HUDChipStyle(muted: true))
                         }
                     }
                 } else {
@@ -46,7 +46,7 @@ struct BeholderGitHubDiscoveryView: View {
                 if let page = discovery.page {
                     Text("\(page.total) matches reported by GitHub · showing \(page.hits.count) on the first page").hudType(.label)
                     Text(
-                        "Search uses containment in public fields. These are candidates, not exact name/email matches or identity evidence."
+                        "These are uninspected public search hits. GitHub uses containment in public fields, not exact name/email or identity matching."
                     )
                     .hudType(.caption).foregroundStyle(HUD.inkMuted)
                     Text("Search checked " + page.checkedAt.formatted()).hudType(.caption).foregroundStyle(HUD.inkMuted)
@@ -55,13 +55,13 @@ struct BeholderGitHubDiscoveryView: View {
                             .hudType(.caption).foregroundStyle(HUD.warn)
                     }
                     if page.hits.isEmpty {
-                        Text("No public candidates were returned on this page. This does not establish that no accounts exist.")
+                        Text("No public search hits were returned on this page. This does not establish that no accounts exist.")
                             .hudType(.caption)
                     }
                     ForEach(page.hits) { hit in
                         HStack {
                             Text("@" + hit.login).hudType(.label).textSelection(.enabled)
-                            Text("Public User · search candidate").hudType(.caption).foregroundStyle(HUD.inkMuted)
+                            Text("Public User · uninspected search hit").hudType(.caption).foregroundStyle(HUD.inkMuted)
                             Spacer()
                             Button(discovery.inspecting == hit.login ? "Inspecting…" : "Inspect GitHub profile") {
                                 discovery.inspect(hit, into: research); saveNote = nil
@@ -97,8 +97,9 @@ struct BeholderGitHubDiscoveryView: View {
             ForEach(finding.fields.keys.sorted(), id: \.self) { key in
                 Text(key + ": " + (finding.fields[key] ?? "")).hudType(.caption).textSelection(.enabled)
             }
-            Text(BeholderGitHubDiscovery.compareEmail(finding, request: request).rawValue).hudType(.caption).foregroundStyle(HUD.primary)
             if finding.status == .candidate {
+                Text(BeholderGitHubDiscovery.compareEmail(finding, request: request).rawValue).hudType(.caption)
+                    .foregroundStyle(HUD.primary)
                 Picker("Investigation", selection: $personID) {
                     Text("Choose a person").tag(nil as UUID?)
                     ForEach(research.people.people) { Text(verbatim: $0.name).tag(Optional($0.id)) }

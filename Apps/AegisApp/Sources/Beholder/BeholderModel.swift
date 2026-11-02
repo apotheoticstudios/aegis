@@ -29,6 +29,8 @@ final class BeholderModel {
     }
 
     private var generation = UUID()
+    /// A case/session boundary; ordinary username lookups keep the same research context.
+    private(set) var discoveryContextID = UUID()
     private var job: Task<Void, Never>?
     private let client: any BeholderSearching
     let githubDiscovery: BeholderGitHubResearch
@@ -68,7 +70,7 @@ final class BeholderModel {
                 "Enter one username using letters, numbers, dots, dashes or underscores, and choose at least one source."
             return
         }
-        cancel()
+        stopLookup()
         let token = UUID()
         generation = token
         username = name
@@ -126,6 +128,12 @@ final class BeholderModel {
 
     func cancel() {
         githubDiscovery.reset()
+        discoveryContextID = UUID()
+        stopLookup()
+    }
+
+    /// Stop only the username lookup, keeping the owner's separate Discover work intact.
+    func stopLookup() {
         generation = UUID()
         job?.cancel()
         job = nil

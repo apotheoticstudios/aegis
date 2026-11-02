@@ -83,6 +83,39 @@ final class BeholderGitHubLifecycleTests: XCTestCase {
         XCTAssertEqual(requests, 1)
     }
 
+    @MainActor func testUsernameLookupAndInspectionStopKeepLiveSearchHits() async throws {
+        let client = PendingGitHubClient(), model = BeholderModel(client: NoGitHubLifecycleNetwork(), discoveryClient: client)
+        let research = model.githubDiscovery
+        research.value = "Example Alex"; research.chooseGitHub(); research.search()
+        try await waitFor({ await client.searchCount }, expected: 1)
+        await client.finishSearch()
+        try await waitUntil { research.searching }
+        let page = try XCTUnwrap(research.page), hit = try XCTUnwrap(page.hits.first)
+        let context = model.discoveryContextID
+        research.inspect(hit, into: model)
+        try await waitFor({ await client.inspectionCount }, expected: 1)
+        model.query = "ExampleOther"; model.selected = [.instagram]
+        model.start(); model.stopLookup()
+        XCTAssertEqual(research.value, "Example Alex"); XCTAssertEqual(research.page, page)
+        XCTAssertEqual(model.discoveryContextID, context)
+        await client.finishInspection()
+        try await waitUntil { research.inspecting != nil }
+        XCTAssertEqual(research.inspectedLogin, hit.login)
+        let before = model.correlation
+        research.inspect(hit, into: model)
+        try await waitFor({ await client.inspectionCount }, expected: 2)
+        research.stop()
+        XCTAssertEqual(research.page, page); XCTAssertEqual(research.prepared, page.request)
+        XCTAssertNil(research.inspecting); XCTAssertNil(research.inspected)
+        await client.finishInspection()
+        try await Task.sleep(for: .milliseconds(10))
+        XCTAssertNil(research.inspected); XCTAssertEqual(model.correlation, before)
+        let count = await client.searchCount
+        XCTAssertEqual(count, 1, "Stopping an inspection must not require or cause another public search")
+        model.clear()
+        XCTAssertNil(research.page); XCTAssertEqual(research.value, "")
+    }
+
     @MainActor private func waitFor(_ count: @Sendable () async -> Int, expected: Int) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while await count() < expected, ContinuousClock.now < deadline {
@@ -97,6 +130,13 @@ final class BeholderGitHubLifecycleTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(2))
         }
         XCTAssertFalse(busy())
+    }
+}
+
+private struct NoGitHubLifecycleNetwork: BeholderSearching {
+    func lookup(_ provider: BeholderProvider, username _: String) async -> BeholderFinding {
+        XCTFail("This synthetic manual lookup must never request data")
+        return .init(provider: provider, status: .unavailable)
     }
 }
 
