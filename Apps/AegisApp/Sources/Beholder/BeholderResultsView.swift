@@ -71,10 +71,12 @@ struct BeholderResultsView: View {
                     BeholderEvidenceSummaryView(findings: findings)
                 }
                 if let research {
-                    Picker("Save possible accounts for", selection: $savingPerson) {
-                        Text("Choose a person").tag(nil as UUID?)
-                        ForEach(research.people.people) { Text(verbatim: $0.name).tag(Optional($0.id)) }
-                    }
+                    BeholderMenuPicker(
+                        label: "Save possible accounts for",
+                        placeholder: "Choose a person",
+                        options: research.people.people.map { ($0.id, $0.name) },
+                        selection: $savingPerson
+                    )
                     if research.people.people.isEmpty {
                         Text("Create a person in People to collect possible accounts for that investigation.").hudType(.caption)
                     }
@@ -242,5 +244,32 @@ extension View {
     /// The design system's look for a Beholder sub-view: Kode Mono text and chip buttons and links.
     func beholderStyle() -> some View {
         font(HUDType.body.font).buttonStyle(HUDChipStyle())
+    }
+}
+
+/// A choice from a longer list (people, accounts, services) as a design-system chip that opens a menu.
+struct BeholderMenuPicker<Value: Hashable>: View {
+    let label: String
+    let placeholder: String
+    let options: [(value: Value, title: String)]
+    @Binding var selection: Value?
+
+    var body: some View {
+        HStack(spacing: HUD.space2) {
+            Text(label).hudType(.label).foregroundStyle(HUD.inkMuted)
+            Menu {
+                Button(placeholder) { selection = nil }
+                ForEach(options, id: \.value) { option in
+                    Button(option.title) { selection = option.value }
+                }
+            } label: {
+                Text((options.first { $0.value == selection }?.title ?? placeholder) + "  ▾")
+            }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(HUDChipStyle())
+            .fixedSize()
+            .accessibilityLabel(label)
+        }
     }
 }

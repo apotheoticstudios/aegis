@@ -16,10 +16,11 @@ struct BeholderSelfCheckView: View {
                 Text("Check one of your own handles against all \(sources) sources. Only the handle is sent, as in any search.")
                     .hudType(.caption).foregroundStyle(HUD.inkMuted)
                 HStack(spacing: HUD.space3) {
-                    HUDTermInput(prompt: "my handle >", text: $handle, placeholder: "e.g. ExampleAlex").onSubmit(check)
-                        .accessibilityLabel("Your own handle")
+                    HUDTermInput(prompt: "my handle >", text: $handle, placeholder: "e.g. ExampleAlex", label: "Your own handle")
+                        .onSubmit(check)
                     Button("Check on all sources", action: check).buttonStyle(HUDPlateStyle(compact: true)).fixedSize()
                         .disabled(BeholderCaseSearch.username(handle) == nil)
+                        .help("Selects every source, then runs the usual search with its preview and Stop.")
                 }
                 ForEach(BeholderSelfCheck.Kind.allCases, id: \.self) { kind in
                     HUDSubhead(title: kind.rawValue, meta: "Checked " + BeholderSelfCheck.checked)

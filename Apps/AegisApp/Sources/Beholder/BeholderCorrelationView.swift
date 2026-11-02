@@ -73,10 +73,13 @@ struct BeholderCorrelationView: View {
     private var personEvidence: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: HUD.space3) {
-                Picker("Person", selection: $personID) {
-                    Text("Choose a person").tag(nil as UUID?)
-                    ForEach(research.people.people) { Text($0.name).tag(Optional($0.id)) }
-                }.padding(.top, HUD.space3)
+                BeholderMenuPicker(
+                    label: "Person",
+                    placeholder: "Choose a person",
+                    options: research.people.people.map { ($0.id, $0.name) },
+                    selection: $personID
+                )
+                .padding(.top, HUD.space3)
                 if let person {
                     Text("Known public identifiers for \(person.name)").hudType(.label)
                     BeholderIdentifierEditor { identifier, source in
@@ -139,14 +142,14 @@ struct BeholderCorrelationView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: HUD.space3) {
                 TextField("Filter archived accounts", text: $filter).modifier(BeholderField())
-                Picker("Account", selection: $accountID) {
-                    Text("Choose an account").tag(nil as String?)
-                    ForEach(research.correlation.accounts.filter {
+                BeholderMenuPicker(
+                    label: "Account",
+                    placeholder: "Choose an account",
+                    options: research.correlation.accounts.filter {
                         filter.isEmpty || ($0.finding.provider.title + " " + $0.username).localizedCaseInsensitiveContains(filter)
-                    }) { item in
-                        Text(item.finding.provider.title + " · @" + item.username).tag(Optional(item.id))
-                    }
-                }
+                    }.map { ($0.id, $0.finding.provider.title + " · @" + $0.username) },
+                    selection: $accountID
+                )
                 if let account {
                     Text(account.finding.provider.title + " · @" + account.username).hudType(.label)
                     BeholderEvidenceExplanationView(finding: account.finding)
@@ -208,14 +211,19 @@ struct BeholderIdentifierEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Picker("Type", selection: $kind) {
-                    Text("Email").tag(BeholderIdentifier.Kind.email)
-                    Text("Phone").tag(BeholderIdentifier.Kind.phone)
-                }.frame(width: 180)
+                HUDSegmented(
+                    label: "Type",
+                    options: [HUDOption(value: BeholderIdentifier.Kind.email, label: "Email"), HUDOption(value: .phone, label: "Phone")],
+                    value: $kind,
+                    small: true
+                )
                 if kind == .phone {
-                    Picker("Format", selection: $region) {
-                        ForEach(BeholderQueryPlanner.PhoneRegion.allCases) { Text($0.rawValue).tag($0) }
-                    }
+                    HUDSegmented(
+                        label: "Format",
+                        options: BeholderQueryPlanner.PhoneRegion.allCases.map { HUDOption(value: $0, label: $0.rawValue) },
+                        value: $region,
+                        small: true
+                    )
                 }
             }
             TextField(kind == .email ? "Public email" : "Complete phone number", text: $input).modifier(BeholderField())

@@ -372,12 +372,14 @@ struct HUDTermInput: View {
     var autofocus = false
     /// Told when typing starts and stops, for a window whose Return key does something else meanwhile.
     var editing: ((Bool) -> Void)?
+    /// What VoiceOver calls the field; the prompt alone is decoration.
+    var label: String?
     @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: HUD.space2) {
             Text(prompt).foregroundStyle(HUD.primary).fixedSize()
-            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(HUD.inkMuted))
+            TextField(label ?? "", text: $text, prompt: Text(placeholder).foregroundStyle(HUD.inkMuted))
                 .textFieldStyle(.plain)
                 .foregroundStyle(HUD.ink)
                 .focused($focused)
