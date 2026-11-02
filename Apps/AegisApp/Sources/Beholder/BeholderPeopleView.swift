@@ -9,6 +9,11 @@ struct BeholderPeopleView: View {
         var originalPersonID: UUID?
         var originalLinkID: UUID?
         var preferredPersonID: UUID?
+
+        func permits(_ personID: UUID?) -> Bool {
+            guard let personID else { return false }
+            return (originalPersonID ?? preferredPersonID).map { $0 == personID } ?? true
+        }
     }
 
     let research: BeholderModel
@@ -21,17 +26,33 @@ struct BeholderPeopleView: View {
     @State private var reason = ""
     @State private var evidence = ""
     @State private var problem: String?
+    @State private var expandedGroups: Set<BeholderPeople.Assessment> = [.supported, .possible]
     @Environment(\.dismiss) private var dismiss
 
-    init(research: BeholderModel, target: Target? = nil, embedded: Bool = false) {
+    init(research: BeholderModel, personID: UUID? = nil, target: Target? = nil, embedded: Bool = false) {
         self.research = research
         self.embedded = embedded
-        let preferred = target?.preferredPersonID.flatMap { id in research.people.people.first { $0.id == id }?.id }
+        let preferred = (target?.preferredPersonID ?? personID).flatMap { id in research.people.people.first { $0.id == id }?.id }
         _selected = State(initialValue: preferred ?? (research.people.people.count == 1 ? research.people.people.first?.id : nil))
         _draft = State(initialValue: target)
     }
 
     var body: some View {
+        if embedded {
+            ScrollViewReader { proxy in
+                ScrollView { content }
+                    .onChange(of: draft?.id) { _, id in
+                        if id != nil {
+                            proxy.scrollTo("account-review", anchor: .top)
+                        }
+                    }
+            }
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: HUD.space3) {
             if !embedded {
                 HStack {
@@ -60,16 +81,60 @@ struct BeholderPeopleView: View {
                 ForEach(research.people.people) { Text(verbatim: $0.name).tag(Optional($0.id)) }
             }
             if let draft {
-                editor(draft)
+                editor(draft).id("account-review")
             }
             if let problem {
                 Text(problem).foregroundStyle(HUD.warn)
             }
             if let person = research.people.people.first(where: { $0.id == selected }) {
+                if embedded {
+                    BeholderInvestigationView(research: research, person: person) { target in
+                        draft = target; assessment = .possible; reason = ""; evidence = ""; problem = nil
+                    }.id(person.id)
+                }
                 Text("\(person.links.count) ACCOUNTS · " + person.name).hudType(.data)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: HUD.space3) {
-                        ForEach(person.links) { link in
+                Group {
+                    if embedded {
+                        accountLinks(person)
+                    } else {
+                        ScrollView { accountLinks(person) }.frame(maxHeight: 300)
+                    }
+                }
+                if person.links.isEmpty {
+                    Text("Search a known username in Results, choose this person, then Save as possible.").foregroundStyle(HUD.inkMuted)
+                }
+            }
+            Text("Kept in memory only. Export the case before closing Aegis. Evidence URLs are stored, never fetched.")
+                .hudType(.caption).foregroundStyle(HUD.inkMuted)
+        }
+        .padding(embedded ? 0 : HUD.space4).frame(width: embedded ? nil : 680, alignment: .leading)
+        .frame(maxWidth: embedded ? .infinity : nil, alignment: .leading)
+        .foregroundStyle(HUD.ink).background(embedded ? AnyShapeStyle(.clear) : AnyShapeStyle(HUD.void)).beholderStyle()
+        .onChange(of: selected) {
+            if let draft, !draft.permits(selected) {
+                self.draft = nil
+            }
+            expandedGroups = [.supported, .possible]
+            assessment = .possible; reason = ""; evidence = ""; problem = nil
+        }
+    }
+
+    private func accountLinks(_ person: BeholderPeople.Person) -> some View {
+        LazyVStack(alignment: .leading, spacing: HUD.space3) {
+            ForEach([BeholderPeople.Assessment.supported, .possible, .ruledOut]) { group in
+                let links = person.links.filter { $0.assessment == group }.sorted { $0.accountKey < $1.accountKey }
+                if !links.isEmpty {
+                    DisclosureGroup(group.title + " · \(links.count)", isExpanded: Binding(
+                        get: { expandedGroups.contains(group) },
+                        set: {
+                            if $0 {
+                                expandedGroups.insert(group)
+                            } else {
+                                expandedGroups.remove(group)
+                            }
+                        }
+                    )) {
+                        ForEach(links) { link in
                             VStack(alignment: .leading, spacing: HUD.space2) {
                                 HStack {
                                     Text(link.finding.provider.title + " · @" + link.username).hudType(.label)
@@ -90,10 +155,28 @@ struct BeholderPeopleView: View {
                                 } else {
                                     Text("Manual profile · Beholder has not checked this account")
                                 }
+                                if let current = research.correlation.accounts.first(where: { $0.id == link.accountKey }) {
+                                    if current.finding.status == .noResult {
+                                        Text("Historical account: latest completed check had no public result.").foregroundStyle(HUD.warn)
+                                    } else if current.pending {
+                                        Text("Re-check pending; original snapshot retained.").foregroundStyle(HUD.inkMuted)
+                                    }
+                                }
+                                DisclosureGroup("Saved profile details") {
+                                    ForEach(link.finding.fields.keys.sorted(), id: \.self) { key in
+                                        Text(key + ": " + (link.finding.fields[key] ?? "")).textSelection(.enabled)
+                                    }
+                                }
                                 if let source = link.finding.sourceURL ?? link.finding.preparedProfileURL {
                                     Text(verbatim: source.absoluteString).textSelection(.enabled)
                                 }
                                 HStack {
+                                    if let url = link.finding.provider.profileURL(link.username) {
+                                        Link("Open profile ↗", destination: url)
+                                            .help(
+                                                "Opens your browser using its current settings. The saved snapshot may be older than the current page."
+                                            )
+                                    }
                                     Button("Review link") {
                                         draft = Target(
                                             username: link.username,
@@ -110,22 +193,8 @@ struct BeholderPeopleView: View {
                             .hudType(.caption).padding(HUD.space3).background(HUD.surface)
                         }
                     }
-                }.frame(maxHeight: 250)
-                if person.links.isEmpty {
-                    Text("Search a handle, then choose Link to person on a result.").foregroundStyle(HUD.inkMuted)
                 }
             }
-            Text("Kept in memory only. Export the case before closing Aegis. Evidence URLs are stored, never fetched.")
-                .hudType(.caption).foregroundStyle(HUD.inkMuted)
-        }
-        .padding(embedded ? 0 : HUD.space4).frame(width: embedded ? nil : 680, alignment: .leading)
-        .frame(maxWidth: embedded ? .infinity : nil, alignment: .leading)
-        .foregroundStyle(HUD.ink).background(embedded ? AnyShapeStyle(.clear) : AnyShapeStyle(HUD.void)).beholderStyle()
-        .onChange(of: selected) {
-            if draft?.originalPersonID != nil {
-                draft = nil
-            }
-            assessment = .possible; reason = ""; evidence = ""; problem = nil
         }
     }
 
@@ -148,7 +217,7 @@ struct BeholderPeopleView: View {
             HStack {
                 Button("Save assessment") {
                     perform {
-                        guard let selected else { throw BeholderPeople.Problem.missing }
+                        guard let selected, target.permits(selected) else { throw BeholderPeople.Problem.missing }
                         if let original = target.originalPersonID, let linkID = target.originalLinkID {
                             guard original == selected else { throw BeholderPeople.Problem.missing }
                             try research.people.reassess(

@@ -197,7 +197,7 @@ struct BeholderCorrelationView: View {
     }
 }
 
-private struct BeholderIdentifierEditor: View {
+struct BeholderIdentifierEditor: View {
     let save: (BeholderIdentifier, String) throws -> Void
     @State private var kind = BeholderIdentifier.Kind.email
     @State private var region = BeholderQueryPlanner.PhoneRegion.international

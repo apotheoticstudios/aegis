@@ -141,6 +141,26 @@ final class BeholderModel {
         problem = nil
     }
 
+    /// An explicit review shortcut. Existing assessments, including manual case variants, are never replaced.
+    @discardableResult func savePossible(personID: UUID, username: String, finding: BeholderFinding) throws -> Bool {
+        guard let person = people.people.first(where: { $0.id == personID }) else { throw BeholderPeople.Problem.missing }
+        let key = BeholderCorrelation.key(finding.provider, username)
+        let supportKey = BeholderPeople.supportKey(provider: finding.provider, username: username)
+        guard !person.links.contains(where: { $0.accountKey == key || $0.supportKey == supportKey }) else { return false }
+        guard !people.people.contains(where: {
+            $0.id != personID && $0.links.contains { $0.supportKey == supportKey && $0.assessment == .supported }
+        }) else { throw BeholderPeople.Problem.conflict }
+        try people.link(
+            personID: personID,
+            username: username,
+            finding: finding,
+            assessment: .possible,
+            reason: "Saved as possible from results; identity has not been reviewed.",
+            evidence: ""
+        )
+        return true
+    }
+
     func export() throws -> Data {
         try BeholderCaseFile.encode(
             username: username,
