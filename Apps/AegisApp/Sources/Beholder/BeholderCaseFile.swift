@@ -3,6 +3,12 @@ import Foundation
 /// An inert, bounded case document. Decoding never verifies claims, opens URLs or reads other files.
 enum BeholderCaseFile {
     static let byteLimit = 8 * 1024 * 1024
+
+    /// Validate a prospective observation with the same rules used by case import/export.
+    static func acceptsFinding(_ finding: BeholderFinding, username: String) -> Bool {
+        do { try validateFinding(finding, username: username); return true } catch { return false }
+    }
+
     static let provenanceNote = "Imported observations, statuses and check times are claims in a file, "
         + "not independently verified by Beholder. "
         + "Contains locally recorded phone/email identifiers. Candidate accounts are not verified identities. Prepared manual links are unchecked."

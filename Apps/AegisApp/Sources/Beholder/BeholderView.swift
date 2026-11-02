@@ -30,11 +30,12 @@ struct BeholderDashboard: View {
     }
 
     private enum CaseTab: Hashable {
-        case results, people, evidence, planner
+        case github, results, people, evidence, planner
     }
 
     @State private var research: BeholderModel
     @State private var discovery: BeholderDiscovery
+    @State private var github: BeholderGitHubResearch
     var followsPanel = false
     @State private var exporting = false
     @State private var document = BeholderDocument()
@@ -55,13 +56,17 @@ struct BeholderDashboard: View {
     init(research: BeholderModel, followsPanel: Bool = false) {
         _research = State(initialValue: research)
         _discovery = State(initialValue: BeholderDiscovery(research))
+        _github = State(initialValue: research.githubDiscovery)
+        _tab = State(initialValue: research.hasCase ? .results : .github)
         self.followsPanel = followsPanel
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: HUD.space3) {
             header
-            searchBar
+            if tab != .github {
+                searchBar
+            }
             if let problem = discovery.problem ?? (discovery.kind == .username ? research.problem : nil) ?? exportProblem {
                 Text(problem).hudType(.caption).foregroundStyle(HUD.warn)
             }
@@ -105,6 +110,7 @@ struct BeholderDashboard: View {
                     if let data = pendingImport {
                         try research.importCase(data)
                         discovery.resetAfterImport()
+                        github.reset()
                         tab = .results
                     }
                     exportProblem = nil
@@ -126,8 +132,8 @@ struct BeholderDashboard: View {
             Text(importPreview +
                 " Imported claims are unverified. This replaces the current session; export first to keep it, then reopen the import.")
         }
-        .onDisappear { research.cancel(); cancelImport() }
-        .onChange(of: research.cancellationID) { _, _ in cancelImport() }
+        .onDisappear { research.cancel(); cancelImport(); github.reset() }
+        .onChange(of: research.cancellationID) { _, _ in cancelImport(); github.reset() }
         .onChange(of: HUDPresence.shared.open) { _, open in
             if followsPanel, !open {
                 research.cancel()
@@ -138,6 +144,7 @@ struct BeholderDashboard: View {
                 reviewingImport = false
                 pendingImport = nil
                 cancelImport()
+                github.reset()
             }
         }
         .fileImporter(isPresented: $opening, allowedContentTypes: [.json]) { result in
@@ -164,7 +171,8 @@ struct BeholderDashboard: View {
 
     private func clearCase() {
         discovery.clearCase()
-        tab = .results
+        github.reset()
+        tab = .github
     }
 
     /// Starts a bounded background read. Old or cancelled completions cannot replace a later preview.
@@ -214,6 +222,9 @@ struct BeholderDashboard: View {
 /// The dashboard's parts: header, search line, case bar and tab content.
 extension BeholderDashboard {
     private var counter: String {
+        if tab == .github {
+            return "GITHUB DISCOVERY"
+        }
         if discovery.kind == .username {
             return "\(research.candidates) " + (research.candidates == 1 ? "CANDIDATE" : "CANDIDATES")
         }
@@ -344,7 +355,8 @@ extension BeholderDashboard {
             HUDSegmented(
                 label: "Case",
                 options: [
-                    HUDOption(value: CaseTab.results, label: "Results", meta: resultsMeta),
+                    HUDOption(value: CaseTab.github, label: "Discover"),
+                    HUDOption(value: CaseTab.results, label: "Search tools", meta: resultsMeta),
                     HUDOption(value: CaseTab.people, label: "People", meta: "\(research.people.people.count)"),
                     HUDOption(value: CaseTab.evidence, label: "Evidence", meta: "\(research.correlation.accounts.count)"),
                     HUDOption(value: CaseTab.planner, label: "Planner"),
@@ -375,6 +387,8 @@ extension BeholderDashboard {
 
     @ViewBuilder private var tabContent: some View {
         switch tab {
+        case .github:
+            BeholderGitHubDiscoveryView(discovery: github, research: research) { sheet = .link($0) }
         case .results:
             if discovery.kind != .username {
                 BeholderCaseSearchView(discovery: discovery) { sheet = .link($0) }

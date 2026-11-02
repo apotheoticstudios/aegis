@@ -15,6 +15,7 @@ struct BeholderWebTransport: BeholderTransport {
     static let byteLimit = 262_144
     /// Test-only protocol interception; production leaves this empty and never consults browser state.
     var protocolClasses: [AnyClass] = []
+    var permitsGitHubDiscovery = false
 
     static func configuration() -> URLSessionConfiguration { // privacy-guard: allow-network ephemeral Beholder requests, #98
         let config = URLSessionConfiguration.ephemeral // privacy-guard: allow-network owner-started Beholder lookup, #98 / ADR-0034
@@ -29,7 +30,9 @@ struct BeholderWebTransport: BeholderTransport {
     }
 
     func get(_ url: URL, accept: String) async throws -> BeholderPayload {
-        guard BeholderProvider.permits(url) else { throw URLError(.unsupportedURL) }
+        guard BeholderProvider.permits(url) || (permitsGitHubDiscovery && BeholderGitHubDiscovery.permits(url)) else {
+            throw URLError(.unsupportedURL)
+        }
         let config = Self.configuration()
         if !protocolClasses.isEmpty {
             config.protocolClasses = protocolClasses

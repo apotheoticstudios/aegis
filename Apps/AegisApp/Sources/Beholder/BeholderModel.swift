@@ -31,9 +31,14 @@ final class BeholderModel {
     private var generation = UUID()
     private var job: Task<Void, Never>?
     private let client: any BeholderSearching
+    let githubDiscovery: BeholderGitHubResearch
 
-    init(client: any BeholderSearching = BeholderClient()) {
+    init(
+        client: any BeholderSearching = BeholderClient(),
+        discoveryClient: any BeholderGitHubDiscovering = BeholderGitHubDiscoveryClient()
+    ) {
         self.client = client
+        githubDiscovery = BeholderGitHubResearch(client: discoveryClient)
     }
 
     var candidates: Int {
@@ -120,6 +125,7 @@ final class BeholderModel {
     }
 
     func cancel() {
+        githubDiscovery.reset()
         generation = UUID()
         job?.cancel()
         job = nil
@@ -169,6 +175,23 @@ final class BeholderModel {
             correlation: correlation,
             importedFrom: importProvenance
         )
+    }
+
+    /// Only a separately inspected, exact public GitHub profile may reach the case; search queries/hits never do.
+    func recordGitHubInspection(login: String, finding: BeholderFinding) -> Bool {
+        guard BeholderGitHubDiscovery.validLogin(login), finding.provider == .github,
+              finding.sourceURL == BeholderProvider.github.endpoint(login), finding.checkedAt != nil,
+              [.candidate, .noResult, .limited, .unavailable].contains(finding.status) else { return false }
+        guard BeholderCaseFile.acceptsFinding(finding, username: login) else { return false }
+        if finding.status == .candidate {
+            guard finding.fields["Account type"] == "User",
+                  finding.fields["Handle"]?.lowercased() == login.lowercased() else { return false }
+        }
+        let result = correlation.observe(username: login, finding: finding)
+        if result == .capacity {
+            problem = "This case has reached its account limit. Export it before starting another."; return false
+        }
+        return result == .recorded || finding.status != .candidate
     }
 
     /// Validate the entire immutable input before cancelling work or replacing any active case value.
