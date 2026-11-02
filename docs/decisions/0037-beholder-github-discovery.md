@@ -25,12 +25,12 @@ A typed name or email could only go to a site through the owner's browser. The o
 **2. Search hits.**
 - **Display:** up to 20 hits in GitHub's order, with no score or ranking shown. Each shows only its `login` and `type`, and the profile address is rebuilt locally from the login.
 - **Context shown with them:** the exact query, the time, `total_count`, and a note when `incomplete_results` is set.
-- **Kept only on screen:** hits are never added to the case archive or export, and the typed name or email is never saved.
+- **Kept only on screen:** the search input and hit metadata (each hit's login and type, `total_count`, `incomplete_results` and the query) are never added to the case, its archive or an export. A separately inspected public profile (step 3) is saved as a normal ADR-0034 observation with its own source and check time. Its fields may independently contain the same name or email the owner typed; that is the profile's own published data, not the query saved as metadata.
 - **Not proof:** GitHub matches `in:email` and `in:name` by *containment* within public fields. A hit is neither an exact email or name match nor identity evidence.
 
 **3. Inspect.**
 - **Trigger:** a separate **Inspect GitHub profile** click on one hit makes one GET to `https://api.github.com/users/<login>`.
-- **The address:** it is rebuilt from a login that passes GitHub's handle rules, never taken from a returned URL.
+- **The address:** it is rebuilt from the `login` of the current, live search hit the owner clicked, after that login passes GitHub's handle rules. This is the only returned value allowed to seed a request (see "Never" below). It is never taken from a returned URL.
 - **The result:** it goes through the existing ADR-0034 GitHub adapter, with the exact-login check, the archive and an optional Save as possible. It is labelled "found via GitHub user search" plus the time, without storing the query.
 - **Email matches:** a typed email counts as an exact match only when the profile `email` canonically equals it. GitHub documents that unauthenticated responses may return `email: null`, so a missing email proves nothing.
 - **No fan-out:** nothing goes to any other source, and nothing is inspected automatically.
@@ -47,7 +47,8 @@ The allow-list gains exactly these two request shapes, rebuilt and compared by e
 - avatars, returned URLs used as destinations, link following or pagination
 - `sort` or text-match parameters, or scoring
 - model calls, account-recovery or breach probes, or private APIs
-- requests built from case references, people, Contacts, messages, mail, files, memory, imported or restored data, or returned text
+- requests built from case references, people, Contacts, messages, mail, files, memory, or imported or restored data
+- requests built from returned text, with one exception: the validated `login` of the current search hit the owner clicks Inspect on (step 3). Response prose and every other returned field (names, bios, emails, URLs, `text_matches` and so on) never seed a request. Nothing from an inspected profile seeds a further request.
 
 The code that builds these requests has no access to the case. Nothing from a response is executed or treated as an instruction (principle 4).
 
