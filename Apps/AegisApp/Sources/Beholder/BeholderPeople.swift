@@ -41,8 +41,13 @@ struct BeholderPeople: Codable, Equatable, Sendable {
 
         /// Conservative conflict detection only; never combines differently spelled manual records.
         var supportKey: String {
-            finding.provider.isManual ? finding.provider.rawValue + ":" + username.lowercased() : accountKey
+            BeholderPeople.supportKey(provider: finding.provider, username: username)
         }
+    }
+
+    /// Preserve the provider's raw spelling while conservatively folding manual handle variants.
+    static func supportKey(provider: BeholderProvider, username: String) -> String {
+        provider.rawValue + ":" + (provider.isManual ? username.lowercased() : provider.lookupHandle(username))
     }
 
     enum Problem: Error {

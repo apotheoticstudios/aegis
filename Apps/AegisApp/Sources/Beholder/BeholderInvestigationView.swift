@@ -10,9 +10,8 @@ struct BeholderInvestigationView: View {
     var body: some View {
         let summary = BeholderInvestigation.summarize(person, people: research.people, store: research.correlation)
         VStack(alignment: .leading, spacing: HUD.space3) {
-            HStack {
-                Text(person.name).hudType(.bodyStrong)
-                Spacer()
+            Text(person.name).hudType(.bodyStrong).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: HUD.space3) {
                 ForEach([BeholderPeople.Assessment.supported, .possible, .ruledOut]) { assessment in
                     Text("\(person.links.filter { $0.assessment == assessment }.count) " + assessment.title).hudType(.caption)
                 }
@@ -72,12 +71,13 @@ struct BeholderInvestigationView: View {
                             Spacer()
                             Button("Save as possible") {
                                 do {
-                                    try research.savePossible(
+                                    let added = try research.savePossible(
                                         personID: person.id,
                                         username: lead.account.username,
                                         finding: lead.account.finding
                                     )
-                                    saveNote = "Saved as possible for " + person.name + ". Review it in the accounts below."
+                                    saveNote = added ? "Saved as possible for " + person.name + ". Review it in the accounts below."
+                                        : "An assessment is already saved for this account or a case variant. It was kept."
                                 } catch { saveNote = (error as? BeholderPeople.Problem)?.message ?? "The account could not be saved." }
                             }
                             Button("Review for " + person.name) {

@@ -202,8 +202,8 @@ struct BeholderResultsView: View {
     @ViewBuilder private func saveButton(_ finding: BeholderFinding) -> some View {
         if let research, let person = research.people.people.first(where: { $0.id == savingPerson }) {
             let key = BeholderCorrelation.key(finding.provider, username)
-            let supportKey = finding.provider.isManual ? key.lowercased() : key
-            if let link = person.links.first(where: { $0.supportKey == supportKey }) {
+            let supportKey = BeholderPeople.supportKey(provider: finding.provider, username: username)
+            if let link = person.links.first(where: { $0.accountKey == key || $0.supportKey == supportKey }) {
                 Text(link.assessment.title + " for " + person.name).hudType(.caption).foregroundStyle(HUD.inkMuted)
             } else if let other = research.people.people.first(where: {
                 $0.id != person.id && $0.links.contains { $0.supportKey == supportKey && $0.assessment == .supported }

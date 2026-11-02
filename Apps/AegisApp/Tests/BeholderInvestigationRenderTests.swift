@@ -33,6 +33,12 @@ final class BeholderInvestigationRenderTests: XCTestCase {
         )
         var possible = finding; possible.sourceURL = BeholderProvider.github.endpoint("ExampleOther")
         try model.savePossible(personID: alex, username: "ExampleOther", finding: possible)
+        let saving = BeholderModel(client: OverviewNoNetwork())
+        try saving.people.create("Example Alex")
+        let longName = try saving.people.create("Example " + String(repeating: "Alex ", count: 14))
+        let longPerson = try XCTUnwrap(saving.people.people.first { $0.id == longName })
+        let single = BeholderModel(client: OverviewNoNetwork())
+        try single.people.create("Example Alex")
         for (name, size, view) in [
             (
                 "person-compact",
@@ -41,8 +47,11 @@ final class BeholderInvestigationRenderTests: XCTestCase {
             ),
             ("person-wide", CGSize(width: 1300, height: 760), AnyView(BeholderPeopleView(research: model, personID: alex, embedded: true))),
             ("save-possible", CGSize(width: 868, height: 620), AnyView(BeholderResultsView(
-                findings: [finding], username: "ExampleAlex", searching: false, research: model, onLink: { _ in }
+                findings: [finding], username: "ExampleAlex", searching: false, research: single, onLink: { _ in }
             ))),
+            ("person-long-name", CGSize(width: 680, height: 520), AnyView(ScrollView {
+                BeholderInvestigationView(research: saving, person: longPerson, onReview: { _ in })
+            })),
         ] {
             let host = NSHostingView(rootView: view.padding(16).frame(width: size.width, height: size.height)
                 .foregroundStyle(HUD.ink).background(HUD.void).environment(\.colorScheme, .dark))

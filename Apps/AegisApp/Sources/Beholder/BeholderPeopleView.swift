@@ -9,6 +9,11 @@ struct BeholderPeopleView: View {
         var originalPersonID: UUID?
         var originalLinkID: UUID?
         var preferredPersonID: UUID?
+
+        func permits(_ personID: UUID?) -> Bool {
+            guard let personID else { return false }
+            return (originalPersonID ?? preferredPersonID).map { $0 == personID } ?? true
+        }
     }
 
     let research: BeholderModel
@@ -21,6 +26,7 @@ struct BeholderPeopleView: View {
     @State private var reason = ""
     @State private var evidence = ""
     @State private var problem: String?
+    @State private var expandedGroups: Set<BeholderPeople.Assessment> = [.supported, .possible]
     @Environment(\.dismiss) private var dismiss
 
     init(research: BeholderModel, personID: UUID? = nil, target: Target? = nil, embedded: Bool = false) {
@@ -105,9 +111,10 @@ struct BeholderPeopleView: View {
         .frame(maxWidth: embedded ? .infinity : nil, alignment: .leading)
         .foregroundStyle(HUD.ink).background(embedded ? AnyShapeStyle(.clear) : AnyShapeStyle(HUD.void)).beholderStyle()
         .onChange(of: selected) {
-            if draft?.originalPersonID != nil {
-                draft = nil
+            if let draft, !draft.permits(selected) {
+                self.draft = nil
             }
+            expandedGroups = [.supported, .possible]
             assessment = .possible; reason = ""; evidence = ""; problem = nil
         }
     }
@@ -117,64 +124,74 @@ struct BeholderPeopleView: View {
             ForEach([BeholderPeople.Assessment.supported, .possible, .ruledOut]) { group in
                 let links = person.links.filter { $0.assessment == group }.sorted { $0.accountKey < $1.accountKey }
                 if !links.isEmpty {
-                    Text(group.title + " · \(links.count)").hudType(.data)
-                    ForEach(links) { link in
-                        VStack(alignment: .leading, spacing: HUD.space2) {
-                            HStack {
-                                Text(link.finding.provider.title + " · @" + link.username).hudType(.label)
-                                Spacer()
-                                Text(link.assessment.title).hudType(.caption).foregroundStyle(HUD.primary)
-                            }
-                            Text(verbatim: link.reason).textSelection(.enabled)
-                            if let url = link.evidenceURL {
-                                Text("Your evidence: " + url.absoluteString).textSelection(.enabled)
-                            }
-                            Text("Your assessment: " + link.assessedAt.formatted(date: .abbreviated, time: .standard))
-                            if let checked = link.finding.checkedAt {
-                                Text("Original source check: " + checked.formatted(date: .abbreviated, time: .standard))
-                                if let latest = link.lastObservedAt, latest > checked {
-                                    Text("Seen again: " + latest
-                                        .formatted(date: .abbreviated, time: .standard) + " · original snapshot retained")
-                                }
+                    DisclosureGroup(group.title + " · \(links.count)", isExpanded: Binding(
+                        get: { expandedGroups.contains(group) },
+                        set: {
+                            if $0 {
+                                expandedGroups.insert(group)
                             } else {
-                                Text("Manual profile · Beholder has not checked this account")
-                            }
-                            if let current = research.correlation.accounts.first(where: { $0.id == link.accountKey }) {
-                                if current.finding.status == .noResult {
-                                    Text("Historical account: latest completed check had no public result.").foregroundStyle(HUD.warn)
-                                } else if current.pending {
-                                    Text("Re-check pending; original snapshot retained.").foregroundStyle(HUD.inkMuted)
-                                }
-                            }
-                            DisclosureGroup("Saved profile details") {
-                                ForEach(link.finding.fields.keys.sorted(), id: \.self) { key in
-                                    Text(key + ": " + (link.finding.fields[key] ?? "")).textSelection(.enabled)
-                                }
-                            }
-                            if let source = link.finding.sourceURL ?? link.finding.preparedProfileURL {
-                                Text(verbatim: source.absoluteString).textSelection(.enabled)
-                            }
-                            HStack {
-                                if let url = link.finding.provider.profileURL(link.username) {
-                                    Link("Open profile ↗", destination: url)
-                                        .help(
-                                            "Opens your browser using its current settings. The saved snapshot may be older than the current page."
-                                        )
-                                }
-                                Button("Review link") {
-                                    draft = Target(
-                                        username: link.username,
-                                        finding: link.finding,
-                                        originalPersonID: person.id,
-                                        originalLinkID: link.id
-                                    )
-                                    assessment = link.assessment; reason = link.reason
-                                    evidence = link.evidenceURL?.absoluteString ?? ""; problem = nil
-                                }
-                                Button("Remove link") { research.people.remove(personID: person.id, linkID: link.id) }
+                                expandedGroups.remove(group)
                             }
                         }
-                        .hudType(.caption).padding(HUD.space3).background(HUD.surface)
+                    )) {
+                        ForEach(links) { link in
+                            VStack(alignment: .leading, spacing: HUD.space2) {
+                                HStack {
+                                    Text(link.finding.provider.title + " · @" + link.username).hudType(.label)
+                                    Spacer()
+                                    Text(link.assessment.title).hudType(.caption).foregroundStyle(HUD.primary)
+                                }
+                                Text(verbatim: link.reason).textSelection(.enabled)
+                                if let url = link.evidenceURL {
+                                    Text("Your evidence: " + url.absoluteString).textSelection(.enabled)
+                                }
+                                Text("Your assessment: " + link.assessedAt.formatted(date: .abbreviated, time: .standard))
+                                if let checked = link.finding.checkedAt {
+                                    Text("Original source check: " + checked.formatted(date: .abbreviated, time: .standard))
+                                    if let latest = link.lastObservedAt, latest > checked {
+                                        Text("Seen again: " + latest
+                                            .formatted(date: .abbreviated, time: .standard) + " · original snapshot retained")
+                                    }
+                                } else {
+                                    Text("Manual profile · Beholder has not checked this account")
+                                }
+                                if let current = research.correlation.accounts.first(where: { $0.id == link.accountKey }) {
+                                    if current.finding.status == .noResult {
+                                        Text("Historical account: latest completed check had no public result.").foregroundStyle(HUD.warn)
+                                    } else if current.pending {
+                                        Text("Re-check pending; original snapshot retained.").foregroundStyle(HUD.inkMuted)
+                                    }
+                                }
+                                DisclosureGroup("Saved profile details") {
+                                    ForEach(link.finding.fields.keys.sorted(), id: \.self) { key in
+                                        Text(key + ": " + (link.finding.fields[key] ?? "")).textSelection(.enabled)
+                                    }
+                                }
+                                if let source = link.finding.sourceURL ?? link.finding.preparedProfileURL {
+                                    Text(verbatim: source.absoluteString).textSelection(.enabled)
+                                }
+                                HStack {
+                                    if let url = link.finding.provider.profileURL(link.username) {
+                                        Link("Open profile ↗", destination: url)
+                                            .help(
+                                                "Opens your browser using its current settings. The saved snapshot may be older than the current page."
+                                            )
+                                    }
+                                    Button("Review link") {
+                                        draft = Target(
+                                            username: link.username,
+                                            finding: link.finding,
+                                            originalPersonID: person.id,
+                                            originalLinkID: link.id
+                                        )
+                                        assessment = link.assessment; reason = link.reason
+                                        evidence = link.evidenceURL?.absoluteString ?? ""; problem = nil
+                                    }
+                                    Button("Remove link") { research.people.remove(personID: person.id, linkID: link.id) }
+                                }
+                            }
+                            .hudType(.caption).padding(HUD.space3).background(HUD.surface)
+                        }
                     }
                 }
             }
@@ -200,7 +217,7 @@ struct BeholderPeopleView: View {
             HStack {
                 Button("Save assessment") {
                     perform {
-                        guard let selected else { throw BeholderPeople.Problem.missing }
+                        guard let selected, target.permits(selected) else { throw BeholderPeople.Problem.missing }
                         if let original = target.originalPersonID, let linkID = target.originalLinkID {
                             guard original == selected else { throw BeholderPeople.Problem.missing }
                             try research.people.reassess(

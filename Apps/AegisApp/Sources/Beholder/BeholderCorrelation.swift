@@ -170,7 +170,7 @@ struct BeholderCorrelation: Codable, Equatable, Sendable {
             .map(\.supportKey))
         let grouped = Dictionary(grouping: evidence, by: \.accountID)
         return accounts.compactMap { account -> Lead? in
-            let supportKey = account.finding.provider.isManual ? account.id.lowercased() : account.id
+            let supportKey = BeholderPeople.supportKey(provider: account.finding.provider, username: account.username)
             guard !excluded.contains(account.id), !otherSupport.contains(supportKey), active.contains(account.id) else { return nil }
             let overlaps = (grouped[account.id] ?? []).compactMap { item -> Overlap? in
                 guard let reference = references[item.identifier] else { return nil }

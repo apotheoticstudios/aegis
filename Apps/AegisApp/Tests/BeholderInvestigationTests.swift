@@ -158,6 +158,67 @@ final class BeholderInvestigationTests: XCTestCase {
     }
 }
 
+extension BeholderInvestigationTests {
+    @MainActor func testCamelCaseManualProvidersPreserveAssessmentsAndExcludeOtherPeopleFromLeads() throws {
+        for provider in [BeholderProvider.linkedIn, .soundCloud] {
+            let model = BeholderModel(client: InvestigationNoNetwork())
+            let alex = try model.people.create("Example Alex"), jamie = try model.people.create("Example Jamie")
+            let finding = try XCTUnwrap(provider.manualFinding("ExampleAlex"))
+            for assessment in [BeholderPeople.Assessment.supported, .ruledOut] {
+                try model.people.link(
+                    personID: alex,
+                    username: "ExampleAlex",
+                    finding: finding,
+                    assessment: assessment,
+                    reason: "Example reviewed author source",
+                    evidence: "https://example.com/author"
+                )
+                let before = model.people
+                for handle in ["ExampleAlex", "examplealex"] {
+                    let variant = try XCTUnwrap(provider.manualFinding(handle))
+                    XCTAssertFalse(try model.savePossible(personID: alex, username: handle, finding: variant))
+                    XCTAssertEqual(model.people, before)
+                    if assessment == .supported {
+                        XCTAssertThrowsError(try model.savePossible(personID: jamie, username: handle, finding: variant))
+                    }
+                }
+            }
+            try model.people.link(
+                personID: alex,
+                username: "ExampleAlex",
+                finding: finding,
+                assessment: .supported,
+                reason: "Example reviewed author source",
+                evidence: "https://example.com/author"
+            )
+            let key = BeholderPeople.supportKey(provider: provider, username: "ExampleAlex")
+            XCTAssertEqual(key, provider.rawValue + ":examplealex")
+            XCTAssertEqual(model.people.people.first?.links.first?.supportKey, key)
+            let email = try XCTUnwrap(BeholderIdentifier(input: "example@example.com", kind: .email))
+            try model.correlation.identify(personID: jamie, identifier: email, source: "https://example.com/author")
+            for handle in ["ExampleAlex", "examplealex"] {
+                let variant = try XCTUnwrap(provider.manualFinding(handle))
+                model.correlation.observe(username: handle, finding: variant)
+                try model.correlation.record(
+                    accountID: BeholderCorrelation.key(provider, handle),
+                    identifier: email,
+                    source: "https://example.com/contact"
+                )
+            }
+            let person = try XCTUnwrap(model.people.people.first { $0.id == jamie })
+            XCTAssertTrue(model.correlation.leads(for: person, people: model.people.people).isEmpty)
+        }
+    }
+
+    @MainActor func testLeadReviewIsBoundToItsChosenPerson() {
+        let alex = UUID(), jamie = UUID()
+        let target = BeholderPeopleView.Target(username: "example", finding: candidate("example"), preferredPersonID: alex)
+        XCTAssertTrue(target.permits(alex)); XCTAssertFalse(target.permits(jamie)); XCTAssertFalse(target.permits(nil))
+        let unbound = BeholderPeopleView.Target(username: "example", finding: candidate("example"))
+        XCTAssertTrue(unbound.permits(jamie)); XCTAssertFalse(unbound.permits(nil))
+    }
+}
+
 private actor InvestigationNoNetwork: BeholderSearching {
     private(set) var count = 0
     func lookup(_ provider: BeholderProvider, username _: String) async -> BeholderFinding {
