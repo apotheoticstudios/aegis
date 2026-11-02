@@ -35,12 +35,13 @@ struct BeholderPublicSearchView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Public service", selection: service) {
-                Text("Choose a service").tag(nil as BeholderPublicSearch.Service?)
-                ForEach(BeholderPublicSearch.Service.allCases.filter { $0.supports(input.kind) }) {
-                    Text($0.rawValue).tag(Optional($0))
-                }
-            }.disabled(!ownerTyped || input.value.isEmpty)
+            BeholderMenuPicker(
+                label: "Public service",
+                placeholder: "Choose a service",
+                options: BeholderPublicSearch.Service.allCases.filter { $0.supports(input.kind) }.map { ($0, $0.rawValue) },
+                selection: service
+            )
+            .disabled(!ownerTyped || input.value.isEmpty)
             if !ownerTyped {
                 Text("Type the identifier yourself to prepare a public lookup. Imported records and case evidence are not sent.")
                     .font(.caption).foregroundStyle(HUD.inkMuted)

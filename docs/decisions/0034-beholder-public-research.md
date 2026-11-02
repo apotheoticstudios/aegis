@@ -179,3 +179,7 @@ Email local-part case and plus-addresses remain distinct. Phone formatting requi
 An unknown refresh preserves previous dated evidence and records its separate attempt; a definite candidate
 or no-result response can replace it. Pending checks hide leads temporarily. Case-file provenance and explicit
 reopening are further specified by ADR-0035; no automatic disk storage or network expansion is introduced.
+
+## Self-check (#139, owner requested 2026-11-01)
+
+A Self-check tab lists fixed opt-out and removal pages (data brokers, official opt-outs and Have I Been Pwned's website), assembled locally from host and path. They are browser links the owner opens. Beholder makes no request to them, fetches nothing from them, and sends them no handle or email. Its one action, "Check on all sources", runs the existing owner-started username search on the owner's own handle with every source selected, under this ADR's existing transport rules. In-app breach checks are out of scope: Have I Been Pwned's email search needs a paid key and would send an email address off the Mac, so it needs its own ADR. The pages and their confirmation date are recorded in docs/design/BEHOLDER-SOURCES.md.

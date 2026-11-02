@@ -76,10 +76,12 @@ struct BeholderPeopleView: View {
                     perform { selected = try research.people.create(name); name = "" }
                 }.disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            Picker("Person", selection: $selected) {
-                Text("Select a person").tag(UUID?.none)
-                ForEach(research.people.people) { Text(verbatim: $0.name).tag(Optional($0.id)) }
-            }
+            BeholderMenuPicker(
+                label: "Person",
+                placeholder: "Select a person",
+                options: research.people.people.map { ($0.id, $0.name) },
+                selection: $selected
+            )
             if let draft {
                 editor(draft).id("account-review")
             }
