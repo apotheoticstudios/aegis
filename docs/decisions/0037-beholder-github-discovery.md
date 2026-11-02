@@ -31,7 +31,9 @@ A typed name or email could only go to a site through the owner's browser. The o
 **3. Inspect.**
 - **Trigger:** a separate **Inspect GitHub profile** click on one hit makes one GET to `https://api.github.com/users/<login>`.
 - **The address:** it is rebuilt from the `login` of the current, live search hit the owner clicked, after that login passes GitHub's handle rules. This is the only returned value allowed to seed a request (see "Never" below). It is never taken from a returned URL.
-- **The result:** it goes through the existing ADR-0034 GitHub adapter, with the exact-login check, the archive and an optional Save as possible. It is labelled "found via GitHub user search" plus the time, without storing the query.
+- **The result:** it goes through the existing ADR-0034 GitHub adapter, with the exact-login check, the archive and an optional Save as possible.
+  - The Discover tab shows "found via GitHub user search" and the time, but only there.
+  - The archived profile is an ordinary ADR-0034 observation with its own source and check time. It carries no query and no discovery marker, so once it leaves Discover, or is exported, it reads like any other GitHub profile lookup.
 - **Email matches:** a typed email counts as an exact match only when the profile `email` canonically equals it. GitHub documents that unauthenticated responses may return `email: null`, so a missing email proves nothing.
 - **No fan-out:** nothing goes to any other source, and nothing is inspected automatically.
 
