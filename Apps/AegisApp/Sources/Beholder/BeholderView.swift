@@ -30,7 +30,7 @@ struct BeholderDashboard: View {
     }
 
     private enum CaseTab: Hashable {
-        case results, people, evidence, planner
+        case results, people, evidence, planner, selfCheck
     }
 
     @State private var research: BeholderModel
@@ -342,6 +342,7 @@ extension BeholderDashboard {
                     HUDOption(value: CaseTab.people, label: "People", meta: "\(research.people.people.count)"),
                     HUDOption(value: CaseTab.evidence, label: "Evidence", meta: "\(research.correlation.accounts.count)"),
                     HUDOption(value: CaseTab.planner, label: "Planner"),
+                    HUDOption(value: CaseTab.selfCheck, label: "Self-check"),
                 ],
                 value: $tab
             )
@@ -382,6 +383,14 @@ extension BeholderDashboard {
         case .people: ScrollView { BeholderPeopleView(research: research, embedded: true) }
         case .evidence: BeholderCorrelationView(research: research, embedded: true) { sheet = .link($0) }
         case .planner: ScrollView { BeholderQueryPlannerView(embedded: true).frame(maxWidth: .infinity, alignment: .leading) }
+        case .selfCheck:
+            BeholderSelfCheckView(sources: BeholderProvider.allCases.count) { handle in
+                // An ordinary username search the owner asked for: every source, the same preview and Stop.
+                discovery.kind = .username
+                discovery.query = handle
+                research.selected = Set(BeholderProvider.allCases)
+                runSearch()
+            }
         }
     }
 
