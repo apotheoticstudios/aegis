@@ -38,7 +38,9 @@ enum MemoryText {
     /// when the words follow others ("I'll remember that you…").
     static func toOwner(_ text: String, startsSentence: Bool = true) -> String {
         var line = text.replacingOccurrences(of: "’", with: "'")
-        for (pattern, swap) in [(#"\bI am\b"#, "you are"), (#"\bI was\b"#, "you were")] {
+        for (pattern, swap) in [
+            (#"\bI am\b"#, "you are"), (#"\bI was\b"#, "you were"), (#"\bam I\b"#, "are you"), (#"\bwas I\b"#, "were you"),
+        ] {
             line = line.replacingOccurrences(of: pattern, with: swap, options: [.regularExpression, .caseInsensitive])
         }
         var result = ""

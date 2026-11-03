@@ -130,6 +130,7 @@ final class MemoryBookTests: XCTestCase {
         XCTAssertEqual(MemoryText.toOwner("my car is parked on level 3"), "Your car is parked on level 3")
         XCTAssertEqual(MemoryText.toOwner("I am vegetarian and I'm hungry", startsSentence: false), "you are vegetarian and you're hungry")
         XCTAssertEqual(MemoryText.toOwner("Example Alex owes me $20"), "Example Alex owes you $20")
+        XCTAssertEqual(MemoryText.toOwner("why am I always late", startsSentence: false), "why are you always late")
     }
 
     func testPersistenceRoundTrip() throws {

@@ -159,9 +159,22 @@ final class OwnerMemoryTests: XCTestCase {
             "Is 0400 000 001 Morgan Example?", "0400000001 is Morgan Example?", "If 0400000001 is Morgan Example",
             "The email says 0400000001 is Morgan Example", "\"0400000001 is Morgan Example\"", "I'm tired",
             "Can you send the report", "Hey Aegis, what's up?", "Have they sent the report", "Explain what a contact is",
+            // Spoken: no question mark, often a word first.
+            "no what am I doing today", "Jarvis what's on today", "so where is my next meeting", "tell me what is next",
+            "and how about tomorrow",
         ] {
             XCTAssertNil(MemoryCommand.statedFact(text), text)
         }
+    }
+
+    func testASpokenQuestionIsAnsweredNotRemembered() async throws {
+        let core = try engine()
+        let response = await core.handle(.ask(question: "no what am I doing today"))
+        if case let .answer(answer) = response {
+            XCTAssertFalse(answer.text.contains("remember"), answer.text)
+        }
+        let notes = await core.memory.notes
+        XCTAssertTrue(notes.isEmpty)
     }
 
     func testOrdinaryFactsDoNotRequireASpecificOpeningPhrase() {
@@ -169,6 +182,8 @@ final class OwnerMemoryTests: XCTestCase {
             "On Fridays I work at Example Office",
             "For my birthday I would like a book",
             "Example Sam works at Example Clinic",
+            // A question word that isn't asking anything.
+            "I live where it is warm",
         ] {
             XCTAssertEqual(MemoryCommand.statedFact(statement), statement)
         }

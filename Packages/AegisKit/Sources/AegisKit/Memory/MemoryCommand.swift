@@ -113,7 +113,10 @@ public enum MemoryCommand: Sendable, Equatable {
               line.range(
                   of: #"^(?:if|suppose|imagine|perhaps|maybe|what|who|when|where|why|how|is|are|do|does|did|can|could|would|will|should|the (?:message|email|notification|article))\b|^[\"“>]"#,
                   options: [.regularExpression, .caseInsensitive]
-              ) == nil
+              ) == nil,
+              // Spoken questions have no "?" and often a word before them ("no, what am I doing today"): a question
+              // word followed by a verb anywhere is a question, never a fact.
+              line.range(of: interrogative, options: [.regularExpression, .caseInsensitive]) == nil
         else { return nil }
         if SenderAlias.parse(line) != nil {
             return line
@@ -135,6 +138,9 @@ public enum MemoryCommand: Sendable, Equatable {
               ) != nil else { return nil }
         return line
     }
+
+    private static let interrogative = #"\b(?:what|who|whom|whose|when|where|why|how|which)(?:'s|'re|\s+(?:am|is|are|was|"#
+        + #"were|do|does|did|can|could|will|would|should|have|has|had|about)\b)"#
 
     /// How the owner feels or what they're doing right now: not worth keeping.
     private static let momentary = #"^(?:i'm|i am)\s+(?:so |really |very |a bit |just |still )?(?:tired|hungry|thirsty|bored|"#
