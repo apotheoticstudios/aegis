@@ -25,6 +25,7 @@ final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendabl
     private var tuning = Tuning(.idle)
     private var palette = Palette(.arc, listening: false)
     private var last: TimeInterval?
+    private var idleFrame = true
     private var clock: Float = 0
     private let root = SCNNode()
     private let shell = SCNNode()
@@ -77,8 +78,7 @@ final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendabl
         cameraNode.position = SCNVector3(0, 0, 4.45)
         scene.rootNode.addChildNode(cameraNode)
         apply(palette)
-        glow.scale = SCNVector3(0.52, 0.52, 1)
-        points.setValue(NSNumber(value: tuning.flicker), forKey: "flicker")
+        settleIdleFrame()
     }
 
     // MARK: - Animation (the prototype's tick)
@@ -86,6 +86,9 @@ final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendabl
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
         let mode = mode
         let colours = Palette(theme, listening: mode == .listening)
+        if mode == .idle, !idleFrame {
+            settleIdleFrame()
+        }
         guard mode != .idle, renderer.isPlaying else {
             // A paused view may still redraw on exposure or theme changes. Avoid mutating its
             // geometry every time so those draws do not schedule more work.
@@ -98,6 +101,7 @@ final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendabl
         }
         let step = Float(min(max(0, time - (last ?? time)), 0.05))
         last = time
+        idleFrame = false
         let ease = min(1, step * 3)
         tuning.approach(Tuning(mode), ease)
         if palette != colours {
@@ -122,6 +126,16 @@ final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendabl
         glow.scale = SCNVector3(size, size, 1)
         root.eulerAngles = SCNVector3(0.18, CGFloat(sin(clock * 0.15) * 0.25), 0)
         cameraNode.camera?.bloomIntensity = CGFloat(tuning.bloom + voice * 0.5)
+        points.setValue(NSNumber(value: tuning.flicker), forKey: "flicker")
+    }
+
+    private func settleIdleFrame() {
+        idleFrame = true
+        tuning = Tuning(.idle)
+        shell.scale = SCNVector3(1, 1, 1)
+        let size = CGFloat(0.65 * tuning.glow)
+        glow.scale = SCNVector3(size, size, 1)
+        cameraNode.camera?.bloomIntensity = CGFloat(tuning.bloom)
         points.setValue(NSNumber(value: tuning.flicker), forKey: "flicker")
     }
 

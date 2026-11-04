@@ -154,11 +154,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         panel.toggle()
     }
 
-    @objc private func displaySlept() {
+    @objc private func displaySlept(_: Notification) {
         wake.displayChanged(sleeping: true)
     }
 
-    @objc private func displayWoke() {
+    @objc private func displayWoke(_: Notification) {
         wake.displayChanged(sleeping: false)
     }
 

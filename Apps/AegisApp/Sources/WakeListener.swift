@@ -44,8 +44,8 @@ final class WakeListener {
     @ObservationIgnored private var interruption = InterruptionIntent.Confirmation()
 
     @ObservationIgnored private var engine = AVAudioEngine()
-    /// The mode requested for the open microphone, nil when there is no physical input.
-    @ObservationIgnored private var microphoneEcho: Bool?
+    private enum MicrophoneMode { case plain, echo, echoUnavailable }
+    @ObservationIgnored private var microphoneMode: MicrophoneMode?
     @ObservationIgnored private let router: WakeAudioRouter
     private var audio: AudioRelay {
         router.audio
@@ -138,7 +138,8 @@ final class WakeListener {
             return
         }
         listening = true
-        router.set(.wake)
+        tick()
+        guard listening else { return }
         ticker = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(250))
@@ -150,21 +151,24 @@ final class WakeListener {
 
     /// Closes the microphone (switched off, or the mic button needs it).
     func stop() {
+        suspendInput()
+        acknowledging = false
+        _ = window.cancel()
+        thinkingSince = nil
+        wasSpeaking = false
+    }
+
+    private func suspendInput() {
         startup = UUID()
         router.set(.paused)
         router.keyword.stop()
         echoCancellationReady = false
-        acknowledging = false
         ticker?.cancel()
         ticker = nil
         cancelSegment()
         stopMicrophone()
         listening = false
         gate = WakeActivityGate()
-        _ = window.cancel()
-        segmentStartedAt = nil
-        thinkingSince = nil
-        wasSpeaking = false
     }
 
     /// CoreAudio prevents idle system sleep while the input is open. Release it when displays sleep,
@@ -173,7 +177,7 @@ final class WakeListener {
         guard sleeping != displaySleeping else { return }
         displaySleeping = sleeping
         if sleeping {
-            stop()
+            suspendInput()
         } else {
             Task { [weak self] in await self?.start() }
         }
@@ -565,7 +569,7 @@ private extension WakeListener {
                 engine.prepare()
                 do {
                     try engine.start()
-                    microphoneEcho = echo
+                    microphoneMode = echo ? (echoCancellationReady ? .echo : .echoUnavailable) : .plain
                     return true
                 } catch {
                     DiagnosticLog.shared.record(.microphoneFailed, number: (error as NSError).code)
@@ -582,8 +586,8 @@ private extension WakeListener {
     }
 
     func stopMicrophone() {
-        guard microphoneEcho != nil else { return }
-        microphoneEcho = nil
+        guard microphoneMode != nil else { return }
+        microphoneMode = nil
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
         // Use a fresh input on restart, since sleep or echo cancellation can change its format.
@@ -785,7 +789,7 @@ extension WakeListener {
 
     private func syncMicrophone(open: Bool) -> Bool {
         let echo = needsEchoCancellation(open: open)
-        guard let microphoneEcho, echo != microphoneEcho else { return true }
+        guard let microphoneMode, microphoneMode != .echoUnavailable, echo != (microphoneMode == .echo) else { return true }
         stopMicrophone()
         audio.discardRecent()
         guard startMicrophone(echo: echo) else {

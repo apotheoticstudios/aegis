@@ -68,6 +68,51 @@ final class KeywordAudioTests: XCTestCase {
         XCTAssertNil(gate.feed(silent))
     }
 
+    func testGatedAndUngatedDecodersUseTheSameDefaultAndCustomClips() async throws {
+        guard ProcessInfo.processInfo.environment["AEGIS_TEST_WAKE_KEYWORD"] == "1" else {
+            throw XCTSkip("Opt in to offline keyword inference on synthesized speech.")
+        }
+        let resources = try XCTUnwrap(Bundle.main.resourceURL)
+        let detector = try XCTUnwrap(KeywordDetector(directory: resources.appendingPathComponent("WakeModels"), additionalName: "Friday"))
+        let voice = VoiceXPCClient()
+        for phrase in ["Hey Aegis.", "Hey Friday."] {
+            let wav = await voice.audio(for: phrase)
+            let buffer = try XCTUnwrap(VoiceFinish.playbackBuffer(from: XCTUnwrap(wav)))
+            let channel = try XCTUnwrap(buffer.floatChannelData?[0])
+            let rate = Int(buffer.format.sampleRate)
+            for gain: Float in [1, 0.1] {
+                let padding = Array(repeating: Float.zero, count: rate * 5 / 4)
+                let speech = (0 ..< Int(buffer.frameLength)).map { channel[$0] * gain }
+                let samples = padding + speech + padding
+                let direct = Self.matches(samples, rate: rate, gated: false, detector: detector)
+                let gated = Self.matches(samples, rate: rate, gated: true, detector: detector)
+                XCTAssertTrue(!direct || gated, "Silence gating lost a baseline match at gain \(gain).")
+            }
+        }
+        await voice.stop()
+    }
+
+    private static func matches(_ samples: [Float], rate: Int, gated: Bool, detector: KeywordDetector) -> Bool {
+        detector.reset()
+        var gate = WakeSilenceGate(sampleRate: rate)
+        for start in stride(from: 0, to: samples.count, by: 1024) {
+            let chunk = Array(samples[start ..< min(start + 1024, samples.count)])
+            if gated {
+                guard let frame = gate.feed(chunk) else { continue }
+                if let leadIn = frame.leadIn {
+                    detector.reset()
+                    if detector.accept(leadIn, sampleRate: rate) {
+                        return true
+                    }
+                }
+            }
+            if detector.accept(chunk, sampleRate: rate) {
+                return true
+            }
+        }
+        return false
+    }
+
     func testRealKeywordDetectorWithSyntheticSpeechAndNoise() async throws {
         guard ProcessInfo.processInfo.environment["AEGIS_TEST_WAKE_KEYWORD"] == "1" else {
             throw XCTSkip("Opt in to offline keyword inference on synthesized speech; no microphone is used.")

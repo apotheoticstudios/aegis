@@ -257,6 +257,19 @@ final class WakeListenerTests: XCTestCase {
         XCTAssertFalse(wake.needsEchoCancellation(open: true))
     }
 
+    func testDisplaySleepPausesInputAndPreservesTheConversation() {
+        let wake = WakeListener()
+        wake.wakeDetected()
+        XCTAssertEqual(wake.inputMode, .question)
+        wake.displayChanged(sleeping: true)
+        XCTAssertEqual(wake.inputMode, .paused)
+        wake.displayChanged(sleeping: false)
+        wake.tick()
+        XCTAssertEqual(wake.inputMode, .question)
+        wake.segment("End Conversation")
+        XCTAssertEqual(wake.inputMode, .wake)
+    }
+
     func testIdleAudioIsNeverBufferedForQuestionRecognition() throws {
         let heard = BufferCount()
         let router = WakeAudioRouter(wakeAudio: { _ in heard.increment() })

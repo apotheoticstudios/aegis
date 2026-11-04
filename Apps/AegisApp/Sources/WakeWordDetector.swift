@@ -178,7 +178,7 @@ final class WakeAudioRouter: @unchecked Sendable {
                 } else {
                     keyword.receive(buffer)
                 }
-                // Keep the room calibration used for quiet questions, at the gate's own coarse cadence.
+                // Keep room calibration for quiet questions while reducing idle main-actor work.
                 // Only question and interruption modes need levels from every audio buffer.
                 let interval = max(1, Int(buffer.format.sampleRate) / 8)
                 wakeMeterFrames += Int(buffer.frameLength)

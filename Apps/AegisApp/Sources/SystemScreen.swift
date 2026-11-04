@@ -1,7 +1,7 @@
 import AegisKit
 import SwiftUI
 
-/// 02 SYSTEM, diagnostics wired to a beating heart: the Mac's processors and memory on the left, the local model,
+/// 02 SYSTEM, diagnostics wired to the heart: the Mac's processors and memory on the left, the local model,
 /// the busiest processes, input and output on the right, and the last minute of processor load below.
 /// Everything here is measured on this Mac, once a second, only while this screen shows.
 struct SystemScreen: View {
