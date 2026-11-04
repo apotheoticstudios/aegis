@@ -108,6 +108,10 @@ struct WakeSilenceGate {
     private var quietSamples = 0
     private var recent: [Float] = []
 
+    init(sampleRate: Int) {
+        self.sampleRate = sampleRate
+    }
+
     mutating func feed(_ samples: [Float]) -> Frame? {
         // A low peak threshold (about -66 dBFS) keeps even quiet speech in the detector.
         if samples.contains(where: { abs($0) >= 0.0005 }) {
