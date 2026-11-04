@@ -252,6 +252,7 @@ private struct HUDLinks: View {
     let layout: HUDLinkLayout
     let wires: Bool
     @Environment(\.accessibilityReduceMotion) private var still
+    @Environment(\.hudArrival) private var arrival
 
     var body: some View {
         // The links draw out from the hub once the sections are up, then their end nodes light and the pulses start.
@@ -266,8 +267,8 @@ private struct HUDLinks: View {
                     Rectangle().fill(HUD.frame).frame(width: 4, height: 4).position(link.start).opacity(lit)
                     Rectangle().fill(HUD.frame).frame(width: 4, height: 4).position(link.end).opacity(lit)
                 }
-                if wires {
-                    // A glowing pulse travels each cable from the hub out to its section, only while the panel shows.
+                if wires, arrival.start != nil, !still {
+                    // One pulse during screen entry. The static connections remain after the build settles.
                     TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !HUDPresence.shared.animating || still)) { context in
                         let phase = context.date.timeIntervalSinceReferenceDate * 60
                         ForEach(layout.links.indices, id: \.self) { index in

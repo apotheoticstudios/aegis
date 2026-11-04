@@ -3,8 +3,7 @@ import SwiftUI
 
 /// The panel's arc reactor (#292): the WebGL prototype (docs/design/prototypes/reactor.html) rebuilt in SceneKit on
 /// Metal. A twinkling particle shell, a spinning band, orbiting arcs and a hot core, with bloom, in the theme's colours.
-/// Idle drifts and breathes, thinking spins up, speaking pulses, listening takes the accent. It draws only while its
-/// window is visible.
+/// Idle holds a frame, thinking spins up, speaking pulses and listening takes the accent.
 struct ReactorView: NSViewRepresentable {
     enum Mode: Equatable {
         case idle, thinking, listening, speaking
@@ -20,9 +19,7 @@ struct ReactorView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: ReactorSceneView, context: Context) {
-        view.reactor.mode = mode
-        view.held = still
-        view.reactor.theme = context.environment.hudTheme
+        view.configure(mode: mode, theme: context.environment.hudTheme, held: still || context.environment.accessibilityReduceMotion)
         view.setAccessibilityLabel(Self.label(mode))
     }
 
@@ -40,17 +37,10 @@ struct ReactorView: NSViewRepresentable {
     }
 }
 
-/// The SceneKit view, see-through so the HUD's ground shows behind it; it plays only while its window is visible.
+/// The SceneKit view plays only during visible, active work.
 final class ReactorSceneView: SCNView {
     let reactor = ReactorScene()
-    /// Holds the frame even while visible.
-    var held = false {
-        didSet {
-            if held != oldValue {
-                occlusionChanged()
-            }
-        }
-    }
+    private var held = false
 
     init(size: CGFloat) {
         super.init(frame: CGRect(x: 0, y: 0, width: size, height: size), options: nil)
@@ -80,10 +70,25 @@ final class ReactorSceneView: SCNView {
         occlusionChanged()
     }
 
-    /// Nothing animates once the panel closes.
+    func configure(mode: ReactorView.Mode, theme: HUDTheme, held: Bool) {
+        let changed = reactor.mode != mode || reactor.theme != theme
+        reactor.mode = mode
+        reactor.theme = theme
+        self.held = held
+        occlusionChanged()
+        if changed {
+            needsDisplay = true
+        }
+    }
+
     @objc private func occlusionChanged() {
         let visible = window?.occlusionState.contains(.visible) ?? false
-        isPlaying = visible && !held
-        rendersContinuously = visible && !held
+        let moving = visible && !held && reactor.mode != .idle
+        if isPlaying != moving {
+            isPlaying = moving
+        }
+        if rendersContinuously != moving {
+            rendersContinuously = moving
+        }
     }
 }

@@ -18,25 +18,28 @@ final class KeywordAudioTests: XCTestCase {
         wake.ask = { _ in XCTFail("Keyword audio must never become a question.") }
         let found = expectation(description: "The audio-only keyword worker opens the question window")
         let directory = try XCTUnwrap(Bundle.main.resourceURL).appendingPathComponent("WakeModels")
-        let ready = await router.keyword.prepare(directory: directory) {
+        let ready = await router.keyword.prepare(directory: directory, name: "Friday") {
             wake.wakeDetected()
             found.fulfill()
         }
         XCTAssertTrue(ready)
         defer { router.set(.paused); router.keyword.stop() }
         let voice = VoiceXPCClient()
-        let wav = await voice.audio(for: "Hey Aegis.")
+        let wav = await voice.audio(for: "Hey Friday.")
         await voice.stop()
         let buffer = try XCTUnwrap(VoiceFinish.playbackBuffer(from: XCTUnwrap(wav)))
         let channels = try XCTUnwrap(buffer.floatChannelData)
         router.set(.wake)
-        for start in stride(from: 0, to: Int(buffer.frameLength) + 48000, by: 1024) {
+        let leadIn = Int(buffer.format.sampleRate * 1.25)
+        let end = leadIn + Int(buffer.frameLength) + Int(buffer.format.sampleRate)
+        for start in stride(from: 0, to: end, by: 1024) {
             let chunk = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: 1024))
             chunk.frameLength = 1024
             let output = try XCTUnwrap(chunk.floatChannelData)
             for channel in 0 ..< Int(buffer.format.channelCount) {
                 for frame in 0 ..< 1024 {
-                    output[channel][frame] = start + frame < buffer.frameLength ? channels[channel][start + frame] : 0
+                    let source = start + frame - leadIn
+                    output[channel][frame] = (0 ..< Int(buffer.frameLength)).contains(source) ? channels[channel][source] * 0.1 : 0
                 }
             }
             _ = router.receive(chunk)
@@ -45,6 +48,24 @@ final class KeywordAudioTests: XCTestCase {
         await fulfillment(of: [found], timeout: 5)
         XCTAssertEqual(acknowledgements, 1)
         XCTAssertEqual(wake.inputMode, .question)
+    }
+
+    func testProlongedSilenceSkipsInferenceAndKeepsTheQuietLeadIn() {
+        let rate = 16000
+        let silent = Array(repeating: Float(0), count: 160)
+        var gate = WakeSilenceGate(sampleRate: rate)
+        let fed = (0 ..< 6000).filter { _ in gate.feed(silent) != nil }.count
+        XCTAssertEqual(fed, 75, "Only the first 750 ms of a quiet minute needs decoding.")
+        let quietOnset = Array(repeating: Float(0.0004), count: 160)
+        XCTAssertNil(gate.feed(quietOnset))
+        let quietSpeech = Array(repeating: Float(0.0006), count: 160)
+        let resumed = gate.feed(quietSpeech)?.leadIn
+        XCTAssertEqual(resumed?.count, 4000)
+        XCTAssertEqual(resumed?.suffix(160), quietOnset[...])
+        for _ in 0 ..< 75 {
+            XCTAssertNotNil(gate.feed(silent), "Trailing blanks must reach the keyword decoder.")
+        }
+        XCTAssertNil(gate.feed(silent))
     }
 
     func testRealKeywordDetectorWithSyntheticSpeechAndNoise() async throws {

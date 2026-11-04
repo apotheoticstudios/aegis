@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 02 SYSTEM, diagnostics wired to a beating heart: the Mac's processors and memory on the left, the local model,
 /// the busiest processes, input and output on the right, and the last minute of processor load below.
-/// Everything here is measured on this Mac, four times a second, only while this screen shows.
+/// Everything here is measured on this Mac, once a second, only while this screen shows.
 struct SystemScreen: View {
     let model: PanelModel
     @Binding var screen: HUDScreen
@@ -77,7 +77,7 @@ struct SystemScreen: View {
         let disk = Double(reading.diskUsed) / Double(max(reading.diskTotal, 1))
         return VStack(spacing: 0) {
             HUDAsciiArt(
-                shape: .anatomy, cols: 52, rows: 26, grit: 0.12, tone: HUD.critical, label: "A beating heart: the Mac's vitals", hub: true
+                shape: .anatomy, cols: 52, rows: 26, grit: 0.12, tone: HUD.critical, label: "The Mac's vitals", hub: true, animate: false
             )
             HStack(spacing: HUD.space8) {
                 HUDReadout(label: "CPU", value: "\(Int((reading.cpu * 100).rounded()))", unit: "%", tone: HUD.critical)

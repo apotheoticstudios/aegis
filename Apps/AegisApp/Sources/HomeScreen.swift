@@ -61,7 +61,7 @@ struct HomeScreen: View {
                 )
             }
             HUDSection(title: "Scan", code: "COL.02", index: 2) {
-                HUDAsciiArt(shape: .radar, cols: 34, rows: 12, seed: 5, tone: HUD.primary, label: "Aegis's collectors scanning")
+                HUDAsciiArt(shape: .radar, cols: 34, rows: 12, seed: 5, tone: HUD.primary, label: "Aegis's collectors", animate: false)
                     .frame(maxWidth: .infinity)
             }
         }

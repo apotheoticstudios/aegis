@@ -77,17 +77,29 @@ final class ReactorScene: NSObject, SCNSceneRendererDelegate, @unchecked Sendabl
         cameraNode.position = SCNVector3(0, 0, 4.45)
         scene.rootNode.addChildNode(cameraNode)
         apply(palette)
+        glow.scale = SCNVector3(0.52, 0.52, 1)
+        points.setValue(NSNumber(value: tuning.flicker), forKey: "flicker")
     }
 
     // MARK: - Animation (the prototype's tick)
 
-    func renderer(_: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
-        let step = Float(min(time - (last ?? time), 0.05))
-        last = time
+    func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
         let mode = mode
+        let colours = Palette(theme, listening: mode == .listening)
+        guard mode != .idle, renderer.isPlaying else {
+            // A paused view may still redraw on exposure or theme changes. Avoid mutating its
+            // geometry every time so those draws do not schedule more work.
+            last = nil
+            if palette != colours {
+                palette = colours
+                apply(palette)
+            }
+            return
+        }
+        let step = Float(min(max(0, time - (last ?? time)), 0.05))
+        last = time
         let ease = min(1, step * 3)
         tuning.approach(Tuning(mode), ease)
-        let colours = Palette(theme, listening: mode == .listening)
         if palette != colours {
             palette.approach(colours, ease)
             apply(palette)

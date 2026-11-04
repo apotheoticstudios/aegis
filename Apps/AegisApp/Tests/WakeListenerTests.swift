@@ -226,6 +226,37 @@ final class WakeListenerTests: XCTestCase {
         wake.segment(nil)
     }
 
+    @MainActor func testDisplaySleepDefersHandsFreeStartup() async {
+        let wake = WakeListener()
+        wake.displayChanged(sleeping: true)
+        await wake.set(enabled: true)
+        // The test host's command-line argument overrides the persistent opt-in for microphone safety.
+        let saved = UserDefaults.aegis.persistentDomain(forName: "dev.aegis.app.tests")?[WakeListener.enabledKey] as? Bool
+        XCTAssertEqual(saved, true, "Display sleep preserves the hands-free preference.")
+        XCTAssertTrue(wake.displaySleeping)
+        XCTAssertFalse(wake.listening, "An enabled listener must not open the input while displays sleep.")
+        wake.answerFinished()
+        XCTAssertEqual(wake.inputMode, .paused, "A late answer must not rearm the sleeping listener.")
+        await wake.set(enabled: false)
+        wake.displayChanged(sleeping: false)
+        await Task.yield()
+        XCTAssertFalse(wake.displaySleeping)
+        XCTAssertFalse(wake.listening, "Display wake must respect the owner's opt-out.")
+    }
+
+    func testEchoCancellationFollowsConversationAndReplyRatherThanPanelVisibility() {
+        let wake = WakeListener()
+        XCTAssertFalse(wake.needsEchoCancellation(open: true))
+        wake.isPlayingReply = { true }
+        XCTAssertTrue(wake.needsEchoCancellation(open: true))
+        XCTAssertFalse(wake.needsEchoCancellation(open: false))
+        wake.isPlayingReply = { false }
+        wake.wakeDetected()
+        XCTAssertTrue(wake.needsEchoCancellation(open: true))
+        wake.segment("End Conversation")
+        XCTAssertFalse(wake.needsEchoCancellation(open: true))
+    }
+
     func testIdleAudioIsNeverBufferedForQuestionRecognition() throws {
         let heard = BufferCount()
         let router = WakeAudioRouter(wakeAudio: { _ in heard.increment() })
@@ -234,15 +265,14 @@ final class WakeListenerTests: XCTestCase {
         buffer.frameLength = 480
         try XCTUnwrap(buffer.floatChannelData?[0]).initialize(repeating: 0.2, count: 480)
         router.set(.wake)
-        for _ in 0 ..< 100 {
-            _ = router.receive(buffer)
-        }
+        let readings = (0 ..< 100).filter { _ in router.receive(buffer) }.count
         XCTAssertEqual(heard.value, 100)
+        XCTAssertEqual(readings, 8, "Room calibration continues without waking the main actor for every buffer.")
         router.set(.question)
         let transcribed = BufferCount()
         router.audio.begin { _ in transcribed.increment() }
         XCTAssertEqual(transcribed.value, 0, "No pre-wake audio may be replayed into transcription.")
-        _ = router.receive(buffer)
+        XCTAssertTrue(router.receive(buffer), "Post-wake audio still drives the speech activity gate.")
         XCTAssertEqual(transcribed.value, 1)
         router.set(.paused)
         _ = router.receive(buffer)

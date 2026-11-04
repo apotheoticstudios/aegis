@@ -3,13 +3,13 @@ import Foundation
 import IOKit
 
 /// The Mac's own readings for the SYSTEM and HOME screens: processor, memory, disk, network and graphics load, and
-/// Aegis's processes. Sampled four times a second only while one of those screens shows; counts and rates only, kept in
+/// Aegis's processes. Sampled once a second only while one of those screens shows; counts and rates only, kept in
 /// memory, never written or logged.
 @MainActor @Observable
 final class SystemMonitor {
     static let shared = SystemMonitor()
     /// Seconds between samples.
-    static let interval = 0.25
+    static let interval = 1.0
     /// How many samples each history keeps: the last minute.
     static let historyLength = Int(60 / interval)
 
@@ -33,6 +33,7 @@ final class SystemMonitor {
                 let sample = copy.read(processes: processes)
                 return (copy, sample)
             }.value
+            guard !Task.isCancelled, generation == mine else { return }
             self.reader = next
             reading = sampled
             Self.append(sampled.cpu, to: &cpuHistory)

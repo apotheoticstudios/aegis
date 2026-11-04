@@ -124,6 +124,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         // App tests run inside Aegis: they must not open the microphone (#305).
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            let workspace = NSWorkspace.shared.notificationCenter
+            workspace.addObserver(self, selector: #selector(displaySlept), name: NSWorkspace.screensDidSleepNotification, object: nil)
+            workspace.addObserver(self, selector: #selector(displayWoke), name: NSWorkspace.screensDidWakeNotification, object: nil)
             Task { [wake] in await wake.start() }
         }
         Task { await model.refresh() }
@@ -149,6 +152,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func togglePanel() {
         panel.toggle()
+    }
+
+    @objc private func displaySlept() {
+        wake.displayChanged(sleeping: true)
+    }
+
+    @objc private func displayWoke() {
+        wake.displayChanged(sleeping: false)
     }
 
     func talk() {

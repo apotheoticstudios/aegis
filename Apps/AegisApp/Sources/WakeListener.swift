@@ -14,6 +14,7 @@ final class WakeListener {
 
     /// True while the microphone is open for the wake phrase.
     var listening = false
+    private(set) var displaySleeping = false
     /// Why hands-free voice can't run, in plain words.
     private(set) var problem: String?
 
@@ -43,6 +44,8 @@ final class WakeListener {
     @ObservationIgnored private var interruption = InterruptionIntent.Confirmation()
 
     @ObservationIgnored private var engine = AVAudioEngine()
+    /// The mode requested for the open microphone, nil when there is no physical input.
+    @ObservationIgnored private var microphoneEcho: Bool?
     @ObservationIgnored private let router: WakeAudioRouter
     private var audio: AudioRelay {
         router.audio
@@ -99,12 +102,14 @@ final class WakeListener {
 
     /// Opens the microphone for the wake phrase, when switched on and allowed.
     func start() async {
-        guard enabled, !listening else { return }
+        guard enabled, !listening, !displaySleeping else { return }
         startup = UUID()
         let attempt = startup
         problem = nil
         let speech = await Self.speechAllowed()
+        guard startup == attempt else { return }
         let mic = await AVCaptureDevice.requestAccess(for: .audio)
+        guard startup == attempt else { return }
         log.notice("wake start: speech allowed \(speech), mic allowed \(mic)")
         guard speech, mic else {
             DiagnosticLog.shared.record(.permissionDenied)
@@ -126,7 +131,7 @@ final class WakeListener {
             problem = "Aegis's wake-word model is missing. Reinstall the complete app to enable Hey Aegis."
             return
         }
-        guard startMicrophone(echo: isPanelOpen()) else {
+        guard startMicrophone(echo: needsEchoCancellation(open: isPanelOpen())) else {
             DiagnosticLog.shared.record(.microphoneFailed)
             router.keyword.stop()
             problem = "Aegis couldn't use the microphone."
@@ -153,14 +158,25 @@ final class WakeListener {
         ticker?.cancel()
         ticker = nil
         cancelSegment()
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
+        stopMicrophone()
         listening = false
         gate = WakeActivityGate()
         _ = window.cancel()
         segmentStartedAt = nil
         thinkingSince = nil
         wasSpeaking = false
+    }
+
+    /// CoreAudio prevents idle system sleep while the input is open. Release it when displays sleep,
+    /// then restore opted-in listening when the owner wakes the display.
+    func displayChanged(sleeping: Bool) {
+        guard sleeping != displaySleeping else { return }
+        displaySleeping = sleeping
+        if sleeping {
+            stop()
+        } else {
+            Task { [weak self] in await self?.start() }
+        }
     }
 
     func heard(level: Float, at _: TimeInterval) {
@@ -532,7 +548,7 @@ extension WakeListener {
 }
 
 private extension WakeListener {
-    /// Echo cancellation costs about a quarter of a core and is only needed while Aegis can speak: with the panel open.
+    /// Echo cancellation is expensive and is needed only for an open conversation or reply.
     func startMicrophone(echo: Bool) -> Bool {
         let input = engine.inputNode
         if !echo {
@@ -549,6 +565,7 @@ private extension WakeListener {
                 engine.prepare()
                 do {
                     try engine.start()
+                    microphoneEcho = echo
                     return true
                 } catch {
                     DiagnosticLog.shared.record(.microphoneFailed, number: (error as NSError).code)
@@ -562,6 +579,15 @@ private extension WakeListener {
             echoCancellationReady = false
         }
         return false
+    }
+
+    func stopMicrophone() {
+        guard microphoneEcho != nil else { return }
+        microphoneEcho = nil
+        engine.stop()
+        engine.inputNode.removeTap(onBus: 0)
+        // Use a fresh input on restart, since sleep or echo cancellation can change its format.
+        engine = AVAudioEngine()
     }
 
     func configureEchoCancellation(_ input: AVAudioInputNode) -> Bool {
@@ -592,6 +618,7 @@ private extension WakeListener {
     }
 
     private func updateAudioRoute() {
+        guard !displaySleeping, syncMicrophone(open: isPanelOpen()) else { return }
         if isPlayingReply(), isSpeaking(), !acknowledging, !isAnswering(), echoCancellationReady, isPanelOpen() {
             if router.mode != .interruption, segmentOpen {
                 cancelSegment()
@@ -748,21 +775,26 @@ extension WakeListener {
 }
 
 extension WakeListener {
-    /// The panel opened or closed (#313): the microphone restarts with echo cancellation only while it's open, since
-    /// Aegis never speaks with it closed.
+    func needsEchoCancellation(open: Bool) -> Bool {
+        open && (window.state != .waitingForWake || isPlayingReply())
+    }
+
     func panelChanged(open: Bool) {
-        guard listening, open != engine.inputNode.isVoiceProcessingEnabled else { return }
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
-        // A reused engine keeps a stale multi-channel input after voice processing turns off: start a fresh one.
-        engine = AVAudioEngine()
+        _ = syncMicrophone(open: open)
+    }
+
+    private func syncMicrophone(open: Bool) -> Bool {
+        let echo = needsEchoCancellation(open: open)
+        guard let microphoneEcho, echo != microphoneEcho else { return true }
+        stopMicrophone()
         audio.discardRecent()
-        guard startMicrophone(echo: open) else {
+        guard startMicrophone(echo: echo) else {
             DiagnosticLog.shared.record(.microphoneFailed)
             stop()
             problem = "Aegis couldn't use the microphone."
-            return
+            return false
         }
+        return true
     }
 }
 
