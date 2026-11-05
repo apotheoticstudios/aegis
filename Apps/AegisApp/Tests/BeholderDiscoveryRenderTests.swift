@@ -26,15 +26,17 @@ final class BeholderDiscoveryRenderTests: XCTestCase {
             (.phone, "+61 400 000 001"),
             (.ip, "203.0.113.1"),
         ] {
-            let discovery = BeholderDiscovery(model)
-            discovery.kind = kind; discovery.query = input; discovery.search()
+            let discovery = model.unifiedSearch
+            discovery.query = input; discovery.interpret(as: kind); discovery.prepare()
             let size = CGSize(width: 760, height: 620)
             let host = NSHostingView(rootView: VStack(alignment: .leading, spacing: 16) {
                 Text("FIND BY " + kind.rawValue.uppercased()).font(.headline)
                 if kind != .ip {
                     BeholderPublicSearchView(input: .init(value: input, kind: kind, region: .international), ownerTyped: true)
                 }
-                BeholderCaseSearchView(discovery: discovery, onReview: { _ in })
+                ScrollView { BeholderLocalResultsView(
+                    report: discovery.report(in: model), ip: discovery.ip, kind: kind, onReview: { _ in }
+                ) }
             }.padding(20).frame(width: size.width, height: size.height).foregroundStyle(HUD.ink)
                 .background(HUD.void).environment(\.colorScheme, .dark))
             let window = NSWindow(

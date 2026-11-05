@@ -10,6 +10,8 @@ final class BeholderUnifiedSearch {
     private var phoneRegion = BeholderQueryPlanner.PhoneRegion.international
     private let github: BeholderGitHubResearch
     @ObservationIgnored var edited: () -> Void = {}
+    @ObservationIgnored private var cachedReport: BeholderCaseSearch.Report?
+    @ObservationIgnored private var cachedRevision: UInt64?
     private(set) var prepared: BeholderPublicSearch.Input?
     private(set) var profileQuery: String?
     private(set) var problem: String?
@@ -49,6 +51,16 @@ final class BeholderUnifiedSearch {
         automatic && Self.detect(text) == .username && !text.hasPrefix("@") && Self.validName(text)
     }
 
+    var inputHint: String? {
+        if text.contains("://") {
+            return "Enter the handle, name or address rather than a profile link."
+        }
+        if kind == .phone, !canPrepare {
+            return "Add a +country code, or choose Australia for a national number."
+        }
+        return nil
+    }
+
     var canPrepare: Bool {
         guard let kind else { return false }
         switch kind {
@@ -74,8 +86,15 @@ final class BeholderUnifiedSearch {
 
     private func clear() {
         prepared = nil
-        profileQuery = nil
+        cachedReport = nil
+        cachedRevision = nil
         problem = nil
+        stopPublicWork()
+    }
+
+    /// Closing the panel stops requests but keeps the owner's local search in memory.
+    func stopPublicWork() {
+        profileQuery = nil
         github.reset()
     }
 
@@ -87,8 +106,7 @@ final class BeholderUnifiedSearch {
     func prepare() {
         invalidate()
         guard canPrepare, let kind else {
-            problem = kind == .phone ? "Add a country code starting with +, or choose Australia for a national number."
-                : "Check the input or change its interpretation below."
+            problem = inputHint ?? "Check the input or change its interpretation below."
             return
         }
         prepared = .init(value: text, kind: kind, region: region)
@@ -96,10 +114,15 @@ final class BeholderUnifiedSearch {
 
     func report(in model: BeholderModel) -> BeholderCaseSearch.Report? {
         guard let prepared, prepared.kind != .ip else { return nil }
-        return try? BeholderCaseSearch.compute(
+        if cachedRevision == model.caseRevision {
+            return cachedReport
+        }
+        cachedReport = try? BeholderCaseSearch.compute(
             input: prepared.value, kind: prepared.kind, region: prepared.region,
             store: model.correlation, people: model.people
         )
+        cachedRevision = model.caseRevision
+        return cachedReport
     }
 
     var ip: BeholderIPContext.Info? {
@@ -128,7 +151,7 @@ final class BeholderUnifiedSearch {
             !CharacterSet.controlCharacters.contains($0) && $0.properties.generalCategory != .format
         }) else { return nil }
         let value = raw.trimmingCharacters(in: .whitespaces)
-        guard !value.isEmpty else { return nil }
+        guard !value.isEmpty, !value.contains("://") else { return nil }
         if value.hasPrefix("@"), !value.dropFirst().contains("@") {
             return .username
         }

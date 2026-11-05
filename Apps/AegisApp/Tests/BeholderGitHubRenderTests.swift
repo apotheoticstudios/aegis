@@ -10,9 +10,8 @@ final class BeholderGitHubRenderTests: XCTestCase {
         let model = BeholderModel(discoveryClient: GitHubRenderFixture())
         let discovery = model.githubDiscovery
         try await render(BeholderDashboard(research: model), name: "empty", height: 650)
-        discovery.kind = .email
-        discovery.value = "example+tag@example.com"
-        discovery.chooseGitHub()
+        model.unifiedSearch.query = "example+tag@example.com"
+        model.unifiedSearch.prepare(); model.unifiedSearch.chooseGitHub()
         try await render(BeholderDashboard(research: model), name: "prepared", height: 650)
         discovery.search()
         try await finish { discovery.searching }

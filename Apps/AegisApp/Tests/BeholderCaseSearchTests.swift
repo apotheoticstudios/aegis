@@ -110,55 +110,55 @@ final class BeholderCaseSearchTests: XCTestCase {
     @MainActor func testModeIsolationMakesNoRequestsAndNeverExportsSearchOnlyIdentifiers() async throws {
         let client = DiscoveryCountingClient()
         let model = BeholderModel(client: client)
-        let discovery = BeholderDiscovery(model)
+        let discovery = model.unifiedSearch
         for (kind, input) in [
             (BeholderCaseSearch.Kind.name, "Example Alex"),
             (.phone, "+61 400 000 099"),
             (.email, "unknown@example.com"),
             (.ip, "203.0.113.1"),
         ] {
-            discovery.kind = kind
             discovery.query = input
-            discovery.search()
+            discovery.interpret(as: kind)
+            discovery.prepare()
             let requestCount = await client.count()
             XCTAssertEqual(requestCount, 0)
             XCTAssertEqual(model.query, "")
-            XCTAssertFalse(try String(decoding: model.export(), as: UTF8.self).contains(input))
-            discovery.kind = .username
-            XCTAssertEqual(discovery.query, "")
-            XCTAssertFalse(discovery.canSearch)
+            let exported = try XCTUnwrap(String(data: model.export(), encoding: .utf8))
+            XCTAssertFalse(exported.contains(input))
+            discovery.interpret(as: .username)
+            XCTAssertEqual(discovery.query, input)
+            XCTAssertNil(discovery.prepared)
+            XCTAssertFalse(discovery.canPrepare)
         }
-        discovery.kind = .phone; discovery.query = "+61 400 000 099"; discovery.search()
+        discovery.query = "+61 400 000 099"; discovery.prepare()
         discovery.query = "+61 400 000 098"
-        XCTAssertNil(discovery.report, "Editing input cannot leave stale results visible")
+        XCTAssertNil(discovery.report(in: model), "Editing input cannot leave stale results visible")
     }
 
     @MainActor func testEditingEvidenceInvalidatesSavedMatchesImmediately() throws {
         let model = BeholderModel(client: DiscoveryCountingClient())
         model.correlation.observe(username: "example", finding: candidate("example", fields: ["Public email": "example@example.com"]))
-        let discovery = BeholderDiscovery(model)
-        discovery.kind = .email; discovery.query = "example@example.com"; discovery.search()
-        XCTAssertEqual(discovery.report?.total, 1)
+        let discovery = model.unifiedSearch
+        discovery.query = "example@example.com"; discovery.prepare()
+        XCTAssertEqual(discovery.report(in: model)?.total, 1)
         let id = try XCTUnwrap(model.correlation.evidence.first?.id)
         model.correlation.removeEvidence(id)
-        XCTAssertNil(discovery.report)
-        XCTAssertTrue(discovery.problem?.contains("changed") == true)
-        discovery.search()
-        XCTAssertEqual(discovery.report?.total, 0)
+        XCTAssertEqual(discovery.report(in: model)?.total, 0, "A changed case must refresh the cached report")
         XCTAssertNil(discovery.problem)
     }
 
     @MainActor func testPhoneAndEmailInputsCannotStartAUsernameLookup() async {
         let client = DiscoveryCountingClient()
         let model = BeholderModel(client: client)
-        let discovery = BeholderDiscovery(model)
+        let discovery = model.unifiedSearch
         for value in [
             "0400000001", "61400000001", "0400-000-001", "@0400000001", "tel:0400000001", "example@example.com", "203.0.113.1",
         ] {
             discovery.query = value
-            XCTAssertFalse(discovery.canSearch)
+            discovery.interpret(as: .username)
+            XCTAssertFalse(discovery.canPrepare)
+            discovery.prepare()
             XCTAssertNotNil(discovery.problem)
-            discovery.search()
             XCTAssertEqual(model.query, "")
             XCTAssertFalse(model.searching)
             model.query = value
@@ -175,19 +175,18 @@ final class BeholderCaseSearchTests: XCTestCase {
         XCTAssertNil(BeholderCaseSearch.username("ExampleAlex\u{2028}"))
     }
 
-    @MainActor func testLocalModesDoNotCancelAnExplicitUsernameSearch() {
+    @MainActor func testNewLocalSearchCancelsAnEarlierExplicitUsernameSearch() {
         let model = BeholderModel(client: DiscoveryCountingClient())
         model.query = "ExampleAlex"; model.selected = [.github]; model.start()
         defer { model.cancel() }
         let generation = model.cancellationID
-        let discovery = BeholderDiscovery(model)
-        discovery.kind = .name
+        let discovery = model.unifiedSearch
         XCTAssertEqual(discovery.query, "")
-        discovery.query = "Example Alex"; discovery.search()
-        XCTAssertTrue(model.searching)
-        XCTAssertEqual(model.cancellationID, generation)
+        discovery.query = "Example Alex"; discovery.prepare()
+        XCTAssertFalse(model.searching)
+        XCTAssertNotEqual(model.cancellationID, generation)
         XCTAssertEqual(model.query, "ExampleAlex")
-        XCTAssertEqual(discovery.report?.total, 0)
+        XCTAssertEqual(discovery.report(in: model)?.total, 0)
     }
 
     func testRechecksRetainDatedMatchesAndInitialsDoNotCreateBroadNameMatches() throws {

@@ -53,6 +53,33 @@ final class BeholderUnifiedLifecycleTests: XCTestCase {
         XCTAssertFalse(research.findings.contains { $0.status == .candidate })
     }
 
+    func testCloseKeepsLocalSearchButDiscardsLatePublicResults() async throws {
+        let client = UnifiedPendingClient()
+        let model = BeholderModel(client: client, discoveryClient: client)
+        let search = model.unifiedSearch
+        search.query = "Example Alex"; search.prepare(); search.chooseGitHub(); model.githubDiscovery.search()
+        try await started { await client.waiting }
+        let input = search.prepared
+        model.cancel()
+        XCTAssertEqual(search.prepared, input); XCTAssertEqual(search.query, "Example Alex")
+        XCTAssertNil(model.githubDiscovery.prepared)
+        await client.finish()
+        try await Task.sleep(for: .milliseconds(10))
+        XCTAssertNil(model.githubDiscovery.page)
+        model.selected = [.github]
+        search.query = "@ExampleAlex"; search.prepare(); search.searchProfiles(in: model)
+        try await started { await client.waiting }
+        model.cancel()
+        let before = model.correlation
+        XCTAssertEqual(search.query, "@ExampleAlex"); XCTAssertNotNil(search.prepared)
+        XCTAssertNil(search.profileQuery); XCTAssertFalse(model.searching)
+        await client.finish()
+        try await Task.sleep(for: .milliseconds(10))
+        XCTAssertEqual(model.correlation, before)
+        model.clear()
+        XCTAssertEqual(search.query, ""); XCTAssertNil(search.prepared)
+    }
+
     private func started(_ ready: () async -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while await !ready(), ContinuousClock.now < deadline {

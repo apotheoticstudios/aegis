@@ -29,10 +29,11 @@ struct BeholderUnifiedSearchView: View {
                         Button("Treat as " + kind.rawValue.lowercased()) { search.interpret(as: kind) }
                     }
                 } label: {
-                    Text((search.automatic ? "Detected as " : "Treating as ") + (search.kind?.rawValue ?? "…") + " ▾")
+                    Text((search.automatic ? "Detected as " : "Treating as ") + (search.kind?.rawValue ?? "…"))
                         .hudType(.caption)
                 }
                 .menuStyle(.borderlessButton).fixedSize()
+                .hudType(.caption)
                 .accessibilityLabel("Change search interpretation")
                 if search.ambiguous {
                     Text("This could also be a person's name. Change the interpretation if needed.")
@@ -46,10 +47,8 @@ struct BeholderUnifiedSearchView: View {
                 }
                 Spacer(minLength: 0)
             }
-            if let problem = search.problem {
+            if let problem = search.problem ?? search.inputHint {
                 Text(problem).hudType(.caption).foregroundStyle(HUD.warn)
-            } else if search.kind == .phone, !search.canPrepare {
-                Text("Add a +country code, or choose Australia for a national number.").hudType(.caption).foregroundStyle(HUD.inkMuted)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: HUD.space4) {
@@ -61,6 +60,9 @@ struct BeholderUnifiedSearchView: View {
                             Text("PUBLIC GITHUB DISCOVERY").hudType(.data)
                             if research.githubDiscovery.prepared == nil {
                                 Button("Prepare GitHub search") { search.chooseGitHub() }.buttonStyle(HUDChipStyle())
+                                if let problem = research.githubDiscovery.problem {
+                                    Text(problem.message).hudType(.caption).foregroundStyle(HUD.warn)
+                                }
                             } else {
                                 BeholderGitHubDiscoveryView(
                                     discovery: research.githubDiscovery, research: research, embedded: true, onReview: onReview
@@ -98,8 +100,7 @@ struct BeholderUnifiedSearchView: View {
                         .buttonStyle(HUDChipStyle()).disabled(research.providers.isEmpty)
                 }
             }
-            Text("Checking “" + input
-                .value + "” sends the handle to the selected automatic sources with your IP address and app identifier.")
+            Text(profileSummary(input))
                 .hudType(.caption).foregroundStyle(HUD.inkMuted)
             DisclosureGroup("Preview selected destinations") {
                 ForEach(research.providers) { provider in
@@ -113,11 +114,28 @@ struct BeholderUnifiedSearchView: View {
                 if let problem = research.problem {
                     Text(problem).hudType(.caption).foregroundStyle(HUD.warn)
                 }
+                Text("Completed public checks are also retained in the saved evidence above.")
+                    .hudType(.caption).foregroundStyle(HUD.inkMuted)
                 BeholderResultsView(
                     findings: research.findings, username: research.username, searching: research.searching,
                     research: research, embedded: true
                 ) { finding in onReview(.init(username: research.username, finding: finding)) }
             }
         }
+    }
+
+    private func profileSummary(_ input: BeholderPublicSearch.Input) -> String {
+        guard let name = BeholderCaseSearch.username(input.value) else { return "" }
+        let eligible = research.providers.filter { $0.supports(name) }
+        let automatic = eligible.filter { !$0.isManual }
+        let manualCount = eligible.filter(\.isManual).count
+        var summary = "“\(name)” · \(automatic.count) automatic checks · \(manualCount) manual browser links."
+        if !automatic.isEmpty {
+            summary += " Automatic sources receive the handle, your IP address and app identifier."
+        }
+        if automatic.contains(.bluesky) {
+            summary += " Bluesky uses “\(BeholderProvider.bluesky.lookupHandle(name))”."
+        }
+        return summary
     }
 }

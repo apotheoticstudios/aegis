@@ -27,6 +27,9 @@ final class BeholderUnifiedSearchTests: XCTestCase {
         XCTAssertTrue(search.canPrepare)
         search.prepare()
         XCTAssertEqual(BeholderIdentifier(input: search.query, kind: .phone, region: search.region)?.value, "+61400000001")
+        search.query = "https://github.com/ExampleAlex"
+        XCTAssertNil(search.kind)
+        XCTAssertTrue(search.inputHint?.contains("profile link") == true)
     }
 
     func testAmbiguityCanBeCorrectedWithoutRetyping() {
@@ -62,7 +65,8 @@ final class BeholderUnifiedSearchTests: XCTestCase {
         counts = await client.counts
         XCTAssertEqual(counts, [0, 1, 0])
         XCTAssertTrue(model.correlation.accounts.isEmpty)
-        XCTAssertFalse(try String(decoding: model.export(), as: UTF8.self).contains("Example Unlisted"))
+        let exported = try XCTUnwrap(String(data: model.export(), encoding: .utf8))
+        XCTAssertFalse(exported.contains("Example Unlisted"))
         try model.githubDiscovery.inspect(XCTUnwrap(model.githubDiscovery.page?.hits.first), into: model)
         try await finish { model.githubDiscovery.inspecting != nil }
         counts = await client.counts
@@ -80,7 +84,7 @@ final class BeholderUnifiedSearchTests: XCTestCase {
         XCTAssertEqual(counts, [1, 1, 1])
     }
 
-    func testImportAndCloseDiscardIntentWhileFailedImportKeepsIt() throws {
+    func testImportDiscardsIntentWhileCloseAndFailedImportKeepLocalSearch() throws {
         let model = BeholderModel()
         model.query = "ExampleRestored"
         XCTAssertEqual(model.unifiedSearch.query, "")
@@ -97,8 +101,11 @@ final class BeholderUnifiedSearchTests: XCTestCase {
         XCTAssertNil(model.githubDiscovery.prepared)
         model.unifiedSearch.query = "example@example.com"
         model.unifiedSearch.prepare()
+        model.unifiedSearch.chooseGitHub()
         model.cancel()
-        XCTAssertEqual(model.unifiedSearch.query, "")
+        XCTAssertEqual(model.unifiedSearch.query, "example@example.com")
+        XCTAssertNotNil(model.unifiedSearch.prepared)
+        XCTAssertNil(model.githubDiscovery.prepared)
     }
 
     func testSavedEvidenceAndPreparedRoutesFollowTheDetectedKind() throws {

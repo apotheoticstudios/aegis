@@ -88,18 +88,19 @@ final class BeholderPublicSearchTests: XCTestCase {
         }
     }
 
-    @MainActor func testImportedOrRestoredInputIsNotMarkedAsOwnerTyped() {
+    @MainActor func testImportedOrRestoredValuesNeverSeedTheUnifiedInput() throws {
         let model = BeholderModel()
         model.query = "ExampleAlex"
-        let discovery = BeholderDiscovery(model)
-        XCTAssertFalse(discovery.ownerTypedInput)
-        discovery.query = "ExampleOther"
-        XCTAssertTrue(discovery.ownerTypedInput)
-        discovery.kind = .email
-        XCTAssertFalse(discovery.ownerTypedInput); XCTAssertEqual(discovery.query, "")
-        discovery.query = "example@example.com"
-        XCTAssertTrue(discovery.ownerTypedInput)
-        discovery.resetAfterImport()
-        XCTAssertFalse(discovery.ownerTypedInput); XCTAssertEqual(discovery.query, "")
+        let search = model.unifiedSearch
+        XCTAssertEqual(search.query, "")
+        XCTAssertNil(search.prepared)
+        search.query = "ExampleOther"; search.prepare()
+        XCTAssertNotNil(search.prepared)
+        search.interpret(as: .name)
+        XCTAssertEqual(search.query, "ExampleOther")
+        XCTAssertNil(search.prepared)
+        search.query = "example@example.com"; search.prepare()
+        try model.importCase(BeholderModel().export())
+        XCTAssertNil(search.prepared); XCTAssertEqual(search.query, "")
     }
 }

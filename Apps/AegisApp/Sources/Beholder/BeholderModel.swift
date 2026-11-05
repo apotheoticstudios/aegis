@@ -130,7 +130,7 @@ final class BeholderModel {
     }
 
     func cancel() {
-        unifiedSearch.reset()
+        unifiedSearch.stopPublicWork()
         discoveryContextID = UUID()
         stopLookup()
     }
@@ -149,6 +149,7 @@ final class BeholderModel {
 
     func clear() {
         cancel()
+        unifiedSearch.reset()
         query = ""
         username = ""
         findings = []
@@ -209,6 +210,7 @@ final class BeholderModel {
     func importCase(_ data: Data) throws {
         let snapshot = try BeholderCaseFile.decode(data)
         cancel()
+        unifiedSearch.reset()
         query = snapshot.username
         username = snapshot.username
         findings = snapshot.findings
