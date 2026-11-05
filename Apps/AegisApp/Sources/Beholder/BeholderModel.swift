@@ -34,6 +34,7 @@ final class BeholderModel {
     private var job: Task<Void, Never>?
     private let client: any BeholderSearching
     let githubDiscovery: BeholderGitHubResearch
+    let unifiedSearch: BeholderUnifiedSearch
 
     init(
         client: any BeholderSearching = BeholderClient(),
@@ -41,6 +42,8 @@ final class BeholderModel {
     ) {
         self.client = client
         githubDiscovery = BeholderGitHubResearch(client: discoveryClient)
+        unifiedSearch = BeholderUnifiedSearch(github: githubDiscovery)
+        unifiedSearch.edited = { [weak self] in self?.stopLookup() }
     }
 
     var candidates: Int {
@@ -127,7 +130,7 @@ final class BeholderModel {
     }
 
     func cancel() {
-        githubDiscovery.reset()
+        unifiedSearch.reset()
         discoveryContextID = UUID()
         stopLookup()
     }

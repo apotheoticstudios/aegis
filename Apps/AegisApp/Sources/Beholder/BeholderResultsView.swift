@@ -52,44 +52,19 @@ struct BeholderResultsView: View {
     let username: String
     let searching: Bool
     var research: BeholderModel?
+    var embedded = false
     let onLink: (BeholderFinding) -> Void
     @State private var unfolded: Set<BeholderResultGroup> = []
     @State private var savingPerson: UUID?
     @State private var saveProblem: String?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: HUD.space3) {
-                HStack(spacing: HUD.space2) {
-                    Text("Results for @" + username).hudType(.label).foregroundStyle(HUD.ink)
-                    if searching {
-                        ProgressView().controlSize(.small)
-                    }
-                    Spacer()
-                }
-                if !searching {
-                    BeholderEvidenceSummaryView(findings: findings)
-                }
-                if let research {
-                    Picker("Save possible accounts for", selection: $savingPerson) {
-                        Text("Choose a person").tag(nil as UUID?)
-                        ForEach(research.people.people) { Text(verbatim: $0.name).tag(Optional($0.id)) }
-                    }
-                    if research.people.people.isEmpty {
-                        Text("Create a person in People to collect possible accounts for that investigation.").hudType(.caption)
-                    }
-                }
-                if let saveProblem {
-                    Text(saveProblem).hudType(.caption).foregroundStyle(HUD.warn)
-                }
-                ForEach(BeholderResultGroup.allCases, id: \.self) { group in
-                    let members = findings.filter { BeholderResultGroup.of($0) == group }
-                    if !members.isEmpty {
-                        section(group, members)
-                    }
-                }
+        Group {
+            if embedded {
+                contents
+            } else {
+                ScrollView { contents }
             }
-            .padding(.trailing, HUD.space2)
         }
         .onAppear {
             if research?.people.people.count == 1 {
@@ -101,6 +76,40 @@ struct BeholderResultsView: View {
                 self.savingPerson = nil
             }
         }
+    }
+
+    private var contents: some View {
+        VStack(alignment: .leading, spacing: HUD.space3) {
+            HStack(spacing: HUD.space2) {
+                Text("Results for @" + username).hudType(.label).foregroundStyle(HUD.ink)
+                if searching {
+                    ProgressView().controlSize(.small)
+                }
+                Spacer()
+            }
+            if !searching {
+                BeholderEvidenceSummaryView(findings: findings)
+            }
+            if let research {
+                Picker("Save possible accounts for", selection: $savingPerson) {
+                    Text("Choose a person").tag(nil as UUID?)
+                    ForEach(research.people.people) { Text(verbatim: $0.name).tag(Optional($0.id)) }
+                }
+                if research.people.people.isEmpty {
+                    Text("Create a person in People to collect possible accounts for that investigation.").hudType(.caption)
+                }
+            }
+            if let saveProblem {
+                Text(saveProblem).hudType(.caption).foregroundStyle(HUD.warn)
+            }
+            ForEach(BeholderResultGroup.allCases, id: \.self) { group in
+                let members = findings.filter { BeholderResultGroup.of($0) == group }
+                if !members.isEmpty {
+                    section(group, members)
+                }
+            }
+        }
+        .padding(.trailing, HUD.space2)
     }
 
     private func section(_ group: BeholderResultGroup, _ members: [BeholderFinding]) -> some View {

@@ -85,6 +85,9 @@ enum BeholderCaseSearch {
         let identifier: BeholderIdentifier?
         let query: String
         switch kind {
+        case .username:
+            guard let value = username(input) else { throw Problem.input }
+            query = value; identifier = nil
         case .name:
             guard case let .success(plan) = BeholderQueryPlanner.build(input: input, kind: .name) else { throw Problem.input }
             query = plan.seed; identifier = nil
@@ -129,6 +132,12 @@ enum BeholderCaseSearch {
         let hits = accounts.values.compactMap { account -> Hit? in
             guard [.candidate, .manual, .noResult].contains(account.finding.status) else { return nil }
             var reasons = ownerReasons[account.id] ?? []
+            if kind == .username, account.id == BeholderCorrelation.key(account.finding.provider, query) {
+                reasons.append(.init(
+                    id: "saved-handle", label: "Saved profile handle matches", value: account.username,
+                    source: account.finding.sourceURL, date: account.finding.checkedAt, order: 0
+                ))
+            }
             if kind == .name, account.finding.status == .candidate,
                let name = account.finding.fields["Display name"], let order = nameMatch(query, name)
             {
