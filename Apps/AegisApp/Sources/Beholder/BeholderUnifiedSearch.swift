@@ -10,7 +10,7 @@ final class BeholderUnifiedSearch {
     private var phoneRegion = BeholderQueryPlanner.PhoneRegion.international
     private let github: BeholderGitHubResearch
     @ObservationIgnored var edited: () -> Void = {}
-    @ObservationIgnored private var cachedReport: BeholderCaseSearch.Report?
+    @ObservationIgnored private var cachedReports: [Kind: BeholderCaseSearch.Report] = [:]
     @ObservationIgnored private var cachedRevision: UInt64?
     private(set) var prepared: BeholderPublicSearch.Input?
     private(set) var profileQuery: String?
@@ -48,17 +48,22 @@ final class BeholderUnifiedSearch {
     }
 
     var ambiguous: Bool {
-        automatic && Self.detect(text) == .username && !text.hasPrefix("@") && Self.validName(text)
+        automatic && kind == .username && Self.validName(text)
     }
 
     var inputHint: String? {
+        guard !text.trimmingCharacters(in: .whitespaces).isEmpty, !canPrepare else { return nil }
         if text.contains("://") {
             return "Enter the handle, name or address rather than a profile link."
         }
-        if kind == .phone, !canPrepare {
-            return "Add a +country code, or choose Australia for a national number."
+        switch kind {
+        case .phone: return "Add a +country code, or choose Australia for a national number."
+        case .email: return "Enter one complete email address, such as example@example.com."
+        case .ip: return "Enter a numeric IPv4 or IPv6 address without a port or prefix."
+        case .username: return "Enter one handle using letters, numbers, dots, dashes or underscores."
+        case .name: return "Enter a name using letters, spaces, periods, apostrophes or hyphens."
+        case nil: return "Enter one name, username, email, phone number or numeric IP address."
         }
-        return nil
     }
 
     var canPrepare: Bool {
@@ -86,7 +91,7 @@ final class BeholderUnifiedSearch {
 
     private func clear() {
         prepared = nil
-        cachedReport = nil
+        cachedReports.removeAll()
         cachedRevision = nil
         problem = nil
         stopPublicWork()
@@ -112,17 +117,23 @@ final class BeholderUnifiedSearch {
         prepared = .init(value: text, kind: kind, region: region)
     }
 
-    func report(in model: BeholderModel) -> BeholderCaseSearch.Report? {
-        guard let prepared, prepared.kind != .ip else { return nil }
-        if cachedRevision == model.caseRevision {
-            return cachedReport
+    /// The alternate interpretation only reads the case. Public actions still use the prepared input.
+    func report(in model: BeholderModel, alternate: Bool = false) -> BeholderCaseSearch.Report? {
+        guard let prepared, prepared.kind != .ip, !alternate || ambiguous else { return nil }
+        let kind = alternate ? Kind.name : prepared.kind
+        if cachedRevision != model.caseRevision {
+            cachedReports.removeAll()
+            cachedRevision = model.caseRevision
         }
-        cachedReport = try? BeholderCaseSearch.compute(
-            input: prepared.value, kind: prepared.kind, region: prepared.region,
+        if let report = cachedReports[kind] {
+            return report
+        }
+        let report = try? BeholderCaseSearch.compute(
+            input: prepared.value, kind: kind, region: prepared.region,
             store: model.correlation, people: model.people
         )
-        cachedRevision = model.caseRevision
-        return cachedReport
+        cachedReports[kind] = report
+        return report
     }
 
     var ip: BeholderIPContext.Info? {

@@ -4,7 +4,10 @@ struct BeholderLocalResultsView: View {
     let report: BeholderCaseSearch.Report?
     let ip: BeholderIPContext.Info?
     let kind: BeholderCaseSearch.Kind
+    var onOpenPerson: ((UUID) -> Void)?
     let onReview: (BeholderPeopleView.Target) -> Void
+    @State private var showAll = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: HUD.space3) {
             if let ip {
@@ -13,16 +16,26 @@ struct BeholderLocalResultsView: View {
                 Text(ip.version + " · " + ip.category.replacingOccurrences(of: "-", with: " ").capitalized).foregroundStyle(HUD.primary)
                 Text(ip.explanation)
             } else if let report {
-                Text("CASE MATCHES FOR " + report.query).hudType(.data).textSelection(.enabled)
-                Text("\(report.total) stored account match(es). Names and shared identifiers are leads, not verified identities.")
+                Text("SAVED \(report.kind.rawValue.uppercased()) MATCHES · " + report.query).hudType(.data).textSelection(.enabled)
+                Text("\(report.people.count) saved people · \(report.total) saved accounts")
                     .hudType(.caption).foregroundStyle(HUD.inkMuted)
-                if report.hits.isEmpty {
-                    Text(
-                        "No matching evidence in this case. This does not mean no accounts exist; public searches can find additional pages to inspect."
-                    )
-                    .foregroundStyle(HUD.inkMuted)
+                if report.hits.isEmpty, report.people.isEmpty {
+                    Text("No saved matches for this interpretation.")
+                        .hudType(.caption).foregroundStyle(HUD.inkMuted)
                 }
-                ForEach(report.hits) { hit in
+                ForEach(report.people.prefix(showAll ? report.people.count : 4)) { hit in
+                    VStack(alignment: .leading, spacing: HUD.space2) {
+                        HStack {
+                            Text(verbatim: hit.person.name).hudType(.bodyStrong)
+                            Spacer()
+                            if let onOpenPerson {
+                                Button("Open investigation") { onOpenPerson(hit.id) }
+                            }
+                        }
+                        reasonDetails(hit.reason, showValue: hit.reason.value != hit.person.name)
+                    }.padding(HUD.space3).frame(maxWidth: .infinity, alignment: .leading).background(HUD.surface)
+                }
+                ForEach(report.hits.prefix(showAll ? report.hits.count : 6)) { hit in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text(hit.account.finding.provider.title + " · @" + hit.account.username).hudType(.label)
@@ -49,17 +62,13 @@ struct BeholderLocalResultsView: View {
                                 Text("Attempt recorded " + date.formatted()).hudType(.caption).foregroundStyle(HUD.inkMuted)
                             }
                         }
-                        ForEach(hit.reasons) { reason in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(reason.label).foregroundStyle(HUD.primary)
-                                Text(verbatim: reason.value).textSelection(.enabled)
-                                if let source = reason.source {
-                                    Text(verbatim: source.absoluteString).textSelection(.enabled)
-                                }
-                                if let date = reason.date {
-                                    Text("Recorded " + date.formatted())
-                                }
-                            }.hudType(.caption)
+                        if let first = hit.reasons.first {
+                            reasonDetails(first)
+                        }
+                        if hit.reasons.count > 1 {
+                            DisclosureGroup("More matching evidence · \(hit.reasons.count - 1)") {
+                                ForEach(hit.reasons.dropFirst()) { reason in reasonDetails(reason) }
+                            }
                         }
                         if hit.totalReasons > hit.reasons.count {
                             Text("Showing 20 of \(hit.totalReasons) saved references. Reference count is not identity confidence.")
@@ -72,6 +81,10 @@ struct BeholderLocalResultsView: View {
                                 )
                         }
                     }.padding(HUD.space3).frame(maxWidth: .infinity, alignment: .leading).background(HUD.surface)
+                }
+                if report.people.count > 4 || report.hits.count > 6 {
+                    Button(showAll ? "Show fewer saved matches" : "Show more saved matches") { showAll.toggle() }
+                        .buttonStyle(HUDChipStyle())
                 }
                 if report.total > report.hits
                     .count
@@ -88,5 +101,21 @@ struct BeholderLocalResultsView: View {
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
             .beholderStyle()
+            .onChange(of: report?.query) { showAll = false }
+    }
+
+    private func reasonDetails(_ reason: BeholderCaseSearch.Reason, showValue: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(reason.label).foregroundStyle(HUD.primary)
+            if showValue {
+                Text(verbatim: reason.value).textSelection(.enabled)
+            }
+            if let source = reason.source {
+                Text(verbatim: source.absoluteString).textSelection(.enabled)
+            }
+            if let date = reason.date {
+                Text("Recorded " + date.formatted())
+            }
+        }.hudType(.caption)
     }
 }

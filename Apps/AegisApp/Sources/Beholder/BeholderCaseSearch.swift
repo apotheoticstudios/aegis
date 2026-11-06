@@ -36,6 +36,15 @@ enum BeholderCaseSearch {
         let kind: Kind
         let hits: [Hit]
         let total: Int
+        let people: [PersonHit]
+    }
+
+    struct PersonHit: Identifiable {
+        let person: BeholderPeople.Person
+        let reason: Reason
+        var id: UUID {
+            person.id
+        }
     }
 
     enum Problem: Error {
@@ -82,30 +91,33 @@ enum BeholderCaseSearch {
         input: String, kind: Kind, region: BeholderQueryPlanner.PhoneRegion = .international,
         store: BeholderCorrelation, people: BeholderPeople
     ) throws -> Report {
-        let identifier: BeholderIdentifier?
-        let query: String
-        switch kind {
-        case .username:
-            guard let value = username(input) else { throw Problem.input }
-            query = value; identifier = nil
-        case .name:
-            guard case let .success(plan) = BeholderQueryPlanner.build(input: input, kind: .name) else { throw Problem.input }
-            query = plan.seed; identifier = nil
-        case .email, .phone:
-            guard let value = BeholderIdentifier(input: input, kind: kind == .email ? .email : .phone, region: region)
-            else { throw Problem.input }
-            query = value.value; identifier = value
-        default: throw Problem.input
-        }
+        let (query, identifier) = try normalized(input, kind: kind, region: region)
         var accounts: [String: BeholderCorrelation.Account] = [:]
         for account in store.accounts where accounts[account.id] == nil {
             accounts[account.id] = account
         }
         var ownerReasons: [String: [Reason]] = [:]
+        var personReasons: [UUID: [Reason]] = [:]
+        let hintsByPerson = Dictionary(grouping: store.hints, by: \.personID)
         for person in people.people {
             let nameOrder = kind == .name ? nameMatch(query, person.name) : nil
-            let hints = identifier
-                .map { sought in store.hints.filter { $0.personID == person.id && matching(sought, $0.identifier) != nil } } ?? []
+            if let nameOrder {
+                let label = nameOrder == 0 ? "Saved person label matches" : "Saved person label shares name words"
+                personReasons[person.id] = [.init(
+                    id: "label", label: label, value: person.name, source: nil, date: nil, order: nameOrder
+                )]
+            }
+            let references = (hintsByPerson[person.id] ?? []).compactMap { hint -> Reason? in
+                guard let identifier, let order = matching(identifier, hint.identifier) else { return nil }
+                return .init(
+                    id: "hint:" + hint.id.uuidString,
+                    label: "Recorded person reference" + (order == 1 ? "; email case differs" : ""),
+                    value: hint.identifier.value, source: hint.source, date: hint.observedAt, order: order
+                )
+            }
+            if !references.isEmpty {
+                personReasons[person.id] = references
+            }
             for link in person.links where link.assessment == .supported {
                 if accounts[link.accountKey] == nil {
                     accounts[link.accountKey] = .init(id: link.accountKey, username: link.username, finding: link.finding)
@@ -116,14 +128,12 @@ enum BeholderCaseSearch {
                         source: link.evidenceURL, date: link.assessedAt, order: order
                     ))
                 }
-                for hint in hints {
-                    guard let identifier, let order = matching(identifier, hint.identifier) else { continue }
+                for reference in references {
                     ownerReasons[link.accountKey, default: []].append(.init(
-                        id: "hint:" + hint.id.uuidString,
+                        id: reference.id,
                         label: "Owner reference for \(person.name); account link supported by you" +
-                            (order == 1 ? "; email case differs" : ""),
-                        value: hint.identifier.value, source: hint.source, date: hint.observedAt,
-                        order: order
+                            (reference.order == 1 ? "; email case differs" : ""),
+                        value: reference.value, source: reference.source, date: reference.date, order: reference.order
                     ))
                 }
             }
@@ -173,7 +183,44 @@ enum BeholderCaseSearch {
             let rhs = ($1.historical ? 1 : 0, $1.reasons.first?.order ?? 0, $1.id)
             return lhs < rhs
         }
-        return Report(query: query, kind: kind, hits: Array(hits.prefix(100)), total: hits.count)
+        let personHits = matchingPeople(people.people, directReasons: personReasons, accountHits: hits)
+        return Report(query: query, kind: kind, hits: Array(hits.prefix(100)), total: hits.count, people: personHits)
+    }
+
+    private static func normalized(
+        _ input: String, kind: Kind, region: BeholderQueryPlanner.PhoneRegion
+    ) throws -> (String, BeholderIdentifier?) {
+        switch kind {
+        case .username:
+            guard let value = username(input) else { throw Problem.input }
+            return (value, nil)
+        case .name:
+            guard case let .success(plan) = BeholderQueryPlanner.build(input: input, kind: .name) else { throw Problem.input }
+            return (plan.seed, nil)
+        case .email, .phone:
+            guard let value = BeholderIdentifier(input: input, kind: kind == .email ? .email : .phone, region: region)
+            else { throw Problem.input }
+            return (value.value, value)
+        case .ip: throw Problem.input
+        }
+    }
+
+    private static func matchingPeople(
+        _ people: [BeholderPeople.Person], directReasons: [UUID: [Reason]], accountHits: [Hit]
+    ) -> [PersonHit] {
+        let matched = Dictionary(uniqueKeysWithValues: accountHits.map { ($0.id, $0) })
+        return people.compactMap { person -> PersonHit? in
+            let reasons = directReasons[person.id] ?? person.links.compactMap { link -> Reason? in
+                guard link.assessment == .supported, let hit = matched[link.accountKey], let first = hit.reasons.first else { return nil }
+                let title = hit.historical ? "Supported account matched earlier evidence" : "Supported account matched"
+                return .init(
+                    id: link.accountKey, label: title, value: link.finding.provider.title + " · @" + link.username,
+                    source: link.evidenceURL, date: link.assessedAt, order: first.order + (hit.historical ? 3 : 0)
+                )
+            }
+            guard let best = reasons.min(by: { ($0.order, $0.id) < ($1.order, $1.id) }) else { return nil }
+            return .init(person: person, reason: best)
+        }.sorted { ($0.reason.order, $0.person.name, $0.id.uuidString) < ($1.reason.order, $1.person.name, $1.id.uuidString) }
     }
 
     private static func matching(_ query: BeholderIdentifier, _ candidate: BeholderIdentifier) -> Int? {
@@ -192,12 +239,15 @@ enum BeholderCaseSearch {
         if left == right {
             return 0
         }
-        let a = left.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }.sorted()
-        let b = right.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }.sorted()
-        guard !a.isEmpty, a.allSatisfy({ $0.count >= 2 }) else { return nil }
-        if a.count > 1, a == b {
+        let leftWords = left.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }.sorted()
+        let rightWords = right.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }.sorted()
+        guard !leftWords.isEmpty, leftWords.allSatisfy({ $0.count >= 2 }) else { return nil }
+        if leftWords.count > 1, leftWords == rightWords {
             return 1
         }
-        return Set(a).isSubset(of: Set(b)) ? 2 : nil
+        let counts = Dictionary(grouping: rightWords, by: { $0 })
+        return Dictionary(grouping: leftWords, by: { $0 }).allSatisfy { word, occurrences in
+            occurrences.count <= (counts[word]?.count ?? 0)
+        } ? 2 : nil
     }
 }

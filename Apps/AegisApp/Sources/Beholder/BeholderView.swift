@@ -40,6 +40,7 @@ struct BeholderDashboard: View {
     @State private var exportProblem: String?
     @State private var sheet: Sheet?
     @State private var tab = CaseTab.results
+    @State private var selectedPersonID: UUID?
     @State private var clearing = false
     @State private var opening = false
     @State private var reviewingImport = false
@@ -100,6 +101,7 @@ struct BeholderDashboard: View {
                 do {
                     if let data = pendingImport {
                         try research.importCase(data)
+                        selectedPersonID = nil
                         tab = .results
                     }
                     exportProblem = nil
@@ -159,6 +161,7 @@ struct BeholderDashboard: View {
 
     private func clearCase() {
         research.clear()
+        selectedPersonID = nil
         tab = .results
     }
 
@@ -261,8 +264,13 @@ extension BeholderDashboard {
     @ViewBuilder private var tabContent: some View {
         switch tab {
         case .results:
-            BeholderUnifiedSearchView(research: research, onSources: { sheet = .sources }) { sheet = .link($0) }
-        case .people: BeholderPeopleView(research: research, embedded: true)
+            BeholderUnifiedSearchView(
+                research: research,
+                onSources: { sheet = .sources },
+                onOpenPerson: { personID in selectedPersonID = personID; tab = .people },
+                onReview: { sheet = .link($0) }
+            )
+        case .people: BeholderPeopleView(research: research, personID: selectedPersonID, embedded: true)
         case .evidence: BeholderCorrelationView(research: research, embedded: true) { sheet = .link($0) }
         case .planner: ScrollView { BeholderQueryPlannerView(embedded: true).frame(maxWidth: .infinity, alignment: .leading) }
         }

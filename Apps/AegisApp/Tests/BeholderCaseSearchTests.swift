@@ -21,6 +21,45 @@ final class BeholderCaseSearchTests: XCTestCase {
         let partial = try BeholderCaseSearch.compute(input: "Alex", kind: .name, store: store, people: .init())
         XCTAssertEqual(partial.hits.map(\.id), ["github:example-one", "github:example-two"])
         XCTAssertTrue(partial.hits.allSatisfy { $0.reasons[0].label.contains("Partial") })
+        let repeated = try BeholderCaseSearch.compute(input: "Example Example", kind: .name, store: store, people: .init())
+        XCTAssertTrue(repeated.hits.isEmpty)
+    }
+
+    func testPeopleWithoutAccountsAppearByLabelAndRecordedReference() throws {
+        var people = BeholderPeople(), store = BeholderCorrelation()
+        let person = try people.create("Example Alex")
+        let name = try BeholderCaseSearch.compute(input: "Alex Example", kind: .name, store: store, people: people)
+        XCTAssertEqual(name.people.map(\.id), [person])
+        XCTAssertEqual(name.total, 0)
+
+        let phone = try XCTUnwrap(BeholderIdentifier(input: "+61 400 000 001", kind: .phone))
+        try store.identify(personID: person, identifier: phone, source: "https://example.com/reference", now: date)
+        let result = try BeholderCaseSearch.compute(
+            input: "0400 000 001", kind: .phone, region: .australia, store: store, people: people
+        )
+        let match = try XCTUnwrap(result.people.first)
+        XCTAssertEqual(match.id, person)
+        XCTAssertEqual(match.reason.value, phone.value)
+        XCTAssertEqual(match.reason.source?.absoluteString, "https://example.com/reference")
+        XCTAssertEqual(match.reason.date, date)
+        XCTAssertEqual(result.total, 0)
+    }
+
+    func testMatchingAccountFindsOnlyItsSupportedInvestigation() throws {
+        var people = BeholderPeople()
+        let supported = try people.create("Example Alex")
+        let possible = try people.create("Example Jamie")
+        let ruledOut = try people.create("Example Morgan")
+        for (id, assessment) in [(supported, BeholderPeople.Assessment.supported), (possible, .possible), (ruledOut, .ruledOut)] {
+            try people.link(
+                personID: id, username: "Example", finding: candidate("Example"), assessment: assessment,
+                reason: "Example public reference", evidence: "https://example.com/reference", now: date
+            )
+        }
+        let result = try BeholderCaseSearch.compute(input: "@Example", kind: .username, store: .init(), people: people)
+        XCTAssertEqual(result.people.map(\.id), [supported])
+        XCTAssertEqual(result.people.first?.reason.source?.absoluteString, "https://example.com/reference")
+        XCTAssertEqual(result.hits.map(\.id), ["github:example"])
     }
 
     func testEmailExactAndCaseVariantRemainExplainedAndPlusAddressesDistinct() throws {

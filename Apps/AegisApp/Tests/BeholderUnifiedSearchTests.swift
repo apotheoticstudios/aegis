@@ -50,6 +50,32 @@ final class BeholderUnifiedSearchTests: XCTestCase {
         XCTAssertNil(search.prepared, "Overrides must still pass the original username validator.")
     }
 
+    func testBareInputChecksBothLocalInterpretationsWithoutPreparingAnotherPublicRoute() async throws {
+        let client = UnifiedSearchFixture()
+        let model = BeholderModel(client: client, discoveryClient: client), search = model.unifiedSearch
+        search.query = "Example"
+        search.prepare()
+        XCTAssertEqual(search.prepared?.kind, .username)
+        XCTAssertEqual(search.report(in: model, alternate: true)?.people.count, 0)
+        let person = try model.people.create("Example Alex")
+        XCTAssertEqual(search.report(in: model, alternate: true)?.people.map(\.id), [person])
+        XCTAssertTrue(search.report(in: model)?.people.isEmpty == true)
+        search.chooseGitHub()
+        XCTAssertNil(model.githubDiscovery.prepared)
+        var counts = await client.counts
+        XCTAssertEqual(counts, [0, 0, 0])
+
+        search.interpret(as: .name); search.prepare(); search.chooseGitHub()
+        XCTAssertEqual(model.githubDiscovery.prepared?.seed, "Example")
+        XCTAssertNil(search.report(in: model, alternate: true))
+        search.searchProfiles(in: model)
+        counts = await client.counts
+        XCTAssertEqual(counts, [0, 0, 0])
+        search.query = "@Example"; search.prepare()
+        XCTAssertNil(model.githubDiscovery.prepared)
+        XCTAssertNil(search.report(in: model, alternate: true))
+    }
+
     func testPreparingAndChoosingSourcesNeverRequestsData() async throws {
         let client = UnifiedSearchFixture()
         let model = BeholderModel(client: client, discoveryClient: client)

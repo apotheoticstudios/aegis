@@ -9,7 +9,9 @@ final class BeholderUnifiedRenderTests: XCTestCase {
         else { throw XCTSkip("Opt-in synthetic unified search layouts") }
         let model = BeholderModel(client: UnifiedRenderFixture(), discoveryClient: UnifiedRenderFixture())
         try await render(model, name: "empty")
+        try model.people.create("Example Alex")
         model.unifiedSearch.query = "Example"
+        model.unifiedSearch.prepare()
         try await render(model, name: "ambiguous")
         model.unifiedSearch.query = "Example Alex"
         model.unifiedSearch.prepare(); model.unifiedSearch.chooseGitHub()
