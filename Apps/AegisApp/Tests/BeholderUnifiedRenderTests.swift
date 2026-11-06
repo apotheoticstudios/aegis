@@ -9,7 +9,7 @@ final class BeholderUnifiedRenderTests: XCTestCase {
         else { throw XCTSkip("Opt-in synthetic unified search layouts") }
         let model = BeholderModel(client: UnifiedRenderFixture(), discoveryClient: UnifiedRenderFixture())
         try await render(model, name: "empty")
-        try model.people.create("Example Alex")
+        let personID = try model.people.create("Example Alex")
         model.unifiedSearch.query = "Example"
         model.unifiedSearch.prepare()
         try await render(model, name: "ambiguous")
@@ -25,6 +25,14 @@ final class BeholderUnifiedRenderTests: XCTestCase {
         try await finish { model.searching }
         try await render(model, name: "username")
         try await render(model, name: "username-wide", width: 1300, height: 900)
+        for index in 0 ..< 7 {
+            let handle = "ExamplePage\(index)"
+            let finding = await UnifiedRenderFixture().lookup(.github, username: handle)
+            model.correlation.observe(username: handle, finding: finding)
+        }
+        model.unifiedSearch.query = "Example Alex"; model.unifiedSearch.prepare()
+        try await render(model, name: "saved-pages")
+        try await render(model, name: "investigation-sheet", personID: personID)
         model.unifiedSearch.query = "0400 000 001"
         try await render(model, name: "phone-region")
         model.unifiedSearch.region = .australia; model.unifiedSearch.prepare()
@@ -33,9 +41,16 @@ final class BeholderUnifiedRenderTests: XCTestCase {
         try await render(model, name: "ip")
     }
 
-    @MainActor private func render(_ model: BeholderModel, name: String, width: CGFloat = 900, height: CGFloat = 650) async throws {
+    @MainActor private func render(
+        _ model: BeholderModel, name: String, width: CGFloat = 900, height: CGFloat = 650, personID: UUID? = nil
+    ) async throws {
         let size = CGSize(width: width, height: height)
-        let host = NSHostingView(rootView: BeholderDashboard(research: model).padding(16).frame(width: width, height: height)
+        let view = if let personID {
+            AnyView(BeholderInvestigationSheet(research: model, personID: personID))
+        } else {
+            AnyView(BeholderDashboard(research: model))
+        }
+        let host = NSHostingView(rootView: view.padding(16).frame(width: width, height: height)
             .foregroundStyle(HUD.ink).background(HUD.void).environment(\.colorScheme, .dark))
         let window = NSWindow(
             contentRect: NSRect(origin: CGPoint(x: -4000, y: -4000), size: size),

@@ -20,10 +20,11 @@ struct BeholderScreen: View {
 
 struct BeholderDashboard: View {
     private enum Sheet: Identifiable {
-        case sources, link(BeholderPeopleView.Target)
+        case sources, person(UUID), link(BeholderPeopleView.Target)
         var id: String {
             switch self {
             case .sources: "sources"
+            case let .person(id): "person:" + id.uuidString
             case let .link(target): target.id.uuidString
             }
         }
@@ -85,6 +86,7 @@ struct BeholderDashboard: View {
                         }.padding(.horizontal, HUD.space4).padding(.top, HUD.space3)
                         BeholderSourceGuideView(selected: $research.selected)
                     }.frame(width: 440).background(HUD.void)
+                case let .person(id): BeholderInvestigationSheet(research: research, personID: id)
                 case let .link(target): BeholderPeopleView(research: research, target: target)
                 }
             }.environment(\.hudTheme, theme)
@@ -267,13 +269,32 @@ extension BeholderDashboard {
             BeholderUnifiedSearchView(
                 research: research,
                 onSources: { sheet = .sources },
-                onOpenPerson: { personID in selectedPersonID = personID; tab = .people },
+                onOpenPerson: { personID in selectedPersonID = personID; sheet = .person(personID) },
                 onReview: { sheet = .link($0) }
             )
         case .people: BeholderPeopleView(research: research, personID: selectedPersonID, embedded: true)
         case .evidence: BeholderCorrelationView(research: research, embedded: true) { sheet = .link($0) }
         case .planner: ScrollView { BeholderQueryPlannerView(embedded: true).frame(maxWidth: .infinity, alignment: .leading) }
         }
+    }
+}
+
+struct BeholderInvestigationSheet: View {
+    let research: BeholderModel
+    let personID: UUID
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: HUD.space3) {
+            HStack {
+                Text("CASE INVESTIGATION").hudType(.data)
+                Spacer()
+                Button("Back to search") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            BeholderPeopleView(research: research, personID: personID, embedded: true)
+        }
+        .padding(HUD.space4).frame(width: 740, height: 560)
+        .foregroundStyle(HUD.ink).background(HUD.void).beholderStyle()
     }
 }
 

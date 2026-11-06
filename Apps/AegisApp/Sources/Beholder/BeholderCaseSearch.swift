@@ -35,8 +35,38 @@ enum BeholderCaseSearch {
         let query: String
         let kind: Kind
         let hits: [Hit]
-        let total: Int
         let people: [PersonHit]
+
+        var total: Int {
+            hits.count
+        }
+
+        var providers: [BeholderProvider] {
+            Set(hits.map(\.account.finding.provider)).sorted { ($0.title, $0.rawValue) < ($1.title, $1.rawValue) }
+        }
+
+        func accountPage(provider: BeholderProvider?, status: BeholderFinding.Status?, index: Int) -> AccountPage {
+            let matches = hits.filter {
+                (provider == nil || $0.account.finding.provider == provider)
+                    && (status == nil || $0.account.finding.status == status)
+            }
+            let size = 6
+            let lastPage = max(0, matches.count - 1) / size
+            let page = max(0, min(index, lastPage))
+            let start = page * size
+            let end = min(start + size, matches.count)
+            return .init(hits: matches[start ..< end], index: page, total: matches.count)
+        }
+    }
+
+    struct AccountPage {
+        let hits: ArraySlice<Hit>
+        let index: Int
+        let total: Int
+
+        var hasNext: Bool {
+            hits.endIndex < total
+        }
     }
 
     struct PersonHit: Identifiable {
@@ -184,7 +214,7 @@ enum BeholderCaseSearch {
             return lhs < rhs
         }
         let personHits = matchingPeople(people.people, directReasons: personReasons, accountHits: hits)
-        return Report(query: query, kind: kind, hits: Array(hits.prefix(100)), total: hits.count, people: personHits)
+        return Report(query: query, kind: kind, hits: hits, people: personHits)
     }
 
     private static func normalized(

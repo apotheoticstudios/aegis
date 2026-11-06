@@ -102,6 +102,18 @@ final class BeholderCaseSearchTests: XCTestCase {
         store.observe(username: "example", finding: absent)
         let history = try BeholderCaseSearch.compute(input: "+61 400 000 001", kind: .phone, store: store, people: .init())
         XCTAssertTrue(try XCTUnwrap(history.hits.first).historical)
+        let historical = history.accountPage(provider: .github, status: .noResult, index: 0)
+        XCTAssertEqual(historical.hits.map(\.id), ["github:example"])
+        let candidates = history.accountPage(provider: .github, status: .candidate, index: 9)
+        XCTAssertTrue(candidates.hits.isEmpty)
+        XCTAssertEqual(candidates.index, 0)
+        XCTAssertFalse(candidates.hasNext)
+        let manual = try XCTUnwrap(BeholderProvider.instagram.manualFinding("example"))
+        store.observe(username: "example", finding: manual)
+        try store.record(accountID: "instagram:example", identifier: phone, source: "https://example.com/contact", now: date)
+        let mixed = try BeholderCaseSearch.compute(input: phone.value, kind: .phone, store: store, people: .init())
+        XCTAssertEqual(mixed.accountPage(provider: .instagram, status: .manual, index: 0).hits.map(\.id), ["instagram:example"])
+        XCTAssertEqual(mixed.accountPage(provider: .instagram, status: .noResult, index: 0).total, 0)
     }
 
     func testSupportedOwnerReferencesWorkWithLegacyCasesButPossibleLinksNeverSeed() throws {
@@ -146,9 +158,26 @@ final class BeholderCaseSearchTests: XCTestCase {
             let handle = "example-\(index)"
             store.observe(username: handle, finding: candidate(handle, fields: ["Display name": "Example Alex"]))
         }
-        let a = try BeholderCaseSearch.compute(input: "Example Alex", kind: .name, store: store, people: .init())
-        let b = try BeholderCaseSearch.compute(input: "Example Alex", kind: .name, store: store, people: .init())
-        XCTAssertEqual(a.total, 110); XCTAssertEqual(a.hits.count, 100); XCTAssertEqual(a.hits.map(\.id), b.hits.map(\.id))
+        let handle = "ExampleTail"
+        store.observe(username: handle, finding: .init(
+            provider: .gitlab, status: .candidate, checkedAt: date, sourceURL: BeholderProvider.gitlab.endpoint(handle),
+            fields: ["Display name": "Example Alex"]
+        ))
+        let report = try BeholderCaseSearch.compute(input: "Example Alex", kind: .name, store: store, people: .init())
+        XCTAssertEqual(report.total, 111)
+        XCTAssertEqual(report.providers, [.github, .gitlab])
+        let filtered = report.accountPage(provider: .gitlab, status: .candidate, index: 50)
+        XCTAssertEqual(filtered.total, 1)
+        XCTAssertEqual(filtered.index, 0)
+        XCTAssertEqual(filtered.hits.first?.account.username, handle)
+        let first = report.accountPage(provider: nil, status: nil, index: -1)
+        let next = report.accountPage(provider: nil, status: nil, index: 1)
+        let last = report.accountPage(provider: nil, status: nil, index: Int.max)
+        XCTAssertEqual(first.hits.map(\.id), Array(report.hits.prefix(6)).map(\.id))
+        XCTAssertEqual(next.hits.map(\.id), Array(report.hits[6 ..< 12]).map(\.id))
+        XCTAssertTrue(first.hasNext)
+        XCTAssertFalse(last.hasNext)
+        XCTAssertEqual(last.hits.last?.id, filtered.hits.first?.id)
     }
 
     @MainActor func testModeIsolationMakesNoRequestsAndNeverExportsSearchOnlyIdentifiers() async throws {
