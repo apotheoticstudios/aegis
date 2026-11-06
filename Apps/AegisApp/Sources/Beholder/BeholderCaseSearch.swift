@@ -210,7 +210,7 @@ enum BeholderCaseSearch {
     ) -> [PersonHit] {
         let matched = Dictionary(uniqueKeysWithValues: accountHits.map { ($0.id, $0) })
         return people.compactMap { person -> PersonHit? in
-            let reasons = directReasons[person.id] ?? person.links.compactMap { link -> Reason? in
+            let accountReasons = person.links.compactMap { link -> Reason? in
                 guard link.assessment == .supported, let hit = matched[link.accountKey], let first = hit.reasons.first else { return nil }
                 let title = hit.historical ? "Supported account matched earlier evidence" : "Supported account matched"
                 return .init(
@@ -218,7 +218,9 @@ enum BeholderCaseSearch {
                     source: link.evidenceURL, date: link.assessedAt, order: first.order + (hit.historical ? 3 : 0)
                 )
             }
-            guard let best = reasons.min(by: { ($0.order, $0.id) < ($1.order, $1.id) }) else { return nil }
+            // Prefer a direct reference when it matches as closely as a supported account.
+            let reasons = (directReasons[person.id] ?? []) + accountReasons
+            guard let best = reasons.min(by: { $0.order < $1.order }) else { return nil }
             return .init(person: person, reason: best)
         }.sorted { ($0.reason.order, $0.person.name, $0.id.uuidString) < ($1.reason.order, $1.person.name, $1.id.uuidString) }
     }

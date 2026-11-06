@@ -52,7 +52,8 @@ final class BeholderCaseSearchTests: XCTestCase {
         let ruledOut = try people.create("Example Morgan")
         for (id, assessment) in [(supported, BeholderPeople.Assessment.supported), (possible, .possible), (ruledOut, .ruledOut)] {
             try people.link(
-                personID: id, username: "Example", finding: candidate("Example"), assessment: assessment,
+                personID: id, username: "Example", finding: candidate("Example", fields: ["Display name": "Example"]),
+                assessment: assessment,
                 reason: "Example public reference", evidence: "https://example.com/reference", now: date
             )
         }
@@ -60,6 +61,10 @@ final class BeholderCaseSearchTests: XCTestCase {
         XCTAssertEqual(result.people.map(\.id), [supported])
         XCTAssertEqual(result.people.first?.reason.source?.absoluteString, "https://example.com/reference")
         XCTAssertEqual(result.hits.map(\.id), ["github:example"])
+        let name = try BeholderCaseSearch.compute(input: "Example", kind: .name, store: .init(), people: people)
+        XCTAssertEqual(name.people.first?.id, supported)
+        XCTAssertEqual(name.people.first?.reason.label, "Supported account matched")
+        XCTAssertEqual(name.people.first?.reason.order, 0)
     }
 
     func testEmailExactAndCaseVariantRemainExplainedAndPlusAddressesDistinct() throws {

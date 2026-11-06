@@ -111,7 +111,9 @@ struct BeholderUnifiedSearchView: View {
     }
 
     private func count(_ report: BeholderCaseSearch.Report?) -> String {
-        "\((report?.total ?? 0) + (report?.people.count ?? 0))"
+        let people = report?.people.count ?? 0
+        let accounts = report?.total ?? 0
+        return "\(people) \(people == 1 ? "person" : "people") · \(accounts) \(accounts == 1 ? "account" : "accounts")"
     }
 
     private func publicLookups(_ input: BeholderPublicSearch.Input) -> some View {
