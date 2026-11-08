@@ -14,15 +14,14 @@ final class BeholderUnifiedRenderTests: XCTestCase {
         model.unifiedSearch.prepare()
         try await render(model, name: "ambiguous")
         model.unifiedSearch.query = "Example Alex"
-        model.unifiedSearch.prepare(); model.unifiedSearch.chooseGitHub()
         try await render(model, name: "name-preview")
-        model.githubDiscovery.search()
+        model.unifiedSearch.run(in: model)
         try await finish { model.githubDiscovery.searching }
         try await render(model, name: "name-hits")
         model.unifiedSearch.query = "@ExampleAlex"
-        model.unifiedSearch.prepare(); model.selected = [.github]
-        model.unifiedSearch.searchProfiles(in: model)
+        model.unifiedSearch.run(in: model)
         try await finish { model.searching }
+        XCTAssertFalse(model.findings.contains { $0.provider.isManual })
         try await render(model, name: "username")
         try await render(model, name: "username-wide", width: 1300, height: 900)
         for index in 0 ..< 7 {
@@ -79,7 +78,8 @@ final class BeholderUnifiedRenderTests: XCTestCase {
 
 private struct UnifiedRenderFixture: BeholderSearching, BeholderGitHubDiscovering {
     func lookup(_ provider: BeholderProvider, username: String) async -> BeholderFinding {
-        .init(
+        guard provider == .github else { return .init(provider: provider, status: .unavailable, sourceURL: provider.endpoint(username)) }
+        return .init(
             provider: provider,
             status: .candidate,
             checkedAt: Date(timeIntervalSince1970: 1_790_000_000),

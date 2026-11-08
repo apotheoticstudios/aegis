@@ -117,6 +117,36 @@ final class BeholderUnifiedSearch {
         prepared = .init(value: text, kind: kind, region: region)
     }
 
+    /// A deliberate Search submits only the current owner-typed input to its supported sources.
+    func run(in model: BeholderModel) {
+        prepare()
+        guard let prepared else { return }
+        switch prepared.kind {
+        case .username:
+            model.query = prepared.value
+            model.start(providers: BeholderProvider.automaticSources)
+            profileQuery = BeholderCaseSearch.username(prepared.value)
+        case .name, .email:
+            chooseGitHub()
+            github.search(into: model)
+        case .phone, .ip: break
+        }
+    }
+
+    var requestSummary: String {
+        guard canPrepare, let kind else { return "Enter an identifier to see automatic search coverage." }
+        switch kind {
+        case .username:
+            let name = BeholderCaseSearch.username(text) ?? ""
+            let count = BeholderProvider.automaticSources.filter { $0.supports(name) }.count
+            return "Search retrieves public profiles from the supported automatic sources using this username (up to \(count) checks)."
+        case .name, .email:
+            return "Search sends this \(kind.rawValue.lowercased()) to GitHub and retrieves up to 20 matching public profiles."
+        case .phone: return "Phone search checks the saved references and account evidence in this case."
+        case .ip: return "IP search shows local address context."
+        }
+    }
+
     /// The alternate interpretation only reads the case. Public actions still use the prepared input.
     func report(in model: BeholderModel, alternate: Bool = false) -> BeholderCaseSearch.Report? {
         guard let prepared, prepared.kind != .ip, !alternate || ambiguous else { return nil }

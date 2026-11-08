@@ -20,10 +20,9 @@ struct BeholderScreen: View {
 
 struct BeholderDashboard: View {
     private enum Sheet: Identifiable {
-        case sources, person(UUID), link(BeholderPeopleView.Target)
+        case person(UUID), link(BeholderPeopleView.Target)
         var id: String {
             switch self {
-            case .sources: "sources"
             case let .person(id): "person:" + id.uuidString
             case let .link(target): target.id.uuidString
             }
@@ -31,7 +30,7 @@ struct BeholderDashboard: View {
     }
 
     private enum CaseTab: Hashable {
-        case results, people, evidence, planner
+        case results, people, evidence
     }
 
     @State private var research: BeholderModel
@@ -76,16 +75,6 @@ struct BeholderDashboard: View {
         .sheet(item: $sheet) { presented in
             Group {
                 switch presented {
-                case .sources:
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Button("Original four") { research.selected = BeholderProvider.originalSources }
-                                .buttonStyle(HUDChipStyle(muted: true))
-                            Spacer()
-                            Button("Done") { sheet = nil }.keyboardShortcut(.cancelAction).buttonStyle(HUDChipStyle())
-                        }.padding(.horizontal, HUD.space4).padding(.top, HUD.space3)
-                        BeholderSourceGuideView(selected: $research.selected)
-                    }.frame(width: 440).background(HUD.void)
                 case let .person(id): BeholderInvestigationSheet(research: research, personID: id)
                 case let .link(target): BeholderPeopleView(research: research, target: target)
                 }
@@ -237,7 +226,6 @@ extension BeholderDashboard {
                     HUDOption(value: CaseTab.results, label: "Search"),
                     HUDOption(value: CaseTab.people, label: "People", meta: "\(research.people.people.count)"),
                     HUDOption(value: CaseTab.evidence, label: "Evidence", meta: "\(research.correlation.accounts.count)"),
-                    HUDOption(value: CaseTab.planner, label: "Planner"),
                 ],
                 value: $tab
             )
@@ -268,13 +256,11 @@ extension BeholderDashboard {
         case .results:
             BeholderUnifiedSearchView(
                 research: research,
-                onSources: { sheet = .sources },
                 onOpenPerson: { personID in selectedPersonID = personID; sheet = .person(personID) },
                 onReview: { sheet = .link($0) }
             )
         case .people: BeholderPeopleView(research: research, personID: selectedPersonID, embedded: true)
         case .evidence: BeholderCorrelationView(research: research, embedded: true) { sheet = .link($0) }
-        case .planner: ScrollView { BeholderQueryPlannerView(embedded: true).frame(maxWidth: .infinity, alignment: .leading) }
         }
     }
 }
