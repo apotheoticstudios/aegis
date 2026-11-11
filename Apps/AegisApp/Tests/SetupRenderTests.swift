@@ -56,11 +56,11 @@ final class SetupRenderTests: XCTestCase {
         drivePrivacyToSilence(driver, setup, app)
 
         // The rail jumps back to a screen reached, and forward again.
-        driver.click(95, 100.6 + 2 * 23.05, "rail-storage")
+        driver.click(95, 100.6 + 3 * 23.05, "rail-storage")
         XCTAssertEqual(setup.wizard.current, .storage)
-        driver.click(95, 100.6 + 13 * 23.05, "rail-silence")
+        driver.click(95, 100.6 + 14 * 23.05, "rail-silence")
         XCTAssertEqual(setup.wizard.current, .silence)
-        driver.click(95, 100.6 + 15 * 23.05, "rail-ready-locked")
+        driver.click(95, 100.6 + 16 * 23.05, "rail-ready-locked")
         XCTAssertEqual(setup.wizard.current, .silence, "a screen not reached stays locked")
         driver.click(69, 799, "back")
         XCTAssertEqual(setup.wizard.current, .interface)
@@ -92,6 +92,9 @@ final class SetupRenderTests: XCTestCase {
         XCTAssertFalse(setup.wizard.mac.isLaptop, "Desktop chosen")
         XCTAssertTrue(setup.wizard.alwaysOn, "a desktop runs always on unless changed")
 
+        driver.click(1266, 799, "next")
+        XCTAssertEqual(setup.wizard.current, .brain)
+        XCTAssertEqual(BrainSettings.shared.brain, .local, "this Mac until changed")
         driver.click(1266, 799, "next")
         XCTAssertEqual(setup.wizard.current, .storage)
         driver.drag(from: (278, 253), to: (720, 253), "03-slider-drag")
@@ -222,7 +225,7 @@ final class SetupRenderTests: XCTestCase {
         XCTAssertFalse(SetupWindow.window?.isVisible ?? true, "Escape closes setup")
         XCTAssertFalse(HUDPresence.shared.setup)
         let resumed = SetupModel(file: SetupFile(url: url), mac: SetupTests.sampleMac)
-        XCTAssertEqual(resumed.wizard.current, .storage)
+        XCTAssertEqual(resumed.wizard.current, .brain)
     }
 }
 

@@ -140,4 +140,25 @@ final class SetupTests: XCTestCase {
         XCTAssertNotNil(Brain.status(.unavailable))
         XCTAssertEqual(ClaudeTools.Category.allCases.map(\.label).count, Set(ClaudeTools.Category.allCases.map(\.label)).count)
     }
+
+    /// One copy for the wizard and settings: each change is kept at once, and a missing Claude Code is said, never
+    /// shown as a passed check.
+    func testBrainSettingsAreSharedAndKept() {
+        let settings = BrainSettings(installed: false)
+        settings.brain = .claude
+        settings.reads.remove(.mail)
+        settings.choice.effort = .high
+        XCTAssertEqual(Brain.current, .claude)
+        XCTAssertFalse(ClaudeReads.enabled.contains(.mail))
+        XCTAssertEqual(ClaudeCodeRunner.choice.effort, .high)
+        let other = BrainSettings(installed: false)
+        XCTAssertEqual(other.brain, .claude, "a window opened later reads the kept choice")
+        XCTAssertEqual(other.reads, settings.reads)
+        settings.check()
+        XCTAssertTrue(settings.checked)
+        XCTAssertEqual(settings.status, Brain.status(.unavailable))
+        settings.brain = .local
+        settings.reads = Set(ClaudeTools.Category.allCases)
+        settings.choice = .standard
+    }
 }

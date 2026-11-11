@@ -5,17 +5,13 @@ import SwiftUI
 /// Claude and ChatGPT settings (#223): the brain (ADR-0038), the owner's API keys (kept in the Keychain) and
 /// automatic hand-off.
 struct CloudSettingsView: View {
-    @State private var brain = Brain.current
-    @State private var reads = ClaudeReads.enabled
+    @Bindable private var settings = BrainSettings.shared
     @State private var claudeKey = ""
     @State private var openAIKey = ""
     @State private var saved: [CloudHandOff.Provider: Bool] = [:]
     @State private var automatic = CloudKeys.automatic
     @State private var chatGPTPlan = CloudKeys.useChatGPTPlan
     @State private var claudePlan = CloudKeys.useClaudePlan
-    @State private var claudeChoice = ClaudeCodeRunner.choice
-    @State private var claudeModels = ClaudeCodeRunner.models
-    @State private var claudeStatus: String?
     @State private var notice: String?
 
     var body: some View {
@@ -64,20 +60,17 @@ struct CloudSettingsView: View {
     /// What Aegis thinks with (ADR-0038), and with Claude, what it may read.
     @ViewBuilder private var brainRows: some View {
         Text("Brain").font(.headline)
-        Picker("Aegis thinks with", selection: $brain) {
+        Picker("Aegis thinks with", selection: $settings.brain) {
             Text("On this Mac").tag(Brain.local)
             Text("Claude (your plan)").tag(Brain.claude)
         }
         .pickerStyle(.segmented)
-        .disabled(ClaudeCodeRunner.executable == nil && brain == .local)
-        .onChange(of: brain) { _, brain in
-            Brain.current = brain
-            checkClaude()
-        }
-        if ClaudeCodeRunner.executable == nil {
+        .disabled(!settings.installed && settings.brain == .local)
+        .onChange(of: settings.brain) { _, _ in checkClaude() }
+        if !settings.installed {
             Text("Install Claude Code, and sign in with your Claude plan, to choose Claude.").font(.callout).foregroundStyle(.secondary)
         }
-        if brain == .claude {
+        if settings.brain == .claude {
             modelRows
             Text(Brain.leaves + " " + Brain.pending).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             LazyVGrid(
@@ -85,18 +78,17 @@ struct CloudSettingsView: View {
                 alignment: .leading
             ) {
                 ForEach(ClaudeTools.Category.allCases, id: \.self) { category in
-                    Toggle(category.label, isOn: Binding(get: { reads.contains(category) }, set: { on in
+                    Toggle(category.label, isOn: Binding(get: { settings.reads.contains(category) }, set: { on in
                         if on {
-                            reads.insert(category)
+                            settings.reads.insert(category)
                         } else {
-                            reads.remove(category)
+                            settings.reads.remove(category)
                         }
-                        ClaudeReads.enabled = reads
                     }))
                 }
             }
-            if let claudeStatus {
-                Text(claudeStatus).font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            if let status = settings.status {
+                Text(status).font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -109,11 +101,11 @@ struct CloudSettingsView: View {
                 checkClaude()
             }
         if claudePlan {
-            if brain != .claude {
+            if settings.brain != .claude {
                 modelRows
             }
-            Text(brain == .claude ? "It counts against your Claude plan's limits. A Claude key below, if saved, is used instead."
-                : claudeStatus ?? "It counts against your Claude plan's limits. A Claude key below, if saved, is used instead.")
+            Text(settings.brain == .claude ? "It counts against your Claude plan's limits. A Claude key below, if saved, is used instead."
+                : settings.status ?? "It counts against your Claude plan's limits. A Claude key below, if saved, is used instead.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -121,26 +113,21 @@ struct CloudSettingsView: View {
     /// Claude's model and effort, the same for the brain and the hand-off.
     private var modelRows: some View {
         HStack {
-            Picker("Model", selection: $claudeChoice.model) {
-                ForEach(claudeModels.isEmpty ? [ClaudeCode.Model(value: claudeChoice.model, name: "Recommended")] : claudeModels) {
+            Picker("Model", selection: $settings.choice.model) {
+                ForEach(settings.models.isEmpty ? [ClaudeCode.Model(value: settings.choice.model, name: "Recommended")] : settings.models) {
                     Text($0.name).tag($0.value)
                 }
             }
-            Picker("Effort", selection: $claudeChoice.effort) {
+            Picker("Effort", selection: $settings.choice.effort) {
                 ForEach(ClaudeCode.Effort.allCases, id: \.self) { Text($0.label).tag($0) }
             }
         }
-        .onChange(of: claudeChoice) { _, choice in ClaudeCodeRunner.choice = choice }
     }
 
-    /// Asks Claude Code who's signed in and which models the plan offers, without sending anything to Claude.
+    /// Checks Claude Code when the brain or the hand-off would use it.
     private func checkClaude() {
-        guard claudePlan || brain == .claude, ClaudeCodeRunner.executable != nil else { return }
-        claudeStatus = "Checking Claude Code…"
-        Task {
-            let ending = await ClaudeCodeRunner().check()
-            claudeModels = ClaudeCodeRunner.models
-            claudeStatus = Brain.status(ending)
+        if settings.brain == .claude || (claudePlan && settings.installed) {
+            settings.check()
         }
     }
 
