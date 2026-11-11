@@ -65,6 +65,53 @@ final class ClaudeActionTests: XCTestCase {
         XCTAssertEqual(pending.button, "Go")
     }
 
+    /// A card the owner hasn't answered, or a plan paused at a message, stays: Claude's card is refused.
+    func testTheOwnersCardIsNeverReplaced() async {
+        let model = PanelModel(service: FixtureCore())
+        let owner = PendingAction(
+            command: .reminder(title: "Owner's", due: nil),
+            request: ActionRequest(payload: .reminder(title: "Owner's", due: nil), origin: .ownerTyped), text: "Owner's card", at: Date()
+        )
+        ActionPresence.shared.pending = owner
+        for action in [
+            ClaudeTools.Action.command(.reminder(title: "Claude's", due: nil)),
+            .plan([.reminder(title: "A", due: nil), .reminder(title: "B", due: nil)]),
+            .message(to: "Sam", text: "Hi", channel: .message),
+        ] {
+            let said = await model.claude(action)
+            XCTAssertEqual(said, PanelModel.cardWaiting, "\(action)")
+            XCTAssertEqual(ActionPresence.shared.pending?.request.id, owner.request.id)
+        }
+        ActionPresence.shared.pending = nil
+        ActionPresence.shared.planRest = (after: UUID(), steps: [])
+        defer { ActionPresence.shared.planRest = nil }
+        _ = await model.claude(.command(.reminder(title: "Claude's", due: nil)))
+        XCTAssertNil(ActionPresence.shared.pending, "a paused plan keeps the slot")
+    }
+
+    /// Once Claude's run has stopped, nothing it asked for appears or starts.
+    func testNothingAppearsAfterTheRunStops() async {
+        let model = PanelModel(service: FixtureCore())
+        let late = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await model.claude(.command(.reminder(title: "Late", due: nil)))
+        }
+        _ = await late.value
+        XCTAssertNil(ActionPresence.shared.pending)
+    }
+
+    /// An accepted action counts even when its run stops before it answers, so the request is never replayed.
+    func testAnAcceptedActionStillCountsWhenTheRunStops() async throws {
+        let call = #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"add_reminder","arguments":{"title":"Bins"}}}"#
+        let runner = try ClaudeCodeRunner(executable: standIn(calls: [call], checks: ["never"]))
+        let ending = await runner.run(
+            system: "S", prompt: "Remind me", choice: .standard, timeout: 3, reads: .init(source: SlowActions(), enabled: [], acts: true)
+        ) { _ in }
+        XCTAssertEqual(ending, .timedOut)
+        let actions = await runner.lastActions
+        XCTAssertEqual(actions, 1)
+    }
+
     /// Without the run allowing actions, the tools aren't offered and a call is refused as unknown.
     func testReadOnlyRunsCantAct() async throws {
         let call = #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"add_reminder","arguments":{"title":"Bins"}}}"#
@@ -116,5 +163,16 @@ final class ClaudeActionTests: XCTestCase {
         try script.write(to: file, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
         return file.path
+    }
+}
+
+/// Takes far longer than any run to act, ignoring cancellation.
+private struct SlowActions: ClaudeToolSource {
+    func fetch(_: ClaudeTools.Call, enabled _: Set<ClaudeTools.Category>) async -> ClaudeTools.Payload {
+        let end = Date().addingTimeInterval(30)
+        while Date() < end {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return .refused("late")
     }
 }

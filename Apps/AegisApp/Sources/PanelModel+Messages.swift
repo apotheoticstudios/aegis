@@ -122,7 +122,18 @@ extension PanelModel {
     private func proposeMessage(_ draft: MessageDraft, request: ActionRequest, text: String) async -> Bool {
         let decision = await logMessage(request, .proposed)
         guard decision.allowed else { return false }
-        ActionPresence.shared.pending = PendingAction(command: nil, message: draft, request: request, text: text, at: Date(), needed: 2)
+        guard ActionPresence.shared.install(PendingAction(
+            command: nil,
+            message: draft,
+            request: request,
+            text: text,
+            at: Date(),
+            needed: 2
+        ))
+        else {
+            await logMessage(request, .cancelled)
+            return false
+        }
         await logMessage(request, .awaitingConfirmation)
         return true
     }

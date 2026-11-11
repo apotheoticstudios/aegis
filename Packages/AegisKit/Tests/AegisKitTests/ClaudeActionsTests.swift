@@ -162,6 +162,25 @@ final class ClaudeActionsTests: XCTestCase {
         )
     }
 
+    /// The action log keeps who asked; entries written before it was recorded still load.
+    func testTheLogRecordsWhoAsked() throws {
+        let request = ActionRequest(payload: .app(bundleID: "Music", verb: .open), origin: .claude)
+        let entry = ActionLogEntry(
+            time: Date(timeIntervalSince1970: 0), request: request, decision: .init(tier: .auto, reasonCodes: [.reversible]),
+            outcomeCode: .succeeded
+        )
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("claude-log-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let log = try ActionLogFile(url: file)
+        try log.append(entry)
+        XCTAssertEqual(try log.load().first?.origin, .claude)
+        var old = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(entry)) as? [String: Any])
+        old["origin"] = nil
+        let decoded = try JSONDecoder().decode(ActionLogEntry.self, from: JSONSerialization.data(withJSONObject: old))
+        XCTAssertNil(decoded.origin)
+        XCTAssertEqual(decoded.requestID, request.id)
+    }
+
     // MARK: Helpers
 
     private func call(_ id: Int, _ name: String, _ arguments: [String: Any]) -> Data {

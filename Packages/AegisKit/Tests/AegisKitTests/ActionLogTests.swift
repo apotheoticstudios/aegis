@@ -112,7 +112,8 @@ final class ActionLogTests: XCTestCase {
         }
         for data in try lines(url) + lines(file.archiveURL) {
             let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-            XCTAssertEqual(Set(object.keys), ["time", "requestID", "domain", "decision", "outcomeCode"])
+            XCTAssertEqual(Set(object.keys), ["time", "requestID", "domain", "decision", "outcomeCode", "origin"])
+            XCTAssertNotNil((object["origin"] as? String).flatMap(ActionOrigin.init(rawValue:)), "a closed code, never text")
             XCTAssertNotNil(try UUID(uuidString: XCTUnwrap(object["requestID"] as? String)))
         }
     }

@@ -6,13 +6,17 @@ import Foundation
 /// log, as Claude's request. Nothing here approves a card: only the owner's Add, Go, Send or "yes" does.
 extension PanelModel {
     func claude(_ action: ClaudeTools.Action) async -> String {
+        // A card the owner hasn't answered stays: anything that would need a card waits for them.
+        if !ActionPresence.shared.claudeMayAsk, Self.asks(action) {
+            return Self.cardWaiting
+        }
         switch action {
         case let .command(command):
-            await claudeCommand(command)
+            return await claudeCommand(command)
         case let .message(to, text, channel):
-            await messageCard(MessageCommand(channel: channel, to: to, text: text), words: nil, origin: .claude).text
+            return await messageCard(MessageCommand(channel: channel, to: to, text: text), words: nil, origin: .claude).text
         case let .plan(commands):
-            await claudePlan(commands)
+            return await claudePlan(commands)
         }
     }
 
@@ -52,7 +56,10 @@ extension PanelModel {
             }
         }
         let text = "Here's the plan: " + steps.map(\.said).joined(separator: ", then ") + "."
-        ActionPresence.shared.pending = PendingAction(command: nil, request: first, text: text, at: Date(), plan: steps)
+        guard ActionPresence.shared.install(PendingAction(command: nil, request: first, text: text, at: Date(), plan: steps)) else {
+            await cancel(steps)
+            return Self.cardWaiting
+        }
         return ([text] + left + ["Say yes, or press Go."]).joined(separator: " ")
     }
 
@@ -68,6 +75,14 @@ extension PanelModel {
             await Self.found(name, reveal: reveal)
         default:
             command
+        }
+    }
+
+    /// Whether the action shows a card (anything but an automatic step).
+    private static func asks(_ action: ClaudeTools.Action) -> Bool {
+        switch action {
+        case .message, .plan: true
+        case let .command(command): [.reminder, .calendar].contains(command.payload.domain)
         }
     }
 

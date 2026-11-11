@@ -204,7 +204,10 @@ actor ClaudeCodeRunner {
                 return await send(ClaudeCode.controlError(requestID: requestID), to: link.pipes, until: link.deadline)
             }
             let reply: ClaudeTools.Server.Reply
-            switch server.handle(message) {
+            let step = server.handle(message)
+            // Kept at once: an accepted action counts even if its run stops before it answers (ADR-0038 §2).
+            link.server = server
+            switch step {
             case let .reply(message):
                 reply = .init(message: message, counts: [:])
             case let .call(id, call):

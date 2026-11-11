@@ -12,22 +12,30 @@ public struct ActionLogEntry: Codable, Sendable, Hashable {
     public let domain: ActionDomain
     public let decision: ActionDecision
     public let outcomeCode: ActionOutcomeCode
+    /// Who asked (ADR-0038, additive): the owner or Claude. Nil in entries written before it was recorded.
+    public let origin: ActionOrigin?
 
-    public init(time: Date, requestID: UUID, domain: ActionDomain, decision: ActionDecision, outcomeCode: ActionOutcomeCode) {
+    public init(
+        time: Date, requestID: UUID, domain: ActionDomain, decision: ActionDecision, outcomeCode: ActionOutcomeCode,
+        origin: ActionOrigin? = nil
+    ) {
         self.time = time
         self.requestID = requestID
         self.domain = domain
         self.decision = decision
         self.outcomeCode = outcomeCode
+        self.origin = origin
     }
 
-    /// Copies only the opaque identifier and domain from a request, never its arguments.
+    /// Copies only the opaque identifier, domain and origin from a request, never its arguments.
     public init(time: Date, request: ActionRequest, decision: ActionDecision, outcomeCode: ActionOutcomeCode) {
-        self.init(time: time, requestID: request.id, domain: request.domain, decision: decision, outcomeCode: outcomeCode)
+        self.init(
+            time: time, requestID: request.id, domain: request.domain, decision: decision, outcomeCode: outcomeCode, origin: request.origin
+        )
     }
 
     enum CodingKeys: String, CodingKey, CaseIterable {
-        case time, requestID, domain, decision, outcomeCode
+        case time, requestID, domain, decision, outcomeCode, origin
     }
 
     public init(from decoder: any Decoder) throws {
@@ -38,5 +46,6 @@ public struct ActionLogEntry: Codable, Sendable, Hashable {
         domain = try container.decode(ActionDomain.self, forKey: .domain)
         decision = try container.decode(ActionDecision.self, forKey: .decision)
         outcomeCode = try container.decode(ActionOutcomeCode.self, forKey: .outcomeCode)
+        origin = try container.decodeIfPresent(ActionOrigin.self, forKey: .origin)
     }
 }

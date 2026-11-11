@@ -15,6 +15,21 @@ final class ActionPresence {
     @ObservationIgnored var shortcuts: (names: [String], at: Date)?
     /// A plan's approved steps after the message card it stopped at (#47), bound to that card's request (#59).
     @ObservationIgnored var planRest: (after: UUID, steps: [PlanStep])?
+    /// Shows a card. Claude's never replaces a card the owner hasn't answered or a plan paused at a message, and never
+    /// appears once its run has stopped (ADR-0038 §6); the owner's own command always does, as before.
+    func install(_ card: PendingAction) -> Bool {
+        if card.request.origin == .claude {
+            guard claudeMayAsk, !Task.isCancelled else { return false }
+        }
+        pending = card
+        return true
+    }
+
+    /// Nothing waits on the owner: no fresh card, no paused plan.
+    var claudeMayAsk: Bool {
+        planRest == nil && pending.map { Date().timeIntervalSince($0.at) >= 300 } ?? true
+    }
+
     /// The owner's last command, for follow-ups (#49).
     @ObservationIgnored var context: CommandContext?
     /// The owner asked Aegis something other than a command since; "again" is then the chat's (#49).
@@ -256,7 +271,10 @@ extension PanelModel {
     private func propose(_ command: ActionCommand, request: ActionRequest, text: String) async -> Void? {
         let decision = await log(request, .proposed)
         guard decision.allowed else { return nil }
-        ActionPresence.shared.pending = PendingAction(command: command, request: request, text: text, at: Date())
+        guard ActionPresence.shared.install(PendingAction(command: command, request: request, text: text, at: Date())) else {
+            await log(request, .cancelled)
+            return nil
+        }
         await log(request, .awaitingConfirmation)
         return ()
     }
@@ -320,14 +338,24 @@ extension PanelModel {
         let text = command.summary(calendar: .current)
         guard decision.tier == .auto else {
             let pending = PendingAction(command: command, request: request, text: text, at: Date(), guessed: guessed)
-            ActionPresence.shared.pending = pending
+            guard ActionPresence.shared.install(pending) else {
+                await log(request, .cancelled, guessed: guessed)
+                return Self.cardWaiting
+            }
             await log(request, .awaitingConfirmation, guessed: guessed)
             return text + " Say yes, or press \(pending.button)."
+        }
+        // Claude's run may have stopped while this was being found: nothing starts after Stop or its deadline.
+        if request.origin == .claude, Task.isCancelled {
+            await log(request, .cancelled)
+            return "Stopped."
         }
         let (worked, said) = await Self.run(command)
         await log(request, worked ? .succeeded : .failed, guessed: guessed)
         return said
     }
+
+    static let cardWaiting = "A card is already waiting for the owner, so Aegis won't add another. They can answer it first."
 
     /// AegisShell's launcher: an app, a file or a settings page the owner chose, through the safety system like any
     /// command they typed.
@@ -361,6 +389,10 @@ extension PanelModel {
         let request = ActionRequest(payload: .app(bundleID: Bundle(url: app)?.bundleIdentifier ?? name, verb: .open), origin: origin)
         let decision = await log(request, .proposed)
         guard decision.tier == .auto else { return "That's not something I can do." }
+        if origin == .claude, Task.isCancelled {
+            await log(request, .cancelled)
+            return "Stopped."
+        }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         let opened = await (try? NSWorkspace.shared.openApplication(at: app, configuration: configuration)) != nil
