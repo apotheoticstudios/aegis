@@ -125,7 +125,8 @@ final class ClaudeCodeRunnerTests: XCTestCase {
               call='{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"recent_items","arguments":{"limit":5}}}'
               printf '{"type":"control_request","request_id":"t1","request":{"subtype":"mcp_message","server_name":"aegis","message":%s}}\n' "$call"
               IFS= read -r answer
-              case "$answer" in *'"request_id":"t1"'*Alex*) word=read ;; *) word=nothing ;; esac
+              word=nothing
+              case "$answer" in *'"request_id":"t1"'*) case "$answer" in *Alex*) word=read ;; esac ;; esac
               printf '{"type":"result","subtype":"success","is_error":false,"result":"%s","stop_reason":"end_turn"}\n' "$word"
               ;;
           esac
@@ -139,6 +140,37 @@ final class ClaudeCodeRunnerTests: XCTestCase {
         XCTAssertEqual(ending, .outcome(.answer(text: "read", model: "claude-opus-5-5")))
         let reads = await runner.lastReads
         XCTAssertEqual(reads, [.messages: 1, .notifications: 1], "mail was switched off")
+    }
+
+    /// A tool whose data never comes can't hold the run past its deadline, and nothing counts as read.
+    func testAToolThatNeverAnswersCantHoldTheRun() async throws {
+        let caller = try script("waiting", #"""
+        reply() { printf '{"type":"control_response","response":{"subtype":"success","request_id":"%s","response":%s}}\n' "$1" "$2"; }
+        while IFS= read -r line; do
+          case "$line" in
+            *aegis-init*) reply aegis-init '{"account":{"subscription":"max","apiProvider":"firstParty"},"commands":[],"models":[]}' ;;
+            *aegis-mcp*) reply aegis-mcp '{"mcpServers":[]}' ;;
+            *aegis-settings*) reply aegis-settings '{"effective":{},"sources":[]}' ;;
+            *'"type":"user"'*)
+              served='[{"name":"aegis","status":"connected","source":"sdk"}]'
+              printf '{"type":"system","subtype":"init","tools":["mcp__aegis__brief"],"mcp_servers":%s,' "$served"
+              echo '"plugins":[],"skills":[],"slash_commands":[],"apiKeySource":"none","model":"claude-opus-5-5"}'
+              call='{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"brief","arguments":{}}}'
+              printf '{"type":"control_request","request_id":"t1","request":{"subtype":"mcp_message","server_name":"aegis","message":%s}}\n' "$call"
+              ;;
+          esac
+        done
+        """#)
+        let runner = ClaudeCodeRunner(executable: caller)
+        let began = Date()
+        let ending = await runner.run(
+            system: "S", prompt: "Brief?", choice: .standard, timeout: 3,
+            reads: .init(source: NeverAnswers(), enabled: Set(ClaudeTools.Category.allCases))
+        ) { _ in }
+        XCTAssertEqual(ending, .timedOut)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 8)
+        let reads = await runner.lastReads
+        XCTAssertEqual(reads, [:])
     }
 
     func testMissingClaudeCodeIsUnavailable() async {
@@ -171,5 +203,16 @@ private final class Pieces: @unchecked Sendable {
             text.append(piece)
             onDisk.append(found)
         }
+    }
+}
+
+/// A data source that ignores cancellation and takes far longer than any run.
+private struct NeverAnswers: ClaudeToolSource {
+    func fetch(_: ClaudeTools.Call, enabled _: Set<ClaudeTools.Category>) async -> ClaudeTools.Payload {
+        let end = Date().addingTimeInterval(30)
+        while Date() < end {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return .refused("late")
     }
 }

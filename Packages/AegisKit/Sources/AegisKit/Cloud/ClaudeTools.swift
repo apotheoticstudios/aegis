@@ -52,7 +52,9 @@ public enum ClaudeTools {
             switch self {
             case .recentItems: "The owner's newest messages, emails and notifications from the last 24 hours, newest first."
             case .readItems: "Messages, emails or notifications by their IDs, as other tools cite them."
-            case .schedule: "Calendar events and reminders from days_back days ago to days_ahead days ahead."
+            case .schedule:
+                "Calendar events and reminders from days_back days ago to days_ahead days ahead (together at most "
+                    + "\(CoreRequest.maxScheduleDays - 1))."
             case .brief: "The owner's latest brief: what matters today."
             case .peopleWaiting: "People waiting on the owner's reply, oldest first."
             case .promises: "Open promises in the owner's own messages and emails."
@@ -68,8 +70,8 @@ public enum ClaudeTools {
             case .readItems: ["ids": ["type": "array", "items": ["type": "string"], "maxItems": CoreRequest.maxSourceIDs]]
             case .schedule:
                 [
-                    "days_back": ["type": "integer", "minimum": 0, "maximum": 7],
-                    "days_ahead": ["type": "integer", "minimum": 0, "maximum": 14],
+                    "days_back": ["type": "integer", "minimum": 0, "maximum": CoreRequest.maxScheduleDays - 1],
+                    "days_ahead": ["type": "integer", "minimum": 0, "maximum": CoreRequest.maxScheduleDays - 1],
                 ]
             default: [:]
             }
@@ -95,7 +97,11 @@ public enum ClaudeTools {
                     return nil
                 }
                 self = .readItems(ids: Array(ids.prefix(CoreRequest.maxSourceIDs)))
-            case .schedule: self = .schedule(daysBack: integer("days_back", 0 ... 7, 0), daysAhead: integer("days_ahead", 0 ... 14, 1))
+            case .schedule:
+                // AegisCore answers at most `maxScheduleDays` whole days, today included.
+                let most = CoreRequest.maxScheduleDays - 1
+                let ahead = integer("days_ahead", 0 ... most, 1)
+                self = .schedule(daysBack: min(integer("days_back", 0 ... most, 0), most - ahead), daysAhead: ahead)
             case .brief: self = .brief
             case .peopleWaiting: self = .peopleWaiting
             case .promises: self = .promises
@@ -123,29 +129,34 @@ public enum ClaudeTools {
         guard !enabled.isDisjoint(with: Category.collected) else { return .refused("The owner has switched these sources off.") }
         let allowed = events.filter { enabled.contains(Category($0.source)) }
         return pack(allowed.map { event in
-            (ItemView(event), Category(event.source))
+            (ItemView(event), [Category(event.source)])
         })
     }
 
     public static func schedule(_ occurrences: [CalendarOccurrence], _ reminders: [ReminderItem], enabled: Set<Category>) -> Payload {
         guard enabled.contains(.calendar) else { return .refused("The owner has switched the calendar off.") }
-        let events: [(any Encodable, Category)] = occurrences.map { (EventView($0), .calendar) }
-        return pack(events + reminders.map { (ReminderView($0), .calendar) })
+        let events: [(any Encodable, Set<Category>)] = occurrences.map { (EventView($0), [.calendar]) }
+        return pack(events + reminders.map { (ReminderView($0), [.calendar]) })
     }
 
     /// `sources`: the category of each cited event, as AegisCore returned it. An item citing an event that's
     /// switched off, or that AegisCore didn't return, is left out.
     public static func brief(_ stored: StoredBrief?, sources: [String: Category], enabled: Set<Category>) -> Payload {
         let items = (stored?.brief.items ?? []).filter { cited($0.eventIDs, sources, enabled) }
-        return pack(items.map { (BriefView($0), category($0.eventIDs, sources)) })
+        return pack(items.map { (BriefView($0), categories($0.eventIDs, sources)) })
     }
 
+    /// A person's count and waiting time cover every open question, but only the first ten are cited: with any
+    /// collected source off, a person with more questions than citations is left out, as their totals can't be
+    /// shown to come only from sources left on.
     public static func people(_ people: [PersonWaiting], sources: [String: Category], enabled: Set<Category>) -> Payload {
-        pack(people.filter { cited($0.eventIDs, sources, enabled) }.map { (PersonView($0), category($0.eventIDs, sources)) })
+        let complete = enabled.isSuperset(of: Category.collected)
+        let allowed = people.filter { cited($0.eventIDs, sources, enabled) && (complete || $0.questions <= $0.eventIDs.count) }
+        return pack(allowed.map { (PersonView($0), categories($0.eventIDs, sources)) })
     }
 
     public static func promises(_ promises: [Commitment], sources: [String: Category], enabled: Set<Category>) -> Payload {
-        pack(promises.filter { cited([$0.eventID], sources, enabled) }.map { (PromiseView($0), category([$0.eventID], sources)) })
+        pack(promises.filter { cited([$0.eventID], sources, enabled) }.map { (PromiseView($0), categories([$0.eventID], sources)) })
     }
 
     public static func done(_ items: [DoneItem], sources: [String: Category], enabled: Set<Category>) -> Payload {
@@ -153,30 +164,43 @@ public enum ClaudeTools {
             cited(item.eventIDs, sources, enabled) && (item.scheduleIDs.isEmpty || enabled.contains(.calendar))
         }
         return pack(allowed.map { item in
-            (DoneView(item), item.eventIDs.isEmpty ? .calendar : category(item.eventIDs, sources))
+            (DoneView(item), categories(item.eventIDs, sources).union(item.scheduleIDs.isEmpty ? [] : [.calendar]))
         })
     }
 
     public static func memories(_ notes: [MemoryNote], enabled: Set<Category>) -> Payload {
         guard enabled.contains(.memory) else { return .refused("The owner has switched memory off.") }
-        return pack(notes.map { (NoteView($0), .memory) })
+        // Quarantined notes are text the injection scanner flagged: never used in a reply, so never sent.
+        return pack(notes.filter { $0.origin != .quarantined }.map { (NoteView($0), [.memory]) })
     }
 
     public static func health(_ status: CoreStatus, enabled: Set<Category>) -> Payload {
         guard enabled.contains(.health) else { return .refused("The owner has switched source health off.") }
-        return pack(status.sources.map { (HealthView($0), .health) })
+        return pack(status.sources.map { (HealthView($0), [.health]) })
     }
 
     private static func cited(_ ids: [String], _ sources: [String: Category], _ enabled: Set<Category>) -> Bool {
         ids.allSatisfy { id in sources[id].map(enabled.contains) ?? false }
     }
 
-    private static func category(_ ids: [String], _ sources: [String: Category]) -> Category {
-        ids.first.flatMap { sources[$0] } ?? .messages
+    private static func categories(_ ids: [String], _ sources: [String: Category]) -> Set<Category> {
+        Set(ids.compactMap { sources[$0] })
     }
 
-    /// Items encoded one by one, as many as fit in `Server.maxResultBytes`.
-    private static func pack(_ items: [(any Encodable, Category)]) -> Payload {
+    /// A name to show for a person: never a phone number or email address, which stay on the Mac.
+    static func safeName(_ name: String?) -> String? {
+        guard var name = name?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return nil }
+        if let bracket = name.firstIndex(of: "<") {
+            name = name[..<bracket].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        }
+        let digits = name.unicodeScalars.filter(CharacterSet.decimalDigits.contains).count
+        guard !name.isEmpty, !name.contains("@"), digits < 5 else { return nil }
+        return name
+    }
+
+    /// Items encoded one by one, as many as fit in three quarters of `Server.maxResultBytes`, leaving room for the
+    /// escaping in the message that carries them. Each item counts once for every category it draws on.
+    private static func pack(_ items: [(any Encodable, Set<Category>)]) -> Payload {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -184,11 +208,13 @@ public enum ClaudeTools {
         var parts: [String] = []
         var size = head.utf8.count + 40
         var counts: [Category: Int] = [:]
-        for (item, category) in items {
-            guard let data = try? encoder.encode(item), size + data.count + 1 <= Server.maxResultBytes else { break }
+        for (item, categories) in items {
+            guard let data = try? encoder.encode(item), size + data.count + 1 <= Server.maxResultBytes * 3 / 4 else { break }
             parts.append(String(decoding: data, as: UTF8.self))
             size += data.count + 1
-            counts[category, default: 0] += 1
+            for category in categories {
+                counts[category, default: 0] += 1
+            }
         }
         let text = head + parts.joined(separator: ",") + #"],"left_out":\#(items.count - parts.count)}"#
         return Payload(text: text, counts: counts, isError: false)
@@ -284,15 +310,34 @@ public enum ClaudeTools {
             }
         }
 
-        /// The answer to a call, counted against the run's limits; a result over them is withheld.
-        public mutating func result(id: RPCID, _ payload: Payload) -> Data {
-            let size = payload.text.utf8.count
-            guard size <= Self.maxResultBytes, bytes + size <= Self.maxTotalBytes else {
-                return Self.result(id, "That result is larger than Aegis sends for one request.", isError: true)
+        /// The answer to a call, as the message that carries it, and the items it would send.
+        public struct Reply: Equatable, Sendable {
+            public let message: Data
+            public let counts: [Category: Int]
+
+            public init(message: Data, counts: [Category: Int]) {
+                self.message = message
+                self.counts = counts
             }
-            bytes += size
-            counts.merge(payload.counts, uniquingKeysWith: +)
-            return Self.result(id, payload.text, isError: payload.isError)
+        }
+
+        /// The answer to a call, measured as the whole message against the run's limits; a result over them is
+        /// withheld. Its items count as read only once `sent(_:)` confirms it went.
+        public mutating func result(id: RPCID, _ payload: Payload) -> Reply {
+            let message = Self.result(id, payload.text, isError: payload.isError)
+            guard message.count <= Self.maxResultBytes, bytes + message.count <= Self.maxTotalBytes else {
+                return Reply(
+                    message: Self.result(id, "That result is larger than Aegis sends for one request.", isError: true),
+                    counts: [:]
+                )
+            }
+            bytes += message.count
+            return Reply(message: message, counts: payload.counts)
+        }
+
+        /// The reply went to Claude: its items join the read log.
+        public mutating func sent(_ reply: Reply) {
+            counts.merge(reply.counts, uniquingKeysWith: +)
         }
 
         private static func result(_ id: RPCID, _ text: String, isError: Bool) -> Data {
@@ -324,17 +369,17 @@ private struct ItemView: Encodable {
     let time: Date
     let title: String?
     let text: String
-    let thread: String?
 
+    /// No handles, recipients or thread IDs (a chat's ID can hold the other person's address).
     init(_ event: Event) {
         id = event.id
         source = event.source.rawValue
         direction = event.direction.rawValue
-        from = event.senderContact?.name ?? event.sender
+        from = SenderDisplay.isOutgoing(event) ? "you"
+            : event.senderContact?.name ?? ClaudeTools.safeName(event.source == .notification ? event.appID ?? event.sender : event.sender)
         time = event.eventTime
         title = event.title.map { String($0.prefix(200)) }
         text = String(event.body.prefix(ClaudeTools.maxText))
-        thread = event.threadID
     }
 }
 
@@ -374,11 +419,13 @@ private struct BriefView: Encodable {
     let text: String
     let priority: String
     let person: String?
+    let ids: [String]
 
     init(_ item: Brief.Item) {
         text = item.text
         priority = item.priority.rawValue
-        person = item.person?.name
+        person = ClaudeTools.safeName(item.person?.name)
+        ids = item.eventIDs
     }
 }
 
@@ -390,7 +437,7 @@ private struct PersonView: Encodable {
     let ids: [String]
 
     init(_ waiting: PersonWaiting) {
-        person = waiting.person.name
+        person = ClaudeTools.safeName(waiting.person.name) ?? "someone"
         waitingSince = waiting.waitingSince
         questions = waiting.questions
         latest = String(waiting.latest.prefix(ClaudeTools.maxText))
@@ -403,9 +450,11 @@ private struct PromiseView: Encodable {
     let promise: String
     let due: Date?
     let madeAt: Date
+    let id: String
 
     init(_ commitment: Commitment) {
-        person = commitment.person
+        id = commitment.eventID
+        person = ClaudeTools.safeName(commitment.person) ?? "someone"
         promise = commitment.text
         due = commitment.due
         madeAt = commitment.madeAt
@@ -416,8 +465,10 @@ private struct DoneView: Encodable {
     let kind: String
     let text: String
     let time: Date
+    let ids: [String]
 
     init(_ item: DoneItem) {
+        ids = item.eventIDs
         kind = item.kind.rawValue
         text = item.text
         time = item.time

@@ -28,7 +28,9 @@ struct ClaudeReads: ClaudeToolSource {
         case let .schedule(daysBack, daysAhead):
             let start = Calendar.current.startOfDay(for: Date())
             let from = Calendar.current.date(byAdding: .day, value: -daysBack, to: start) ?? start
-            let to = Calendar.current.date(byAdding: .day, value: daysAhead + 1, to: start) ?? start
+            // A daylight-saving change can lengthen the days; AegisCore takes at most `maxScheduleDays` × 24 hours.
+            let end = Calendar.current.date(byAdding: .day, value: daysAhead + 1, to: start) ?? start
+            let to = min(end, from.addingTimeInterval(Double(CoreRequest.maxScheduleDays) * 86400))
             guard case let .schedule(occurrences, reminders) = await service.handle(.schedule(from: from, to: to)) else {
                 return Self.unavailable
             }

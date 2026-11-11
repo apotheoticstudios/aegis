@@ -198,15 +198,23 @@ actor ClaudeCodeRunner {
             guard var server = link.server, let source = link.source else {
                 return await send(ClaudeCode.controlError(requestID: requestID), to: link.pipes, until: link.deadline)
             }
-            let answer: Data = switch server.handle(message) {
-            case let .reply(reply): reply
-            case let .call(id, call): await server.result(id: id, source.fetch(call, enabled: server.enabled))
+            let reply: ClaudeTools.Server.Reply
+            switch server.handle(message) {
+            case let .reply(message):
+                reply = .init(message: message, counts: [:])
+            case let .call(id, call):
+                guard let payload = await fetch(call, from: source, enabled: server.enabled, until: link.deadline) else {
+                    return stopped(link.deadline) ?? .cancelled
+                }
+                reply = server.result(id: id, payload)
             }
+            if let failed = await send(ClaudeCode.mcpResponse(requestID: requestID, reply.message), to: link.pipes, until: link.deadline) {
+                link.server = server
+                return failed
+            }
+            server.sent(reply)
             link.server = server
-            if let stopped = stopped(link.deadline) {
-                return stopped
-            }
-            return await send(ClaudeCode.mcpResponse(requestID: requestID, answer), to: link.pipes, until: link.deadline)
+            return nil
         case let .denied(requestID):
             return await send(ClaudeCode.controlError(requestID: requestID), to: link.pipes, until: link.deadline)
         case let .finished(outcome):
@@ -216,6 +224,24 @@ actor ClaudeCodeRunner {
             }
             return .outcome(outcome)
         }
+    }
+
+    /// A tool's data, or nil once Stop or the deadline comes first: a fetch that never returns can't hold the run.
+    /// Claude Code may cancel a tool request it no longer needs; its late answer is dropped by Claude Code, and the
+    /// fetch is bounded by the run's deadline.
+    private func fetch(
+        _ call: ClaudeTools.Call, from source: any ClaudeToolSource, enabled: Set<ClaudeTools.Category>, until deadline: Date
+    ) async -> ClaudeTools.Payload? {
+        let box = PayloadBox()
+        let work = Task { await box.set(source.fetch(call, enabled: enabled)) }
+        defer { work.cancel() }
+        while stopped(deadline) == nil {
+            if let payload = await box.value {
+                return payload
+            }
+            do { try await Task.sleep(for: .milliseconds(20)) } catch { return nil }
+        }
+        return nil
     }
 
     /// The read log: what the run sent Claude, as counts by category, never content.
@@ -317,4 +343,12 @@ private final class Pipes {
 /// Answers Claude's read tools: the app fetches from AegisCore, and `ClaudeTools` decides what may go.
 protocol ClaudeToolSource: Sendable {
     func fetch(_ call: ClaudeTools.Call, enabled: Set<ClaudeTools.Category>) async -> ClaudeTools.Payload
+}
+
+private actor PayloadBox {
+    private(set) var value: ClaudeTools.Payload?
+
+    func set(_ payload: ClaudeTools.Payload) {
+        value = payload
+    }
 }
