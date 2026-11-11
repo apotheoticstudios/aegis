@@ -99,6 +99,14 @@ private struct UnifiedRenderFixture: BeholderSearching, BeholderGitHubDiscoverin
     }
 
     func inspect(_ login: String) async -> BeholderFinding {
-        await lookup(.github, username: login)
+        if login == "ExampleOther" {
+            return .init(
+                provider: .github,
+                status: .noResult,
+                checkedAt: Date(timeIntervalSince1970: 1_790_000_000),
+                sourceURL: BeholderProvider.github.endpoint(login)
+            )
+        }
+        return await lookup(.github, username: login)
     }
 }

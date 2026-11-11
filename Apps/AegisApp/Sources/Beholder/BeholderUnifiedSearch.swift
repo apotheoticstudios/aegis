@@ -139,9 +139,9 @@ final class BeholderUnifiedSearch {
         case .username:
             let name = BeholderCaseSearch.username(text) ?? ""
             let count = BeholderProvider.automaticSources.filter { $0.supports(name) }.count
-            return "Search retrieves public profiles from the supported automatic sources using this username (up to \(count) checks)."
+            return "Search checks up to \(count) public sources with this username. Sources receive your IP address and app request metadata."
         case .name, .email:
-            return "Search sends this \(kind.rawValue.lowercased()) to GitHub and retrieves up to 20 matching public profiles."
+            return "Search sends this \(kind.rawValue.lowercased()) to GitHub with your IP address and app request metadata, then retrieves up to 20 public profiles."
         case .phone: return "Phone search checks the saved references and account evidence in this case."
         case .ip: return "IP search shows local address context."
         }

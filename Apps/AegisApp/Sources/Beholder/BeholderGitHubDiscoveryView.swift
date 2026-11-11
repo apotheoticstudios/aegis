@@ -68,7 +68,7 @@ struct BeholderGitHubDiscoveryView: View {
                 HStack {
                     ProgressView().controlSize(.small)
                     Text(discovery.page == nil ? "Searching GitHub…" :
-                        "Completed \(discovery.profiles.count) of \(discovery.page?.hits.count ?? 0) profile checks")
+                        "Completed \(discovery.checkedCount) of \(discovery.page?.hits.count ?? 0) profile checks")
                         .hudType(.caption)
                 }
             } else if discovery.page == nil, discovery.problem == nil {
@@ -92,15 +92,10 @@ struct BeholderGitHubDiscoveryView: View {
                     Text("No public search hits were returned on this page. This does not establish that no accounts exist.")
                         .hudType(.caption)
                 }
-                ForEach(page.hits) { hit in
-                    if discovery.automatic {
-                        if let finding = discovery.profiles[hit.login] {
-                            profile(finding, login: hit.login, request: page.request)
-                        } else {
-                            Text("@" + hit.login + (discovery.searching ? " · retrieving profile…" : " · profile not retrieved"))
-                                .hudType(.caption).foregroundStyle(HUD.inkMuted)
-                        }
-                    } else {
+                if discovery.automatic {
+                    automaticResults(page)
+                } else {
+                    ForEach(page.hits) { hit in
                         HStack {
                             Text("@" + hit.login).hudType(.label).textSelection(.enabled)
                             Text("Public User · uninspected search hit").hudType(.caption).foregroundStyle(HUD.inkMuted)
@@ -117,6 +112,42 @@ struct BeholderGitHubDiscoveryView: View {
             }
 
         }.padding(.trailing, HUD.space2)
+    }
+
+    private func automaticResults(_ page: BeholderGitHubDiscovery.Page) -> some View {
+        let found = discovery.foundHits.count
+        return VStack(alignment: .leading, spacing: HUD.space3) {
+            Text(
+                "\(found) public \(found == 1 ? "profile" : "profiles") retrieved · \(discovery.checkedCount) of \(page.hits.count) checks completed"
+            )
+            .hudType(.label)
+            if discovery.unresolvedCount > 0 {
+                Text("\(discovery.unresolvedCount) checks could not establish a result. See Other checks for details.")
+                    .hudType(.caption).foregroundStyle(HUD.warn)
+            }
+            ForEach(discovery.foundHits) { hit in
+                if let finding = discovery.profiles[hit.login] {
+                    profile(finding, login: hit.login, request: page.request)
+                }
+            }
+            if !discovery.pendingHits.isEmpty {
+                Text(discovery.searching ? "\(discovery.pendingHits.count) profiles still to check…" :
+                    "\(discovery.pendingHits.count) profiles were not retrieved. Search again to start a new check.")
+                    .hudType(.caption).foregroundStyle(HUD.inkMuted)
+            }
+            if !discovery.otherHits.isEmpty {
+                DisclosureGroup("Other checks · \(discovery.otherHits.count)") {
+                    ForEach(discovery.otherHits) { hit in
+                        if let finding = discovery.profiles[hit.login] {
+                            profile(finding, login: hit.login, request: page.request)
+                        } else {
+                            Text("@" + hit.login + " · profile could not be validated or saved")
+                                .hudType(.caption).foregroundStyle(HUD.warn)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func profile(_ finding: BeholderFinding, login: String, request: BeholderGitHubDiscovery.Request) -> some View {
