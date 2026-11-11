@@ -7,7 +7,7 @@ struct BeholderGitHubDiscoveryView: View {
     var embedded = false
     let onReview: (BeholderPeopleView.Target) -> Void
     @State private var personID: UUID?
-    @State private var saveNote: String?
+    @State private var saveNotes: [String: String] = [:]
 
     var body: some View {
         Group {
@@ -27,6 +27,7 @@ struct BeholderGitHubDiscoveryView: View {
                 self.personID = nil
             }
         }
+        .onChange(of: research.cancellationID) { saveNotes.removeAll() }
         .beholderStyle()
     }
 
@@ -53,7 +54,7 @@ struct BeholderGitHubDiscoveryView: View {
                     )
                     .hudType(.caption).foregroundStyle(HUD.inkMuted)
                     HStack {
-                        Button("Search GitHub") { discovery.search(); saveNote = nil }
+                        Button("Search GitHub") { discovery.search(); saveNotes.removeAll() }
                             .buttonStyle(HUDPlateStyle(kind: .primary)).disabled(discovery.searching || discovery.inspecting != nil)
                         if discovery.searching || discovery.inspecting != nil {
                             ProgressView().controlSize(.small)
@@ -101,7 +102,7 @@ struct BeholderGitHubDiscoveryView: View {
                             Text("Public User · uninspected search hit").hudType(.caption).foregroundStyle(HUD.inkMuted)
                             Spacer()
                             Button(discovery.inspecting == hit.login ? "Inspecting…" : "Inspect GitHub profile") {
-                                discovery.inspect(hit, into: research); saveNote = nil
+                                discovery.inspect(hit, into: research); saveNotes.removeAll()
                             }.buttonStyle(HUDChipStyle()).disabled(discovery.inspecting != nil || discovery.searching)
                         }.padding(HUD.space2).background(HUD.surface)
                     }
@@ -181,8 +182,8 @@ struct BeholderGitHubDiscoveryView: View {
                         guard let personID else { return }
                         do {
                             let added = try research.savePossible(personID: personID, username: login, finding: finding)
-                            saveNote = added ? "Saved as possible. Review the evidence in People." : "The existing assessment was kept."
-                        } catch { saveNote = (error as? BeholderPeople.Problem)?.message ?? "The account could not be saved." }
+                            saveNotes[login] = added ? "Saved as possible. Review the evidence in People." : "The existing assessment was kept."
+                        } catch { saveNotes[login] = (error as? BeholderPeople.Problem)?.message ?? "The account could not be saved." }
                     }.disabled(personID == nil)
                     Button("Review account link…") {
                         onReview(.init(username: login, finding: finding, preferredPersonID: personID))
@@ -197,7 +198,7 @@ struct BeholderGitHubDiscoveryView: View {
                     Text("Create a person in People to collect this account for review.").hudType(.caption)
                 }
             }
-            if let saveNote {
+            if let saveNote = saveNotes[login] {
                 Text(saveNote).hudType(.caption).foregroundStyle(HUD.primary)
             }
         }.padding(HUD.space3).background(HUD.surface)

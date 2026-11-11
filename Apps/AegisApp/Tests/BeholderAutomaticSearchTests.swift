@@ -46,6 +46,25 @@ final class BeholderAutomaticSearchTests: XCTestCase {
         XCTAssertEqual(afterLocal, afterEmail)
     }
 
+    func testNameReinterpretationPreparesLocallyUntilSearch() async throws {
+        let client = AutomaticSearchFixture(), model = BeholderModel(client: client, discoveryClient: client)
+        let search = model.unifiedSearch
+        search.query = "Example"; search.run(in: model)
+        try await finish { model.searching }
+        let before = await client.calls
+        search.interpret(as: .name); search.prepare()
+        try await Task.sleep(for: .milliseconds(10))
+        let after = await client.calls
+        XCTAssertEqual(after, before)
+        XCTAssertEqual(search.prepared?.kind, .name)
+        XCTAssertTrue(search.requestSummary.contains("GitHub"))
+        XCTAssertNil(model.githubDiscovery.page)
+        search.run(in: model)
+        try await finish { model.githubDiscovery.searching }
+        let searched = await client.calls
+        XCTAssertEqual(searched, [before[0], 1, 20])
+    }
+
     func testOversizedPageCannotStartProfileRequests() async throws {
         let client = AutomaticSearchFixture(count: 21)
         let model = BeholderModel(discoveryClient: client)

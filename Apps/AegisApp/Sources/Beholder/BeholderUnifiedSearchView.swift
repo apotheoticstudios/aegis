@@ -105,7 +105,7 @@ struct BeholderUnifiedSearchView: View {
                             HStack {
                                 Text("Search also checked the name locally.").hudType(.caption).foregroundStyle(HUD.inkMuted)
                                 Spacer()
-                                Button("Treat as name") { search.interpret(as: .name); search.run(in: research) }
+                                Button("Treat as name") { search.interpret(as: .name); search.prepare() }
                                     .buttonStyle(HUDChipStyle())
                             }
                             BeholderLocalResultsView(
