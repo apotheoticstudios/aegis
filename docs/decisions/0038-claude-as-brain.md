@@ -1,6 +1,6 @@
 # ADR-0038: Claude as Aegis's brain, through the owner's Claude plan
 
-- **Status:** Proposed (owner's design choices, 2026-11-11; cross-vendor safety review folded in the same day). One open decision (§6). Accepted when the owner settles it; build stage 1 then starts.
+- **Status:** Accepted (owner's design choices and §6's decision, pure C, 2026-11-11; cross-vendor safety review folded in the same day).
 - **Supersedes in part:** ADR-0017 (what may go to Claude) and AGENTS.md principles 1 and 4, for the Claude brain only. ADR-0031's tiers, plan card, never-list and action log still apply in full.
 
 ## Context
@@ -49,12 +49,12 @@ The owner wants to choose Claude instead of the local models as Aegis's brain, u
 - **Limits per request:** tool calls, actions, bytes read and bytes returned are capped, with a deadline; results carry collected text marked as data, never as instructions.
 - **Accounting:** each answer in CHAT shows what was sent to Claude (counts by source, covering both tool results and Aegis-built prompts, including requests that fail). The action log and a read log keep codes and counts only.
 
-### 6. Who an action is for (the open decision)
-The owner chose **option C: Claude uses Aegis's normal tiers**. Because Claude also reads collected content, a crafted email or message could try to steer it.
+### 6. Who an action is for: pure C (owner's decision)
+The owner chose **pure C: Claude's actions use Aegis's normal tiers**, so automatic-tier actions run at once and the rest show confirmation cards.
 
-- **Proposed default: C with the owner-request guard.** Before Claude sees any collected content in a turn, Aegis parses the owner's own words (typed or spoken, never text Claude writes) with the existing command grammar into a bounded authorisation: the complete action, its arguments and how many times it may run. A Claude action that matches that authorisation exactly runs at its normal tier. Anything else — an action the owner didn't ask for, different arguments, a repeat, or a value taken from collected content — becomes an exact confirmation card showing everything that will happen. Claude cannot write the owner's words or approve its own card. For ordinary commands ("open Safari", "remind me at 5pm to call the office") this behaves like C.
-- **Alternative: pure C.** Claude's actions always use their normal tier. Not the default, because collected content could then trigger automatic-tier actions, which principle 4 forbids. The owner may still choose it; this ADR then records that waiver.
-- Either way, model-picked actions follow ADR-0031's confirmation rule where the guard doesn't authorise them, the never-list cannot be unlocked, and every step is in the action log.
+- **Waiver recorded.** Claude also reads collected content, so a crafted email or message could steer it into an automatic-tier action the owner didn't ask for (for example opening a website with details in the link). AGENTS.md principle 4 is waived for this, with the owner's informed choice on 2026-11-11, and only with the Claude brain chosen. ADR-0031's rule that model-picked actions need confirmation does not apply to Claude's single actions.
+- **What still holds:** the never-list cannot be unlocked; actions go only through the resolver and execution pipeline (§5), so no raw links, schemes or file paths; more than one action is still a plan card; messages are still confirmed; the per-request caps apply; Claude cannot approve its own cards; every step is in the action log.
+- **Rejected: the owner-request guard** (actions the owner's own words didn't authorise become cards). It stays the design to add if the owner later wants it: Aegis would parse the owner's words into a bounded authorisation before Claude reads collected content.
 
 ### 7. Privacy
 - What Claude reads goes to Anthropic under the owner's Claude account and its data settings, including other people's words in the owner's messages and email. Turning off training use (recommended in setup) does not mean Anthropic keeps nothing: its usual retention applies.
@@ -64,7 +64,7 @@ The owner chose **option C: Claude uses Aegis's normal tiers**. Because Claude a
 
 ## Consequences
 
-- AGENTS.md principle 1 gains an allowed network use once this is accepted: with the Claude brain chosen and the panel open, the owner's requests and the data Aegis reads for them go to Anthropic through Claude Code under the owner's plan. Principle 4 is kept by §6's guard (or waived by the owner's explicit choice of pure C).
+- AGENTS.md principle 1 gains an allowed network use: with the Claude brain chosen and the panel open, the owner's requests and the data Aegis reads for them go to Anthropic through Claude Code under the owner's plan. Principle 4 carries the §6 waiver.
 - Usage counts against the owner's plan limits. Fallback to local keeps Aegis working when limits are hit.
 - Prompts, parsers and tests must work with both brains; tests use a stand-in for Claude Code and synthetic fixtures only, including adversarial messages.
 - Reviews treat as blocking: a connector operation that bypasses the resolver or `ActionPolicy`, writes data, or opens the network; any raw stream written to disk; any outbound path outside the category boundary.
@@ -74,6 +74,6 @@ The owner chose **option C: Claude uses Aegis's normal tiers**. Because Claude a
 
 1. Claude Code bridge: the fixed command line and environment, configuration check, sign-in check, in-memory streaming, model and effort picker, structured error handling, fallback without actions.
 2. Contract change, then the broker and connector with read tools, the outbound category boundary and the read log.
-3. Action tools through the resolver, plan card and `ActionPolicy`, operation IDs, §6's decision, and adversarial tests (injected instructions in synthetic messages never cause an action without a card under the guard).
+3. Action tools through the resolver, plan card and `ActionPolicy`, operation IDs, and adversarial tests (injected instructions in synthetic messages never reach the never-list, a raw link or scheme, a second unplanned action or an unconfirmed message).
 4. The wizard's Brain step and Settings switch.
 5. Switching the owner-started jobs (chat, asks, planning, prep, drafts) to the chosen brain.

@@ -49,3 +49,5 @@ The owner asked to use their existing ChatGPT plan rather than only API keys, an
 - At most two earlier turns are sent.
 
 **Residual risk:** a task's agent can still read files its own permissions allow, and what it reads goes to OpenAI as context. Its input is only the owner's gated words, and the sandbox confines its writes.
+
+**ADR-0038 (2026-11-11):** with the Claude brain chosen, Claude runs through the owner's plan with data access and Aegis's tools; that ADR governs it. This ADR still governs the hand-off and the ChatGPT plan.
