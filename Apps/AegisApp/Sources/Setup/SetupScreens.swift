@@ -14,6 +14,7 @@ struct SetupScreen: View {
         switch setup.wizard.current {
         case .welcome: WelcomeScreen()
         case .mac: MacScreen(setup: setup)
+        case .brain: BrainScreen()
         case .storage: StorageScreen(setup: setup)
         case .schedule: ScheduleScreen(setup: setup)
         case .permissions: PermissionsScreen()

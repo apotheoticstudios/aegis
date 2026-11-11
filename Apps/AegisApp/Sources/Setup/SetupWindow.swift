@@ -371,6 +371,7 @@ extension SetupStep {
         switch self {
         case .welcome: "Welcome"
         case .mac: "Your Mac"
+        case .brain: "Brain"
         case .storage: "Storage"
         case .schedule: "Schedule"
         case .permissions: "Permissions"
@@ -398,6 +399,7 @@ extension SetupStep {
         switch self {
         case .welcome: "Aegis is a private assistant that lives on this Mac. Setup takes a few minutes."
         case .mac: "Found automatically. It decides which models and voices fit."
+        case .brain: "What Aegis thinks with: its own models on this Mac, or Claude through your Claude plan."
         case .storage: "How much space Aegis may use. Models, memory, voice and addons all live inside it."
         case .schedule: "When your brief should be ready, and when Aegis should keep still."
         case .permissions: "macOS keeps each kind of data behind its own permission. Grant them once."

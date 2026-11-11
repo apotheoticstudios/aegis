@@ -28,6 +28,7 @@ final class SetupTests: XCTestCase {
         XCTAssertEqual(setup.wizard.steps, SetupStep.offered)
         setup.wizard.next()
         setup.wizard.next()
+        setup.wizard.next()
         setup.wizard.storageGB = 60
 
         var later = Self.sampleMac
@@ -125,5 +126,18 @@ final class SetupTests: XCTestCase {
         XCTAssertTrue(shown.contains("6") && shown.contains("30"), shown)
         XCTAssertEqual(SetupText.model(.forMemory(24 << 30)), "Qwen3.5-9B")
         XCTAssertEqual(SetupText.model(.forMemory(16 << 30)), "Qwen3.5-4B")
+    }
+
+    /// The Brain step's choice (ADR-0038): this Mac until changed, kept on the Mac, and the step follows the Mac's.
+    func testTheBrainIsThisMacUntilChanged() {
+        XCTAssertEqual(Brain.current, .local)
+        Brain.current = .claude
+        XCTAssertEqual(Brain.current, .claude)
+        Brain.current = .local
+        XCTAssertEqual(SetupStep.offered.firstIndex(of: .brain), SetupStep.offered.firstIndex(of: .mac).map { $0 + 1 })
+        XCTAssertNil(Brain.status(.ready([])))
+        XCTAssertTrue(Brain.status(.outcome(.signedOut))?.contains("claude auth login") == true)
+        XCTAssertNotNil(Brain.status(.unavailable))
+        XCTAssertEqual(ClaudeTools.Category.allCases.map(\.label).count, Set(ClaudeTools.Category.allCases.map(\.label)).count)
     }
 }

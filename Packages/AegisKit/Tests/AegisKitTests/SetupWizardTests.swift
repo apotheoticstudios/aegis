@@ -13,7 +13,7 @@ final class SetupWizardTests: XCTestCase {
 
     func testOfferedScreensAreTheDesignsSixteen() {
         XCTAssertEqual(SetupStep.offered, [
-            .welcome, .mac, .storage, .schedule, .permissions, .sources, .home, .control, .addons, .privacy, .personality,
+            .welcome, .mac, .brain, .storage, .schedule, .permissions, .sources, .home, .control, .addons, .privacy, .personality,
             .voice, .interface, .silence, .tuneUp, .ready,
         ])
     }
@@ -30,7 +30,7 @@ final class SetupWizardTests: XCTestCase {
         XCTAssertEqual(wizard.current, .mac)
         XCTAssertEqual(wizard.reachedPosition, 3, "going back keeps what was reached")
         wizard.go(to: 3)
-        XCTAssertEqual(wizard.current, .schedule)
+        XCTAssertEqual(wizard.current, .storage)
     }
 
     func testRecommendedGoesToTheTuneUpAndOptionsKeepOnlyChanges() throws {
@@ -55,13 +55,15 @@ final class SetupWizardTests: XCTestCase {
 
         wizard.next()
         wizard.next()
+        XCTAssertEqual(wizard.current, .brain)
+        wizard.next()
         XCTAssertEqual(wizard.current, .storage)
-        XCTAssertEqual(wizard.position, 2)
+        XCTAssertEqual(wizard.position, 3)
         wizard.storageGB = 80
         wizard.next()
         wizard.back()
         wizard.back()
-        XCTAssertEqual(wizard.current, .mac)
+        XCTAssertEqual(wizard.current, .brain)
         XCTAssertEqual(wizard.storageGB, 80)
     }
 
@@ -135,7 +137,7 @@ final class SetupWizardTests: XCTestCase {
 
     func testASavedScreenNoLongerShownResumesAtTheNextOne() throws {
         var wizard = SetupWizard(mac: mac())
-        for _ in 0 ..< 6 {
+        for _ in 0 ..< 7 {
             wizard.next()
         }
         XCTAssertEqual(wizard.current, .home)
@@ -152,6 +154,6 @@ final class SetupWizardTests: XCTestCase {
         let old = #"{"answers":{},"finished":false,"mac":\#(saved),"step":"storage"}"#
         let wizard = try JSONDecoder().decode(SetupWizard.self, from: Data(old.utf8))
         XCTAssertEqual(wizard.current, .storage)
-        XCTAssertEqual(wizard.reachedPosition, 2)
+        XCTAssertEqual(wizard.reachedPosition, 3)
     }
 }

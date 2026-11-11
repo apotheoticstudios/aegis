@@ -3,10 +3,11 @@ import Foundation
 /// The setup wizard's screens, in DESIGN.md's order: the Mac first (it decides what's offered), permissions before
 /// what they unlock, personality before voice, addons before the tune-up (so it counts them), the tune-up last.
 public enum SetupStep: String, Codable, Sendable, CaseIterable {
-    case welcome, mac, storage, schedule, permissions, sources, home, control, addons, privacy, personality, voice,
+    case welcome, mac, brain, storage, schedule, permissions, sources, home, control, addons, privacy, personality, voice,
          interface, silence, tuneUp, ready
 
-    /// The screens the wizard shows: all sixteen of the design system's (owner's choice, #65).
+    /// The screens the wizard shows: all sixteen of the design system's (owner's choice, #65), and the Brain step
+    /// after the Mac's: this Mac's models or Claude through the owner's plan (ADR-0038).
     public static let offered = allCases
 
     var rank: Int {
