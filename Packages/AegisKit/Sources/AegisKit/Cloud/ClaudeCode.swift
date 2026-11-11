@@ -61,24 +61,21 @@ public enum ClaudeCode {
         ]
     }
 
-    /// Variables that could bill an API key, send requests elsewhere or load other configuration, set empty so values
-    /// in launchd's environment can't reach the job.
-    public static let blanked = [
-        "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_MODEL",
-        "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
-        "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_SIMPLE", "NODE_OPTIONS",
-    ]
-
     /// The job's whole environment. The real home folder and account name are how Claude Code finds the owner's
-    /// sign-in in the Keychain; nothing else is inherited, and nonessential traffic is off.
+    /// sign-in in the Keychain; nonessential traffic is off. No API key, endpoint, proxy or provider switch.
     public static func environment(home: String, user: String, temporary: String, language: String) -> [String: String] {
-        var values = Dictionary(uniqueKeysWithValues: blanked.map { ($0, "") })
-        values.merge([
+        [
             "HOME": home, "USER": user, "LOGNAME": user, "TMPDIR": temporary, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "LANG": language, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "1",
             "DISABLE_ERROR_REPORTING": "1", "DISABLE_BUG_COMMAND": "1", "DISABLE_AUTOUPDATER": "1",
-        ]) { $1 }
-        return values
+        ]
+    }
+
+    /// What launchd runs: `env -i` first, because launchd adds a job's variables to its own environment rather than
+    /// replacing it, so only `environment` reaches Claude Code.
+    public static func command(executable: String, choice: Choice, system: String, environment: [String: String]) -> [String] {
+        ["/usr/bin/env", "-i"] + environment.sorted { $0.key < $1.key }.map { $0.key + "=" + $0.value }
+            + arguments(executable: executable, choice: choice, system: system)
     }
 
     /// Asked before any prompt: the account and models, the MCP servers loaded, and the settings sources applied.
@@ -196,51 +193,63 @@ public enum ClaudeCode {
         private mutating func control(_ response: [String: Any]) -> Event? {
             guard let id = response["request_id"] as? String, pending.remove(id) != nil else { return nil }
             guard response["subtype"] as? String == "success" else { return finish(.failed("handshake")) }
+            // A missing or renamed field is refused, never read as empty.
             let body = dictionary(response["response"])
             switch id {
             case "aegis-init":
-                let account = dictionary(body["account"])
+                guard let account = body["account"] as? [String: Any], let commands = array(body["commands"]),
+                      let offered = array(body["models"])
+                else { return finish(.refused(["schema"])) }
                 guard account["apiProvider"] as? String == "firstParty" else { return finish(.refused(["provider"])) }
                 if let key = account["apiKeySource"] as? String, key != "none" {
                     return finish(.refused(["api_key"]))
                 }
-                guard let token = account["tokenSource"] as? String, !token.isEmpty, token != "none" else {
+                // A subscription sign-in names its plan; anything else isn't the owner's plan.
+                guard let plan = (account["subscription"] ?? account["subscriptionType"]) as? String, !plan.isEmpty else {
                     return finish(.signedOut)
                 }
-                guard list(body["commands"]).isEmpty else { return finish(.refused(["commands"])) }
-                models = list(body["models"]).compactMap { item in
+                guard commands.isEmpty else { return finish(.refused(["commands"])) }
+                models = offered.compactMap { item in
                     let entry = dictionary(item)
                     guard let value = entry["value"] as? String, Choice(model: value, effort: .medium).isValid else { return nil }
                     return Model(value: value, name: entry["displayName"] as? String ?? value)
                 }
             case "aegis-mcp":
-                guard Set(names(body["mcpServers"])).isSubset(of: servers) else { return finish(.refused(["mcp_servers"])) }
+                guard let loaded = array(body["mcpServers"]) else { return finish(.refused(["schema"])) }
+                guard Set(names(loaded)).isSubset(of: servers) else { return finish(.refused(["mcp_servers"])) }
             default:
-                // Any settings source, managed policy included, could add hooks or plugins.
-                guard list(body["sources"]).isEmpty else { return finish(.refused(["settings"])) }
+                // Any settings source or setting, managed policy included, could add hooks or plugins.
+                guard let sources = array(body["sources"]), let effective = body["effective"] as? [String: Any] else {
+                    return finish(.refused(["schema"]))
+                }
+                guard sources.isEmpty, effective.isEmpty else { return finish(.refused(["settings"])) }
             }
             return pending.isEmpty ? .ready(models) : nil
         }
 
         /// Claude Code's own account of what it loaded, checked again as the turn starts.
         private mutating func configuration(_ object: [String: Any]) -> Event? {
+            guard let tools = array(object["tools"]), let loaded = array(object["mcp_servers"]),
+                  let plugins = array(object["plugins"]), let skills = array(object["skills"]),
+                  let commands = array(object["slash_commands"]), let key = object["apiKeySource"] as? String
+            else { return finish(.refused(["schema"])) }
             var problems: [String] = []
-            if !list(object["tools"]).isEmpty {
+            if !tools.isEmpty {
                 problems.append("tools")
             }
-            if !Set(names(object["mcp_servers"])).isSubset(of: servers) {
+            if !Set(names(loaded)).isSubset(of: servers) {
                 problems.append("mcp_servers")
             }
-            if list(object["plugins"]).contains(where: { !(dictionary($0)["source"] as? String ?? "").hasSuffix("@builtin") }) {
+            if plugins.contains(where: { !(dictionary($0)["source"] as? String ?? "").hasSuffix("@builtin") }) {
                 problems.append("plugins")
             }
-            if !list(object["skills"]).isEmpty {
+            if !skills.isEmpty {
                 problems.append("skills")
             }
-            if !list(object["slash_commands"]).isEmpty {
+            if !commands.isEmpty {
                 problems.append("commands")
             }
-            if (object["apiKeySource"] as? String ?? "none") != "none" {
+            if key != "none" {
                 problems.append("api_key")
             }
             if !pending.isEmpty {
@@ -292,12 +301,12 @@ private func dictionary(_ value: Any?) -> [String: Any] {
     value as? [String: Any] ?? [:]
 }
 
-private func list(_ value: Any?) -> [Any] {
-    value as? [Any] ?? []
+private func array(_ value: Any?) -> [Any]? {
+    value as? [Any]
 }
 
-private func names(_ value: Any?) -> [String] {
-    list(value).map { ($0 as? String) ?? (dictionary($0)["name"] as? String ?? "?") }
+private func names(_ items: [Any]) -> [String] {
+    items.map { ($0 as? String) ?? (dictionary($0)["name"] as? String ?? "?") }
 }
 
 private func truth(_ value: Any?) -> Bool {

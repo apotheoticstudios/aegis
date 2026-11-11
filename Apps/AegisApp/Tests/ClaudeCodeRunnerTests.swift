@@ -7,16 +7,16 @@ final class ClaudeCodeRunnerTests: XCTestCase {
     private static let canary = "CANARY-7f3a"
 
     /// Answers the handshake and one prompt like Claude Code 2.1, from synthetic data, and refuses to start without
-    /// the rebuilt environment and locked-down flags.
+    /// the rebuilt environment (launchd's own variables, such as XPC_SERVICE_NAME, must not arrive) and locked-down flags.
     private static let standIn = #"""
     #!/bin/sh
-    [ -z "$ANTHROPIC_API_KEY" ] && [ "$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" = 1 ] || exit 3
+    [ -z "$XPC_SERVICE_NAME" ] && [ "$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" = 1 ] || exit 3
     case " $* " in *" --safe-mode --restricted "*) ;; *) exit 4 ;; esac
     reply() { printf '{"type":"control_response","response":{"subtype":"success","request_id":"%s","response":%s}}\n' "$1" "$2"; }
     delta() { printf '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"%s"}}}\n' "$1"; }
     while IFS= read -r line; do
       case "$line" in
-        *aegis-init*) reply aegis-init '{"account":{"tokenSource":"oauth","apiProvider":"firstParty"},"commands":[],"models":[{"value":"opus","displayName":"Opus"}]}' ;;
+        *aegis-init*) reply aegis-init '{"account":{"subscription":"max","apiProvider":"firstParty"},"commands":[],"models":[{"value":"opus","displayName":"Opus"}]}' ;;
         *aegis-mcp*) reply aegis-mcp '{"mcpServers":[]}' ;;
         *aegis-settings*) reply aegis-settings '{"effective":{},"sources":[]}' ;;
         *'"type":"user"'*)
@@ -67,15 +67,42 @@ final class ClaudeCodeRunnerTests: XCTestCase {
         XCTAssertEqual(pieces.onDisk, [false, false])
     }
 
-    /// A job that ends without a result fails at once rather than waiting out the timeout.
+    /// A job that ends without a result fails soon, whatever its exit status, rather than waiting out the timeout.
     func testAJobThatDiesEarlyFailsQuickly() async throws {
-        let dying = folder.appendingPathComponent("dying")
-        try "#!/bin/sh\nexit 7\n".write(to: dying, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dying.path)
+        for status in [7, 0] {
+            let dying = try script("dying\(status)", "exit \(status)")
+            let began = Date()
+            let ending = await ClaudeCodeRunner(executable: dying).run(system: "S", prompt: nil, choice: .standard, timeout: 60) { _ in }
+            guard case .failed = ending else { return XCTFail("exit \(status): \(ending)") }
+            XCTAssertLessThan(Date().timeIntervalSince(began), 10, "exit \(status)")
+        }
+    }
+
+    /// A job that answers the handshake and then stops reading can't hold a long prompt's write past the deadline.
+    func testAStalledJobTimesOutInsteadOfBlocking() async throws {
+        let stalled = try script("stalled", #"""
+        read -r a; read -r b; read -r c
+        reply() { printf '{"type":"control_response","response":{"subtype":"success","request_id":"%s","response":%s}}\n' "$1" "$2"; }
+        reply aegis-init '{"account":{"subscription":"max","apiProvider":"firstParty"},"commands":[],"models":[]}'
+        reply aegis-mcp '{"mcpServers":[]}'
+        reply aegis-settings '{"effective":{},"sources":[]}'
+        sleep 60
+        """#)
+        UserDefaults.aegis.set(false, forKey: "claudeCodeSignedIn")
         let began = Date()
-        let ending = await ClaudeCodeRunner(executable: dying.path).check()
-        guard case .failed = ending else { return XCTFail("\(ending)") }
-        XCTAssertLessThan(Date().timeIntervalSince(began), 10)
+        let ending = await ClaudeCodeRunner(executable: stalled).run(
+            system: "S", prompt: String(repeating: "x", count: 400_000), choice: .standard, timeout: 3
+        ) { _ in }
+        XCTAssertEqual(ending, .timedOut)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 8)
+        XCTAssertTrue(ClaudeCodeRunner.signedIn, "the handshake passed, so the stall was in writing the prompt")
+    }
+
+    private func script(_ name: String, _ body: String) throws -> String {
+        let file = folder.appendingPathComponent(name)
+        try ("#!/bin/sh\n" + body + "\n").write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
+        return file.path
     }
 
     func testMissingClaudeCodeIsUnavailable() async {
@@ -83,7 +110,8 @@ final class ClaudeCodeRunnerTests: XCTestCase {
         XCTAssertEqual(ending, .unavailable)
     }
 
-    /// Regular files in the runner's scratch folders (never the pipes themselves, which would block).
+    /// Regular files in the runner's scratch folders (never the pipes themselves, which would block). What the real
+    /// Claude Code writes under the home folder is checked separately, with the owner signed in (ADR-0038 §4).
     private static func canaryOnDisk() -> Bool {
         let files = FileManager.default
         let scratch = (try? files.contentsOfDirectory(at: files.temporaryDirectory, includingPropertiesForKeys: nil)) ?? []

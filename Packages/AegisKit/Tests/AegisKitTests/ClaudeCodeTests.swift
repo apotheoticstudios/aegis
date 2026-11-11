@@ -37,19 +37,20 @@ final class ClaudeCodeTests: XCTestCase {
         XCTAssertFalse(arguments.contains("--mcp-config"))
     }
 
-    func testEnvironmentIsRebuiltWithOverridesBlanked() {
+    /// Only these variables reach Claude Code: `env -i` drops everything launchd would add.
+    func testEnvironmentIsRebuiltFromNothing() {
         let environment = ClaudeCode.environment(home: "/h", user: "u", temporary: "/t", language: "en_AU.UTF-8")
-        for name in ClaudeCode.blanked {
-            XCTAssertEqual(environment[name], "", name)
-        }
         XCTAssertEqual(environment["HOME"], "/h")
         XCTAssertEqual(environment["USER"], "u")
         XCTAssertEqual(environment["TMPDIR"], "/t")
         XCTAssertEqual(environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"], "1")
-        XCTAssertEqual(Set(environment.keys).subtracting(ClaudeCode.blanked), [
+        XCTAssertEqual(Set(environment.keys), [
             "HOME", "USER", "LOGNAME", "TMPDIR", "PATH", "LANG", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
             "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING", "DISABLE_BUG_COMMAND", "DISABLE_AUTOUPDATER",
         ])
+        let command = ClaudeCode.command(executable: "/bin/claude", choice: .standard, system: "S", environment: ["B": "2", "A": "1"])
+        XCTAssertEqual(Array(command.prefix(5)), ["/usr/bin/env", "-i", "A=1", "B=2", "/bin/claude"])
+        XCTAssertEqual(Array(command.dropFirst(4)), ClaudeCode.arguments(executable: "/bin/claude", choice: .standard, system: "S"))
     }
 
     func testOnlyPlainModelNamesAreAccepted() {
@@ -93,7 +94,7 @@ final class ClaudeCodeTests: XCTestCase {
 
     func testSignedOutEndsAtTheHandshake() {
         var session = ClaudeCode.Session()
-        let events = session.feed(Data(Self.handshake(token: "none").joined()))
+        let events = session.feed(Data(Self.handshake(plan: nil).joined()))
         XCTAssertEqual(events, [.finished(.signedOut)])
     }
 
@@ -104,11 +105,25 @@ final class ClaudeCodeTests: XCTestCase {
             (Self.handshake(provider: "bedrock"), ["provider"]),
             (Self.handshake(servers: [["name": "files", "status": "connected"]]), ["mcp_servers"]),
             (Self.handshake(sources: ["policySettings"]), ["settings"]),
+            (Self.handshake(effective: ["hooks": [:]]), ["settings"]),
             (Self.handshake(commands: [["name": "deploy"]]), ["commands"]),
             (Self.handshake() + [Self.initEvent(tools: ["Bash"])], ["tools"]),
             (Self.handshake() + [Self.initEvent(plugins: [["name": "x", "source": "x@market"]])], ["plugins"]),
             ([Self.initEvent()], ["order"]),
         ]
+        // A missing or renamed field is refused, never read as empty.
+        for key in ["settings.effective", "settings.sources", "init.account", "init.commands", "init.models", "mcp.mcpServers"] {
+            var session = ClaudeCode.Session()
+            XCTAssertEqual(session.feed(Data(Self.handshake(drop: key).joined())).last, .finished(.refused(["schema"])), key)
+        }
+        for key in ["tools", "mcp_servers", "plugins", "skills", "slash_commands", "apiKeySource"] {
+            var session = ClaudeCode.Session()
+            XCTAssertEqual(
+                session.feed(Data((Self.handshake() + [Self.initEvent(drop: key)]).joined())).last,
+                .finished(.refused(["schema"])),
+                key
+            )
+        }
         for (lines, codes) in cases {
             var session = ClaudeCode.Session()
             XCTAssertEqual(session.feed(Data(lines.joined())).last, .finished(.refused(codes)), "\(codes)")
@@ -157,32 +172,39 @@ final class ClaudeCodeTests: XCTestCase {
         return data
     }
 
+    /// Shaped like Claude Code 2.1.306's answers: a subscription sign-in names its plan; signed out, it reports
+    /// `tokenSource: none`. `drop` removes one field, as "body.field".
     private static func handshake(
-        token: String = "oauth", apiKey: String? = nil, provider: String = "firstParty", servers: [[String: String]] = [],
-        sources: [String] = [], commands: [[String: String]] = []
+        plan: String? = "max", apiKey: String? = nil, provider: String = "firstParty", servers: [[String: String]] = [],
+        sources: [String] = [], effective: [String: Any] = [:], commands: [[String: String]] = [], drop: String? = nil
     ) -> [Data] {
-        var account: [String: Any] = ["tokenSource": token, "apiProvider": provider]
+        var account: [String: Any] = ["apiProvider": provider]
+        account["subscription"] = plan
+        account["tokenSource"] = plan == nil ? "none" : nil
         account["apiKeySource"] = apiKey
         let models: [[String: String]] = [
             ["value": "opus", "displayName": "Opus"],
             ["value": "--bad", "displayName": "Bad"],
             ["value": "haiku", "displayName": "Haiku"],
         ]
-        func response(_ id: String, _ body: [String: Any]) -> Data {
-            line(["type": "control_response", "response": ["subtype": "success", "request_id": id, "response": body]])
+        func response(_ id: String, _ name: String, _ body: [String: Any]) -> Data {
+            let body = body.filter { name + "." + $0.key != drop }
+            return line(["type": "control_response", "response": ["subtype": "success", "request_id": id, "response": body]])
         }
         return [
-            response("aegis-settings", ["effective": [:], "sources": sources]),
-            response("aegis-init", ["account": account, "models": models, "commands": commands]),
-            response("aegis-mcp", ["mcpServers": servers]),
+            response("aegis-settings", "settings", ["effective": effective, "sources": sources]),
+            response("aegis-init", "init", ["account": account, "models": models, "commands": commands]),
+            response("aegis-mcp", "mcp", ["mcpServers": servers]),
         ]
     }
 
-    private static func initEvent(tools: [String] = [], plugins: [[String: String]] = [["name": "a", "source": "a@builtin"]]) -> Data {
+    private static func initEvent(
+        tools: [String] = [], plugins: [[String: String]] = [["name": "a", "source": "a@builtin"]], drop: String? = nil
+    ) -> Data {
         line([
             "type": "system", "subtype": "init", "tools": tools, "mcp_servers": [], "plugins": plugins, "skills": [],
             "slash_commands": [], "apiKeySource": "none", "model": "claude-opus-5-5",
-        ])
+        ].filter { $0.key != drop })
     }
 
     private static func delta(_ text: String) -> Data {

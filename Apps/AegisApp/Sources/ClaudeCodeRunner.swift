@@ -94,8 +94,11 @@ actor ClaudeCodeRunner {
             log.notice("claude: bootstrap failed")
             return .unavailable
         }
-        guard Self.write(ClaudeCode.handshake, to: pipes.writer) else { return .failed(-5) }
-        return await pump(pipes, label: label, prompt: prompt, timeout: timeout, typed: typed)
+        let deadline = Date().addingTimeInterval(timeout)
+        if let failed = await send(ClaudeCode.handshake, to: pipes, until: deadline) {
+            return failed
+        }
+        return await pump(pipes, label: label, prompt: prompt, deadline: deadline, typed: typed)
     }
 
     /// The job's plist: only Aegis's own instructions, never the prompt.
@@ -103,11 +106,13 @@ actor ClaudeCodeRunner {
         let language = "\(Locale.current.language.languageCode?.identifier ?? "en")_\(Locale.current.region?.identifier ?? "US").UTF-8"
         return [
             "Label": label,
-            "ProgramArguments": ClaudeCode.arguments(executable: executable, choice: choice, system: system),
-            "WorkingDirectory": scratch.appendingPathComponent("work").path,
-            "EnvironmentVariables": ClaudeCode.environment(
-                home: NSHomeDirectory(), user: NSUserName(), temporary: scratch.appendingPathComponent("tmp").path, language: language
+            "ProgramArguments": ClaudeCode.command(
+                executable: executable, choice: choice, system: system,
+                environment: ClaudeCode.environment(
+                    home: NSHomeDirectory(), user: NSUserName(), temporary: scratch.appendingPathComponent("tmp").path, language: language
+                )
             ),
+            "WorkingDirectory": scratch.appendingPathComponent("work").path,
             "StandardInPath": scratch.appendingPathComponent("in").path,
             "StandardOutPath": scratch.appendingPathComponent("out").path,
             "StandardErrorPath": "/dev/null",
@@ -116,9 +121,10 @@ actor ClaudeCodeRunner {
         ]
     }
 
-    /// Reads the job's output until it ends, sending the prompt once the handshake passes.
+    /// Reads the job's output until it ends, sending the prompt once the handshake passes. Stop and the deadline are
+    /// checked before every read, so nothing is sent after either.
     private func pump(
-        _ pipes: Pipes, label: String, prompt: String?, timeout: Double, typed: @Sendable (String) -> Void
+        _ pipes: Pipes, label: String, prompt: String?, deadline: Date, typed: @Sendable (String) -> Void
     ) async -> Ending {
         var session = ClaudeCode.Session()
         var buffer = [UInt8](repeating: 0, count: 65536)
@@ -126,70 +132,88 @@ actor ClaudeCodeRunner {
         var checked = Date()
         var seenRunning = false
         while true {
+            if let stopped = stopped(deadline) {
+                return stopped
+            }
             let count = read(pipes.reader, &buffer, buffer.count)
             if count > 0 {
                 for event in session.feed(Data(buffer[0 ..< count])) {
-                    if let ending = Self.handle(event, pipes: pipes, prompt: prompt, typed: typed) {
-                        return ending
+                    switch event {
+                    case let .ready(models):
+                        Self.remember(models: models, signedIn: true)
+                        guard let prompt else { return .ready(models) }
+                        if let failed = await send(ClaudeCode.prompt(prompt), to: pipes, until: deadline) {
+                            return failed
+                        }
+                        // End of input: Claude Code finishes this turn and exits.
+                        pipes.endInput()
+                    case let .text(piece):
+                        typed(piece)
+                    case let .finished(outcome):
+                        if case .signedOut = outcome {
+                            Self.remember(models: [], signedIn: false)
+                        }
+                        if case .refused = outcome {
+                            Self.remember(models: [], signedIn: false)
+                        }
+                        return .outcome(outcome)
                     }
                 }
+                await Task.yield()
                 continue
             }
-            if cancelled || Task.isCancelled {
-                return .cancelled
-            }
-            if Date().timeIntervalSince(began) > timeout {
-                return .timedOut
-            }
-            // Only when the pipe is empty: a job that has ended with nothing more to read has failed.
             if Date().timeIntervalSince(checked) > 1 {
                 checked = Date()
-                switch PlanRunner.state(of: label) {
-                case .running: seenRunning = true
-                case .pending: break
-                case .gone: return .failed(-2)
-                case let .finished(status) where seenRunning || status != 0: return .failed(Int(status))
-                case .finished: break
+                if let ended = Self.ended(label, since: began, seenRunning: &seenRunning) {
+                    return ended
                 }
             }
             do { try await Task.sleep(for: .milliseconds(40)) } catch { return .cancelled }
         }
     }
 
-    private static func handle(
-        _ event: ClaudeCode.Session.Event, pipes: Pipes, prompt: String?, typed: @Sendable (String) -> Void
-    ) -> Ending? {
-        switch event {
-        case let .ready(models):
-            remember(models: models, signedIn: true)
-            guard let prompt else { return .ready(models) }
-            guard write(ClaudeCode.prompt(prompt), to: pipes.writer) else { return .failed(-5) }
-            // End of input: Claude Code finishes this turn and exits.
-            pipes.endInput()
+    private func stopped(_ deadline: Date) -> Ending? {
+        if cancelled || Task.isCancelled {
+            return .cancelled
+        }
+        return Date() > deadline ? .timedOut : nil
+    }
+
+    /// Polled only while the output pipe is empty: a job that has ended with nothing left to read has failed. launchd
+    /// can report a zero exit before a job's first launch, so a zero from a job never seen running counts after 3 s.
+    private static func ended(_ label: String, since began: Date, seenRunning: inout Bool) -> Ending? {
+        switch PlanRunner.state(of: label) {
+        case .running:
+            seenRunning = true
             return nil
-        case let .text(piece):
-            typed(piece)
+        case .pending:
             return nil
-        case let .finished(outcome):
-            switch outcome {
-            case .signedOut, .refused: remember(models: models, signedIn: false)
-            default: break
-            }
-            return .outcome(outcome)
+        case .gone:
+            return .failed(-2)
+        case let .finished(status):
+            return seenRunning || status != 0 || Date().timeIntervalSince(began) > 3 ? .failed(Int(status)) : nil
         }
     }
 
-    private static func write(_ data: Data, to descriptor: Int32) -> Bool {
-        data.withUnsafeBytes { bytes in
-            guard let base = bytes.baseAddress else { return true }
-            var offset = 0
-            while offset < bytes.count {
-                let written = Darwin.write(descriptor, base + offset, bytes.count - offset)
-                guard written > 0 else { return false }
-                offset += written
+    /// Writes without ever blocking: a job that stops reading can't hold the runner past Stop or the deadline.
+    private func send(_ data: Data, to pipes: Pipes, until deadline: Date) async -> Ending? {
+        var offset = 0
+        while offset < data.count {
+            if let stopped = stopped(deadline) {
+                return stopped
             }
-            return true
+            let written = data.withUnsafeBytes { bytes in
+                bytes.baseAddress.map { Darwin.write(pipes.writer, $0 + offset, bytes.count - offset) } ?? 0
+            }
+            if written > 0 {
+                offset += written
+            } else if written < 0, errno == EAGAIN {
+                do { try await Task.sleep(for: .milliseconds(10)) } catch { return .cancelled }
+            } else {
+                return .failed(-5)
+            }
         }
+        return nil
     }
 
     private static func remember(models: [ClaudeCode.Model], signedIn: Bool) {
@@ -219,7 +243,7 @@ private final class Pipes {
         let output = scratch.appendingPathComponent("out").path
         guard mkfifo(input, 0o600) == 0, mkfifo(output, 0o600) == 0 else { return nil }
         reader = open(output, O_RDWR | O_NONBLOCK)
-        writer = open(input, O_RDWR)
+        writer = open(input, O_RDWR | O_NONBLOCK)
         guard reader >= 0, writer >= 0 else {
             close()
             return nil

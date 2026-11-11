@@ -93,6 +93,7 @@ actor PlanRunner {
                 timeout: 20 * 60
             )
             guard case let .success(text) = result else { return result }
+            guard !Task.isCancelled else { return .failure(.cancelled) }
             guard Self.validFolder(folder, base: base),
                   (try? text.write(to: folder.appendingPathComponent("Claude.md"), atomically: true, encoding: .utf8)) != nil
             else {
