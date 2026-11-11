@@ -53,6 +53,71 @@ final class ClaudeCodeTests: XCTestCase {
         XCTAssertEqual(Array(command.dropFirst(4)), ClaudeCode.arguments(executable: "/bin/claude", choice: .standard, system: "S"))
     }
 
+    /// Aegis's own tools are served over the control channel and allowed without asking; nothing else is loaded.
+    func testServedToolsAddOnlyAegisServer() throws {
+        let tools = [ClaudeTools.Tool.brief.fullName, ClaudeTools.Tool.recentItems.fullName]
+        let arguments = ClaudeCode.arguments(executable: "/bin/claude", choice: .standard, system: "S", tools: tools)
+        let config = try XCTUnwrap(arguments.firstIndex(of: "--mcp-config").map { arguments[$0 + 1] })
+        XCTAssertEqual(config, #"{"mcpServers":{"aegis":{"type":"sdk","name":"aegis"}}}"#)
+        XCTAssertEqual(arguments.firstIndex(of: "--allowedTools").map { arguments[$0 + 1] }, "mcp__aegis__brief,mcp__aegis__recent_items")
+        XCTAssertEqual(arguments.firstIndex(of: "--tools").map { arguments[$0 + 1] }, "", "built-in tools stay off")
+        XCTAssertTrue(String(decoding: ClaudeCode.handshake(served: true), as: UTF8.self).contains(#""sdkMcpServers":["aegis"]"#))
+        XCTAssertFalse(String(decoding: ClaudeCode.handshake(), as: UTF8.self).contains("sdkMcpServers"))
+    }
+
+    /// Claude Code's MCP messages for Aegis's server reach Aegis, even during the handshake; any other request of
+    /// Aegis is refused.
+    func testToolMessagesAreHandedToAegis() throws {
+        var session = ClaudeCode.Session(servers: ["aegis"], tools: ["mcp__aegis__brief"])
+        let call = Self.line(["type": "control_request", "request_id": "c1", "request": [
+            "subtype": "mcp_message", "server_name": "aegis", "message": ["jsonrpc": "2.0", "id": 1, "method": "tools/list"],
+        ]])
+        let other = Self.line(["type": "control_request", "request_id": "c2", "request": ["subtype": "can_use_tool", "tool_name": "Bash"]])
+        let elsewhere = Self.line(["type": "control_request", "request_id": "c3", "request": [
+            "subtype": "mcp_message", "server_name": "files", "message": ["jsonrpc": "2.0", "id": 1, "method": "tools/list"],
+        ]])
+        let events = session.feed(call + other + elsewhere)
+        XCTAssertEqual(events.count, 3)
+        guard case let .mcp(id, message) = events[0] else { return XCTFail("\(events[0])") }
+        XCTAssertEqual(id, "c1")
+        XCTAssertEqual(try (JSONSerialization.jsonObject(with: message) as? [String: Any])?["method"] as? String, "tools/list")
+        XCTAssertEqual(Array(events.dropFirst()), [.denied(requestID: "c2"), .denied(requestID: "c3")])
+
+        let response = try XCTUnwrap(JSONSerialization.jsonObject(with: ClaudeCode.mcpResponse(
+            requestID: "c1",
+            Data(#"{"id":1}"#.utf8)
+        )) as? [String: Any])
+        let body = try XCTUnwrap(response["response"] as? [String: Any])
+        XCTAssertEqual(body["request_id"] as? String, "c1")
+        XCTAssertEqual(((body["response"] as? [String: Any])?["mcp_response"] as? [String: Any])?["id"] as? Int, 1)
+    }
+
+    func testTurnStartsOnlyWithAegisOwnToolsAndServer() {
+        let tools: Set = ["mcp__aegis__brief"]
+        let served = [["name": "aegis", "status": "connected", "source": "sdk"]]
+        var ours = ClaudeCode.Session(servers: ["aegis"], tools: tools)
+        XCTAssertEqual(
+            ours
+                .feed(Data((Self.handshake() + [Self.initEvent(tools: ["mcp__aegis__brief"], servers: served), Self.result("ok")])
+                        .joined())).last,
+            .finished(.answer(text: "ok", model: "claude-opus-5-5"))
+        )
+        let cases: [([String], [[String: String]], [String])] = [
+            (["mcp__aegis__brief", "Bash"], served, ["tools"]),
+            (["mcp__aegis__send"], served, ["tools"]),
+            (["mcp__aegis__brief"], [["name": "aegis", "status": "connected", "source": "user"]], ["mcp_servers"]),
+            (["mcp__aegis__brief"], [["name": "aegis", "status": "connected"]], ["mcp_servers"]),
+        ]
+        for (names, servers, codes) in cases {
+            var session = ClaudeCode.Session(servers: ["aegis"], tools: tools)
+            XCTAssertEqual(
+                session.feed(Data((Self.handshake() + [Self.initEvent(tools: names, servers: servers)]).joined())).last,
+                .finished(.refused(codes)),
+                "\(names) \(servers)"
+            )
+        }
+    }
+
     func testOnlyPlainModelNamesAreAccepted() {
         for name in ["default", "opus", "claude-fable-5-1[1m]", "claude-haiku-5-5"] {
             XCTAssertTrue(ClaudeCode.Choice(model: name, effort: .low).isValid, name)
@@ -199,10 +264,11 @@ final class ClaudeCodeTests: XCTestCase {
     }
 
     private static func initEvent(
-        tools: [String] = [], plugins: [[String: String]] = [["name": "a", "source": "a@builtin"]], drop: String? = nil
+        tools: [String] = [], servers: [[String: String]] = [], plugins: [[String: String]] = [["name": "a", "source": "a@builtin"]],
+        drop: String? = nil
     ) -> Data {
         line([
-            "type": "system", "subtype": "init", "tools": tools, "mcp_servers": [], "plugins": plugins, "skills": [],
+            "type": "system", "subtype": "init", "tools": tools, "mcp_servers": servers, "plugins": plugins, "skills": [],
             "slash_commands": [], "apiKeySource": "none", "model": "claude-opus-5-5",
         ].filter { $0.key != drop })
     }

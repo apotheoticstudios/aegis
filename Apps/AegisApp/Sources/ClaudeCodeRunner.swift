@@ -6,7 +6,14 @@ import OSLog
 /// Claude Code with the owner's Claude plan (ADR-0038). It runs as its own launchd job, not as Aegis's child, so it
 /// doesn't run as Aegis's code identity. The prompt goes in and the reply comes out through named pipes, read in
 /// memory: no text reaches disk, and the job's plist holds only Aegis's own instructions. Logs carry codes only.
+/// With `reads`, Aegis serves its read tools to Claude over the same pipes (ADR-0038 §5): no connector process.
 actor ClaudeCodeRunner {
+    /// Where Claude's read tools get their data, and which categories the owner has left on.
+    struct Reads: Sendable {
+        let source: any ClaudeToolSource
+        let enabled: Set<ClaudeTools.Category>
+    }
+
     /// How a run ended. A run without a prompt (`check`) ends at `ready`.
     enum Ending: Equatable, Sendable {
         case ready([ClaudeCode.Model])
@@ -47,6 +54,8 @@ actor ClaudeCodeRunner {
 
     private let executable: String?
     private var label: String?
+    /// Items the last run sent Claude, by category: counts only.
+    private(set) var lastReads: [ClaudeTools.Category: Int] = [:]
     private var cancelled = false
     private let log = Logger(subsystem: "dev.aegis.app", category: "claude")
 
@@ -68,7 +77,8 @@ actor ClaudeCodeRunner {
     }
 
     func run(
-        system: String, prompt: String?, choice: ClaudeCode.Choice, timeout: Double, typed: @Sendable (String) -> Void
+        system: String, prompt: String?, choice: ClaudeCode.Choice, timeout: Double, reads: Reads? = nil,
+        typed: @Sendable (String) -> Void
     ) async -> Ending {
         guard let executable else { return .unavailable }
         guard choice.isValid else { return .failed(-4) }
@@ -80,12 +90,15 @@ actor ClaudeCodeRunner {
         defer { pipes.close() }
         let label = "dev.aegis.claude." + UUID().uuidString.lowercased()
         let plist = scratch.appendingPathComponent(label + ".plist")
-        let job = Self.job(label: label, executable: executable, choice: choice, system: system, scratch: scratch)
+        let server = reads.map { ClaudeTools.Server(enabled: $0.enabled) }.flatMap { $0.tools.isEmpty ? nil : $0 }
+        let tools = server?.tools.map(\.fullName) ?? []
+        let job = Self.job(label: label, executable: executable, choice: choice, system: system, tools: tools, scratch: scratch)
         guard let data = try? PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0),
               (try? data.write(to: plist)) != nil
         else { return .failed(-1) }
         self.label = label
         cancelled = false
+        lastReads = [:]
         defer {
             PlanRunner.launchctl(["bootout", PlanRunner.domain + "/" + label])
             self.label = nil
@@ -95,19 +108,23 @@ actor ClaudeCodeRunner {
             return .unavailable
         }
         let deadline = Date().addingTimeInterval(timeout)
-        if let failed = await send(ClaudeCode.handshake, to: pipes, until: deadline) {
+        if let failed = await send(ClaudeCode.handshake(served: server != nil), to: pipes, until: deadline) {
             return failed
         }
-        return await pump(pipes, label: label, prompt: prompt, deadline: deadline, typed: typed)
+        var session = ClaudeCode.Session(servers: server == nil ? [] : [ClaudeTools.server], tools: Set(tools))
+        let link = Link(pipes: pipes, label: label, deadline: deadline, server: server, source: reads?.source)
+        return await pump(link, &session, prompt: prompt, typed: typed)
     }
 
     /// The job's plist: only Aegis's own instructions, never the prompt.
-    private static func job(label: String, executable: String, choice: ClaudeCode.Choice, system: String, scratch: URL) -> [String: Any] {
+    private static func job(
+        label: String, executable: String, choice: ClaudeCode.Choice, system: String, tools: [String], scratch: URL
+    ) -> [String: Any] {
         let language = "\(Locale.current.language.languageCode?.identifier ?? "en")_\(Locale.current.region?.identifier ?? "US").UTF-8"
         return [
             "Label": label,
             "ProgramArguments": ClaudeCode.command(
-                executable: executable, choice: choice, system: system,
+                executable: executable, choice: choice, system: system, tools: tools,
                 environment: ClaudeCode.environment(
                     home: NSHomeDirectory(), user: NSUserName(), temporary: scratch.appendingPathComponent("tmp").path, language: language
                 )
@@ -121,42 +138,36 @@ actor ClaudeCodeRunner {
         ]
     }
 
-    /// Reads the job's output until it ends, sending the prompt once the handshake passes. Stop and the deadline are
-    /// checked before every read, so nothing is sent after either.
+    /// One run's pipes, job, deadline and read tools.
+    private struct Link {
+        let pipes: Pipes
+        let label: String
+        let deadline: Date
+        var server: ClaudeTools.Server?
+        let source: (any ClaudeToolSource)?
+    }
+
+    /// Reads the job's output until it ends, sending the prompt once the handshake passes and answering Claude's
+    /// tool calls. Stop and the deadline are checked before every read, so nothing is sent after either. Input stays
+    /// open for the tools' answers; the run ends with Claude Code's result.
     private func pump(
-        _ pipes: Pipes, label: String, prompt: String?, deadline: Date, typed: @Sendable (String) -> Void
+        _ link: Link, _ session: inout ClaudeCode.Session, prompt: String?, typed: @Sendable (String) -> Void
     ) async -> Ending {
-        var session = ClaudeCode.Session()
+        var link = link
         var buffer = [UInt8](repeating: 0, count: 65536)
         let began = Date()
         var checked = Date()
         var seenRunning = false
+        defer { record(link.server) }
         while true {
-            if let stopped = stopped(deadline) {
+            if let stopped = stopped(link.deadline) {
                 return stopped
             }
-            let count = read(pipes.reader, &buffer, buffer.count)
+            let count = read(link.pipes.reader, &buffer, buffer.count)
             if count > 0 {
                 for event in session.feed(Data(buffer[0 ..< count])) {
-                    switch event {
-                    case let .ready(models):
-                        Self.remember(models: models, signedIn: true)
-                        guard let prompt else { return .ready(models) }
-                        if let failed = await send(ClaudeCode.prompt(prompt), to: pipes, until: deadline) {
-                            return failed
-                        }
-                        // End of input: Claude Code finishes this turn and exits.
-                        pipes.endInput()
-                    case let .text(piece):
-                        typed(piece)
-                    case let .finished(outcome):
-                        if case .signedOut = outcome {
-                            Self.remember(models: [], signedIn: false)
-                        }
-                        if case .refused = outcome {
-                            Self.remember(models: [], signedIn: false)
-                        }
-                        return .outcome(outcome)
+                    if let ending = await handle(event, &link, prompt: prompt, typed: typed) {
+                        return ending
                     }
                 }
                 await Task.yield()
@@ -164,11 +175,54 @@ actor ClaudeCodeRunner {
             }
             if Date().timeIntervalSince(checked) > 1 {
                 checked = Date()
-                if let ended = Self.ended(label, since: began, seenRunning: &seenRunning) {
+                if let ended = Self.ended(link.label, since: began, seenRunning: &seenRunning) {
                     return ended
                 }
             }
             do { try await Task.sleep(for: .milliseconds(40)) } catch { return .cancelled }
+        }
+    }
+
+    private func handle(
+        _ event: ClaudeCode.Session.Event, _ link: inout Link, prompt: String?, typed: @Sendable (String) -> Void
+    ) async -> Ending? {
+        switch event {
+        case let .ready(models):
+            Self.remember(models: models, signedIn: true)
+            guard let prompt else { return .ready(models) }
+            return await send(ClaudeCode.prompt(prompt), to: link.pipes, until: link.deadline)
+        case let .text(piece):
+            typed(piece)
+            return nil
+        case let .mcp(requestID, message):
+            guard var server = link.server, let source = link.source else {
+                return await send(ClaudeCode.controlError(requestID: requestID), to: link.pipes, until: link.deadline)
+            }
+            let answer: Data = switch server.handle(message) {
+            case let .reply(reply): reply
+            case let .call(id, call): await server.result(id: id, source.fetch(call, enabled: server.enabled))
+            }
+            link.server = server
+            if let stopped = stopped(link.deadline) {
+                return stopped
+            }
+            return await send(ClaudeCode.mcpResponse(requestID: requestID, answer), to: link.pipes, until: link.deadline)
+        case let .denied(requestID):
+            return await send(ClaudeCode.controlError(requestID: requestID), to: link.pipes, until: link.deadline)
+        case let .finished(outcome):
+            switch outcome {
+            case .signedOut, .refused: Self.remember(models: [], signedIn: false)
+            default: break
+            }
+            return .outcome(outcome)
+        }
+    }
+
+    /// The read log: what the run sent Claude, as counts by category, never content.
+    private func record(_ server: ClaudeTools.Server?) {
+        lastReads = server?.counts ?? [:]
+        for (category, count) in lastReads {
+            DiagnosticLog.shared.record(.claudeRead, number: count, detail: ClaudeTools.Category.allCases.firstIndex(of: category))
         }
     }
 
@@ -228,7 +282,7 @@ actor ClaudeCodeRunner {
 /// never waits for the job and nothing written is lost before the job opens its end.
 private final class Pipes {
     let reader: Int32
-    private(set) var writer: Int32
+    let writer: Int32
 
     init?(scratch: URL) {
         let files = FileManager.default
@@ -250,17 +304,17 @@ private final class Pipes {
         }
     }
 
-    func endInput() {
+    func close() {
         if writer >= 0 {
             Darwin.close(writer)
         }
-        writer = -1
-    }
-
-    func close() {
-        endInput()
         if reader >= 0 {
             Darwin.close(reader)
         }
     }
+}
+
+/// Answers Claude's read tools: the app fetches from AegisCore, and `ClaudeTools` decides what may go.
+protocol ClaudeToolSource: Sendable {
+    func fetch(_ call: ClaudeTools.Call, enabled: Set<ClaudeTools.Category>) async -> ClaudeTools.Payload
 }

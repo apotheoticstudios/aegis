@@ -50,15 +50,19 @@ public enum ClaudeCode {
         }
     }
 
-    /// The whole command line: no built-in tools, no MCP servers but Aegis's (none yet), no settings files,
-    /// customisations, commands or Chrome, nothing saved; the prompt arrives on standard input.
-    public static func arguments(executable: String, choice: Choice, system: String) -> [String] {
-        [
+    /// The whole command line: no built-in tools, no settings files, customisations, commands or Chrome, nothing
+    /// saved; the prompt arrives on standard input. `tools` (full names) are Aegis's own, served by Aegis over the
+    /// control channel and allowed without asking; with none, there are no MCP servers at all.
+    public static func arguments(executable: String, choice: Choice, system: String, tools: [String] = []) -> [String] {
+        let served = tools.isEmpty ? [] : [
+            "--mcp-config", #"{"mcpServers":{"\#(ClaudeTools.server)":{"type":"sdk","name":"\#(ClaudeTools.server)"}}}"#,
+            "--allowedTools", tools.joined(separator: ","),
+        ]
+        return [
             executable, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
             "--include-partial-messages", "--model", choice.model, "--effort", choice.effort.rawValue,
             "--system-prompt", system, "--no-session-persistence", "--tools", "", "--strict-mcp-config",
-            "--setting-sources", "", "--safe-mode", "--restricted", "--disable-slash-commands", "--no-chrome",
-        ]
+        ] + served + ["--setting-sources", "", "--safe-mode", "--restricted", "--disable-slash-commands", "--no-chrome"]
     }
 
     /// The job's whole environment. The real home folder and account name are how Claude Code finds the owner's
@@ -73,18 +77,43 @@ public enum ClaudeCode {
 
     /// What launchd runs: `env -i` first, because launchd adds a job's variables to its own environment rather than
     /// replacing it, so only `environment` reaches Claude Code.
-    public static func command(executable: String, choice: Choice, system: String, environment: [String: String]) -> [String] {
+    public static func command(
+        executable: String, choice: Choice, system: String, tools: [String] = [], environment: [String: String]
+    ) -> [String] {
         ["/usr/bin/env", "-i"] + environment.sorted { $0.key < $1.key }.map { $0.key + "=" + $0.value }
-            + arguments(executable: executable, choice: choice, system: system)
+            + arguments(executable: executable, choice: choice, system: system, tools: tools)
     }
 
     /// Asked before any prompt: the account and models, the MCP servers loaded, and the settings sources applied.
-    public static let handshake = Data("""
-    {"type":"control_request","request_id":"aegis-init","request":{"subtype":"initialize"}}
-    {"type":"control_request","request_id":"aegis-mcp","request":{"subtype":"mcp_status"}}
-    {"type":"control_request","request_id":"aegis-settings","request":{"subtype":"get_settings"}}
+    /// `served`: the MCP servers Aegis serves itself over the control channel.
+    public static func handshake(served: Bool = false) -> Data {
+        let initialize = served ? #","sdkMcpServers":["\#(ClaudeTools.server)"]"# : ""
+        return Data("""
+        {"type":"control_request","request_id":"aegis-init","request":{"subtype":"initialize"\(initialize)}}
+        {"type":"control_request","request_id":"aegis-mcp","request":{"subtype":"mcp_status"}}
+        {"type":"control_request","request_id":"aegis-settings","request":{"subtype":"get_settings"}}
 
-    """.utf8)
+        """.utf8)
+    }
+
+    /// Aegis's answer to one of Claude Code's MCP messages.
+    public static func mcpResponse(requestID: String, _ message: Data) -> Data {
+        line(["type": "control_response", "response": [
+            "subtype": "success", "request_id": requestID,
+            "response": ["mcp_response": (try? JSONSerialization.jsonObject(with: message)) ?? [String: Any]()],
+        ]])
+    }
+
+    /// Refuses any other request Claude Code makes of Aegis, such as permission to use a tool.
+    public static func controlError(requestID: String) -> Data {
+        line(["type": "control_response", "response": ["subtype": "error", "request_id": requestID, "error": "Not available"]])
+    }
+
+    private static func line(_ object: [String: Any]) -> Data {
+        var data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
+        data.append(0x0A)
+        return data
+    }
 
     /// The system prompt for a hand-off; its instructions travel in the message (`CloudHandOff.planPrompt`).
     public static let handOffSystem = "You answer for Aegis, a private assistant on the owner's Mac. Follow the instructions at the top "
@@ -123,6 +152,10 @@ public enum ClaudeCode {
             case ready([Model])
             /// A piece of the reply as it's written.
             case text(String)
+            /// Claude Code's MCP message for Aegis's own server, to answer with `mcpResponse`.
+            case mcp(requestID: String, message: Data)
+            /// Any other request of Aegis, to refuse with `controlError`.
+            case denied(requestID: String)
             case finished(Outcome)
         }
 
@@ -131,6 +164,7 @@ public enum ClaudeCode {
         public static let maxReply = 64000
 
         private let servers: Set<String>
+        private let tools: Set<String>
         private var buffer = Data()
         private var pending: Set<String> = ["aegis-init", "aegis-mcp", "aegis-settings"]
         private var models: [Model] = []
@@ -142,9 +176,10 @@ public enum ClaudeCode {
         private var resets: Date?
         public private(set) var finished = false
 
-        /// `servers`: the MCP servers Aegis itself loads.
-        public init(servers: Set<String> = []) {
+        /// `servers`: the MCP servers Aegis serves itself; `tools`: their tools' full names.
+        public init(servers: Set<String> = [], tools: Set<String> = []) {
             self.servers = servers
+            self.tools = tools
         }
 
         public mutating func feed(_ data: Data) -> [Event] {
@@ -169,6 +204,14 @@ public enum ClaudeCode {
             switch object["type"] as? String {
             case "control_response":
                 return control(dictionary(object["response"]))
+            case "control_request":
+                guard let id = object["request_id"] as? String else { return nil }
+                let request = dictionary(object["request"])
+                guard request["subtype"] as? String == "mcp_message", let server = request["server_name"] as? String,
+                      servers.contains(server), let message = request["message"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: message)
+                else { return .denied(requestID: id) }
+                return .mcp(requestID: id, message: data)
             case "system" where object["subtype"] as? String == "init":
                 return configuration(object)
             case "stream_event":
@@ -216,7 +259,7 @@ public enum ClaudeCode {
                 }
             case "aegis-mcp":
                 guard let loaded = array(body["mcpServers"]) else { return finish(.refused(["schema"])) }
-                guard Set(names(loaded)).isSubset(of: servers) else { return finish(.refused(["mcp_servers"])) }
+                guard only(loaded, sourced: false) else { return finish(.refused(["mcp_servers"])) }
             default:
                 // Any settings source or setting, managed policy included, could add hooks or plugins.
                 guard let sources = array(body["sources"]), let effective = body["effective"] as? [String: Any] else {
@@ -234,10 +277,10 @@ public enum ClaudeCode {
                   let commands = array(object["slash_commands"]), let key = object["apiKeySource"] as? String
             else { return finish(.refused(["schema"])) }
             var problems: [String] = []
-            if !tools.isEmpty {
+            if !tools.allSatisfy({ ($0 as? String).map(self.tools.contains) ?? false }) {
                 problems.append("tools")
             }
-            if !Set(names(loaded)).isSubset(of: servers) {
+            if !only(loaded, sourced: true) {
                 problems.append("mcp_servers")
             }
             if plugins.contains(where: { !(dictionary($0)["source"] as? String ?? "").hasSuffix("@builtin") }) {
@@ -259,6 +302,16 @@ public enum ClaudeCode {
             model = object["model"] as? String ?? ""
             configured = true
             return nil
+        }
+
+        /// Only Aegis's own servers, served over the control channel. Claude Code's `init` report names each server's
+        /// source; its status report may not yet.
+        private func only(_ loaded: [Any], sourced: Bool) -> Bool {
+            loaded.allSatisfy { item in
+                let entry = dictionary(item)
+                let source = entry["source"] as? String
+                return (entry["name"] as? String).map(servers.contains) == true && (sourced ? source == "sdk" : (source ?? "sdk") == "sdk")
+            }
         }
 
         private mutating func delta(_ event: [String: Any]) -> Event? {
@@ -303,10 +356,6 @@ private func dictionary(_ value: Any?) -> [String: Any] {
 
 private func array(_ value: Any?) -> [Any]? {
     value as? [Any]
-}
-
-private func names(_ items: [Any]) -> [String] {
-    items.map { ($0 as? String) ?? (dictionary($0)["name"] as? String ?? "?") }
 }
 
 private func truth(_ value: Any?) -> Bool {

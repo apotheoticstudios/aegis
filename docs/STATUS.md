@@ -10,7 +10,8 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
-| #163 | Claude as the brain (ADR-0038), stage 1: the contained Claude Code bridge; the Claude hand-off uses the owner's plan when no key is saved, with a model and effort picker | agent:claude | claude/163-claude-bridge | PR #164; full answers need `claude auth login` once on the Mac. Next: stage 2, the read-only connector |
+| #165 | Claude as the brain (ADR-0038), stage 2: read tools served by Aegis over Claude Code's control channel, per-category switches on every result, per-run limits, counts-only read log | agent:claude | claude/165-claude-reads | In review. Next: stage 3, actions through the resolver and `ActionPolicy` |
+| #163 | Claude as the brain (ADR-0038), stage 1: the contained Claude Code bridge; the Claude hand-off uses the owner's plan when no key is saved, with a model and effort picker | agent:claude | claude/163-claude-bridge | Merged (#164); full answers need `claude auth login` once on the Mac |
 | — | Real mornings and feedback on the new features | agent:human | — | Owner's reviews drive the next fixes |
 | #94–#96 | AegisShell polish: the urgent line (Open, Later), the hidden mark, the menu fitting long names, matching workspace keys (⌃⌥1–4 when ⌃1–4 are taken), and the voice overlay over any app with details showing (ADR-0033) | agent:claude | merged | Installed; the voice overlay needs the owner's first real try (Codex's review hit its usage limit) |
 | — | AegisShell workspaces: Work, Focus, Evening, Movie (menu, ⌃1–4, voice), each with its accent, wash and scene | agent:claude | claude/shell-workspaces | Merged; the owner's first real run to come |

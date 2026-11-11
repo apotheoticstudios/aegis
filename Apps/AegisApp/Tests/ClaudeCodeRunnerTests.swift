@@ -105,6 +105,42 @@ final class ClaudeCodeRunnerTests: XCTestCase {
         return file.path
     }
 
+    /// Claude asks for a tool mid-turn over the control channel; Aegis answers from its data on the same pipes and
+    /// keeps a counts-only read log.
+    func testToolCallsAreAnsweredOverThePipes() async throws {
+        let caller = try script("caller", #"""
+        case " $* " in *" --allowedTools mcp__aegis__"*) ;; *) exit 4 ;; esac
+        case " $* " in *'{"mcpServers":{"aegis":{"type":"sdk","name":"aegis"}}}'*) ;; *) exit 5 ;; esac
+        reply() { printf '{"type":"control_response","response":{"subtype":"success","request_id":"%s","response":%s}}\n' "$1" "$2"; }
+        while IFS= read -r line; do
+          case "$line" in
+            *aegis-init*sdkMcpServers*) reply aegis-init '{"account":{"subscription":"max","apiProvider":"firstParty"},"commands":[],"models":[]}' ;;
+            *aegis-init*) exit 6 ;;
+            *aegis-mcp*) reply aegis-mcp '{"mcpServers":[]}' ;;
+            *aegis-settings*) reply aegis-settings '{"effective":{},"sources":[]}' ;;
+            *'"type":"user"'*)
+              served='[{"name":"aegis","status":"connected","source":"sdk"}]'
+              printf '{"type":"system","subtype":"init","tools":["mcp__aegis__recent_items"],"mcp_servers":%s,' "$served"
+              echo '"plugins":[],"skills":[],"slash_commands":[],"apiKeySource":"none","model":"claude-opus-5-5"}'
+              call='{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"recent_items","arguments":{"limit":5}}}'
+              printf '{"type":"control_request","request_id":"t1","request":{"subtype":"mcp_message","server_name":"aegis","message":%s}}\n' "$call"
+              IFS= read -r answer
+              case "$answer" in *'"request_id":"t1"'*Alex*) word=read ;; *) word=nothing ;; esac
+              printf '{"type":"result","subtype":"success","is_error":false,"result":"%s","stop_reason":"end_turn"}\n' "$word"
+              ;;
+          esac
+        done
+        """#)
+        let runner = ClaudeCodeRunner(executable: caller)
+        let ending = await runner.run(
+            system: "S", prompt: "What's new?", choice: .standard, timeout: 30,
+            reads: .init(source: ClaudeReads(service: FixtureCore()), enabled: Set(ClaudeTools.Category.allCases).subtracting([.mail]))
+        ) { _ in }
+        XCTAssertEqual(ending, .outcome(.answer(text: "read", model: "claude-opus-5-5")))
+        let reads = await runner.lastReads
+        XCTAssertEqual(reads, [.messages: 1, .notifications: 1], "mail was switched off")
+    }
+
     func testMissingClaudeCodeIsUnavailable() async {
         let ending = await ClaudeCodeRunner(executable: nil).check()
         XCTAssertEqual(ending, .unavailable)

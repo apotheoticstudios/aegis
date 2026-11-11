@@ -28,7 +28,7 @@ final class DiagnosticLog: @unchecked Sendable {
         case speechConversionFailed, transcriptEmpty, legacyRetry, legacyUnavailable
         case synthesisFailed, playbackFailed, coreRefused, coreUnavailable, coreTimedOut, coreStoreFailed
         case questionSubmitted, answerReady, modelInvalidDraft, modelUnknownCitation, modelUnsafeText, questionTooLong, coreBusy
-        case cloudFailed, planFailed, sourceUnhealthy, unexpectedReply
+        case cloudFailed, planFailed, sourceUnhealthy, unexpectedReply, claudeRead
     }
 
     struct Record: Codable {
