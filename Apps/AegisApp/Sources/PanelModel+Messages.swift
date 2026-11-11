@@ -18,13 +18,20 @@ extension PanelModel {
     /// The reply to a message request, or nil when the question isn't one.
     func messageAnswer(_ question: String, origin: ActionOrigin) async -> Answer? {
         guard let command = MessageCommand.parse(question) else { return nil }
+        return await messageCard(command, words: question, origin: origin)
+    }
+
+    /// The message's card, or a draft opened for the owner; `words` are the owner's, remembered for follow-ups.
+    func messageCard(_ command: MessageCommand, words: String?, origin: ActionOrigin) async -> Answer {
         let found = await Self.recipient(for: command)
         let draft: MessageDraft
         switch found {
         case let .failure(problem):
             return Self.said(problem.message)
         case let .success(match):
-            note(question, nil, target: command.candidates.first { $0.body == match.body }?.name)
+            if let words {
+                note(words, nil, target: command.candidates.first { $0.body == match.body }?.name)
+            }
             draft = MessageDraft(
                 channel: command.channel,
                 name: match.name,

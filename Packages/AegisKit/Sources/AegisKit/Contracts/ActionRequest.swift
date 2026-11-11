@@ -1,9 +1,11 @@
 import Foundation
 
-/// Only direct owner input in the open panel may originate a request. There is no collected-content origin.
-/// This tag is not proof of provenance: future adapters must create requests only from trusted panel input.
+/// Who asked, in the open panel. There is no collected-content origin. This tag is not proof of provenance:
+/// adapters must create requests only from trusted panel input, or from Claude's typed action tools.
 public enum ActionOrigin: String, Codable, Sendable, CaseIterable {
     case ownerTyped, ownerSpoken
+    /// Claude as Aegis's brain (ADR-0038): the same policy and tiers as the owner's own commands (§6, pure C).
+    case claude
 }
 
 /// Proposed work, with no execution capability or IPC dispatch route (#189, additive contract).

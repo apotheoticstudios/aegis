@@ -152,7 +152,7 @@ extension PanelModel {
     }
 
     /// One command the owner asked for, at its tier: a card for reminders and events, the rest through `ability`.
-    private func perform(_ command: ActionCommand, origin: ActionOrigin, guessed: Bool = false) async -> String {
+    func perform(_ command: ActionCommand, origin: ActionOrigin, guessed: Bool = false) async -> String {
         switch command {
         case .reminder, .event:
             let request = ActionRequest(payload: command.payload, origin: origin)
@@ -304,7 +304,7 @@ extension PanelModel {
     }
 
     /// A website, shortcut, app, file or catalogue entry (ADR-0031): at once at its tier, or a card when the model picked it.
-    private func ability(_ command: ActionCommand, origin: ActionOrigin, guessed: Bool = false) async -> String {
+    func ability(_ command: ActionCommand, origin: ActionOrigin, guessed: Bool = false) async -> String {
         let request = ActionRequest(payload: command.payload, origin: origin)
         let decision = await log(request, .proposed, guessed: guessed)
         guard decision.allowed else {
@@ -357,7 +357,7 @@ extension PanelModel {
         return await Self.said(ability(found, origin: origin))
     }
 
-    private func openApp(_ app: URL, name: String, origin: ActionOrigin) async -> String {
+    func openApp(_ app: URL, name: String, origin: ActionOrigin) async -> String {
         let request = ActionRequest(payload: .app(bundleID: Bundle(url: app)?.bundleIdentifier ?? name, verb: .open), origin: origin)
         let decision = await log(request, .proposed)
         guard decision.tier == .auto else { return "That's not something I can do." }

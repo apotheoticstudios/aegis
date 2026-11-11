@@ -16,6 +16,21 @@ public struct MessageCommand: Sendable, Equatable {
         public let body: String
     }
 
+    init(channel: ActionMessageChannel, candidates: [Candidate], subject: String?, send: Bool) {
+        self.channel = channel
+        self.candidates = candidates
+        self.subject = subject
+        self.send = send
+    }
+
+    /// A message to send to one named contact, from Claude's typed tool (ADR-0038): always asks twice.
+    public init(channel: ActionMessageChannel, to name: String, text: String) {
+        self.channel = channel
+        candidates = [Candidate(name: name, body: text)]
+        subject = nil
+        send = true
+    }
+
     public static func parse(_ text: String) -> MessageCommand? {
         var line = text.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(

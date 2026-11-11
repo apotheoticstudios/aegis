@@ -85,6 +85,8 @@ public enum ClaudeTools {
         case readItems(ids: [String])
         case schedule(daysBack: Int, daysAhead: Int)
         case brief, peopleWaiting, promises, doneToday, memoryNotes, sourceHealth
+        /// Something Claude asks Aegis to do (`ClaudeActions.swift`).
+        case act(Action)
 
         init?(_ tool: Tool, _ arguments: [String: Any]) {
             func integer(_ key: String, _ range: ClosedRange<Int>, _ fallback: Int) -> Int {
@@ -117,6 +119,12 @@ public enum ClaudeTools {
         public let text: String
         public let counts: [Category: Int]
         public let isError: Bool
+
+        public init(text: String, counts: [Category: Int], isError: Bool) {
+            self.text = text
+            self.counts = counts
+            self.isError = isError
+        }
 
         public static func refused(_ reason: String) -> Payload {
             Payload(text: reason, counts: [:], isError: true)
@@ -259,18 +267,33 @@ public enum ClaudeTools {
         }
 
         public let enabled: Set<Category>
+        /// Whether Claude may ask Aegis to act in this run.
+        public let acts: Bool
         private var calls = 0
         private var bytes = 0
         /// Items sent so far, by category: the read log, counts only.
         public private(set) var counts: [Category: Int] = [:]
+        /// Action calls accepted this run: a run that acted is never replayed on another brain (ADR-0038 §2).
+        public private(set) var actions = 0
 
-        public init(enabled: Set<Category>) {
+        public init(enabled: Set<Category>, acts: Bool = false) {
             self.enabled = enabled
+            self.acts = acts
         }
 
-        /// The tools on offer: those whose categories the owner has left on.
+        /// The read tools on offer: those whose categories the owner has left on.
         public var tools: [Tool] {
             Tool.allCases.filter { !$0.categories.isDisjoint(with: enabled) }
+        }
+
+        /// The action tools on offer.
+        public var actionTools: [ActionTool] {
+            acts ? ActionTool.allCases : []
+        }
+
+        /// Every tool's full name, as Claude Code lists them.
+        public var toolNames: [String] {
+            tools.map(\.fullName) + actionTools.map(\.fullName)
         }
 
         public mutating func handle(_ message: Data) -> Step {
@@ -287,11 +310,19 @@ public enum ClaudeTools {
                     "serverInfo": ["name": ClaudeTools.server, "version": "1"],
                 ]))
             case "tools/list":
-                return .reply(Self.response(id, ["tools": tools.map { tool in
+                let reads = tools.map { tool in
                     ["name": tool.rawValue, "description": tool.summary, "inputSchema": tool.schema] as [String: Any]
-                }]))
+                }
+                let acts = actionTools.map { tool in
+                    ["name": tool.rawValue, "description": tool.summary, "inputSchema": tool.schema] as [String: Any]
+                }
+                return .reply(Self.response(id, ["tools": reads + acts]))
             case "tools/call":
-                guard let name = params["name"] as? String, let tool = tools.first(where: { $0.rawValue == name }) else {
+                guard let name = params["name"] as? String else { return .reply(Self.error(id, -32602, "Unknown tool")) }
+                if let tool = actionTools.first(where: { $0.rawValue == name }) {
+                    return act(id, tool, params["arguments"] as? [String: Any] ?? [:])
+                }
+                guard let tool = tools.first(where: { $0.rawValue == name }) else {
                     return .reply(Self.error(id, -32602, "Unknown tool"))
                 }
                 guard calls < Self.maxCalls, bytes < Self.maxTotalBytes else {
@@ -308,6 +339,27 @@ public enum ClaudeTools {
                 // Notifications need no answer; Claude Code takes an empty result.
                 return .reply(id == .none ? Self.response(.none, [:]) : Self.error(id, -32601, "Method not found"))
             }
+        }
+
+        /// One action per request (ADR-0038 §5): a direct action at its tier, or one plan card for several. Anything
+        /// after it is refused, so no unplanned second action runs.
+        private mutating func act(_ id: RPCID, _ tool: ActionTool, _ arguments: [String: Any]) -> Step {
+            guard calls < Self.maxCalls else {
+                return .reply(Self.result(id, "Aegis's limit for one request is reached.", isError: true))
+            }
+            calls += 1
+            guard actions == 0 else {
+                return .reply(Self.result(
+                    id,
+                    "Aegis takes one action per request. For several, propose them together as one plan, which the owner approves once.",
+                    isError: true
+                ))
+            }
+            guard let action = ClaudeTools.action(tool, arguments) else {
+                return .reply(Self.result(id, "Those arguments aren't valid for \(tool.rawValue).", isError: true))
+            }
+            actions += 1
+            return .call(id: id, .act(action))
         }
 
         /// The answer to a call, as the message that carries it, and the items it would send.

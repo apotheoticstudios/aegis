@@ -12,6 +12,8 @@ actor ClaudeCodeRunner {
     struct Reads: Sendable {
         let source: any ClaudeToolSource
         let enabled: Set<ClaudeTools.Category>
+        /// Claude may also ask Aegis to act (ADR-0038 stage 3): one action, or one plan card, per run.
+        var acts = false
     }
 
     /// How a run ended. A run without a prompt (`check`) ends at `ready`.
@@ -56,6 +58,8 @@ actor ClaudeCodeRunner {
     private var label: String?
     /// Items the last run sent Claude, by category: counts only.
     private(set) var lastReads: [ClaudeTools.Category: Int] = [:]
+    /// Action calls the last run accepted: a run that acted is never replayed on another brain (ADR-0038 §2).
+    private(set) var lastActions = 0
     private var cancelled = false
     private let log = Logger(subsystem: "dev.aegis.app", category: "claude")
 
@@ -90,8 +94,8 @@ actor ClaudeCodeRunner {
         defer { pipes.close() }
         let label = "dev.aegis.claude." + UUID().uuidString.lowercased()
         let plist = scratch.appendingPathComponent(label + ".plist")
-        let server = reads.map { ClaudeTools.Server(enabled: $0.enabled) }.flatMap { $0.tools.isEmpty ? nil : $0 }
-        let tools = server?.tools.map(\.fullName) ?? []
+        let server = reads.map { ClaudeTools.Server(enabled: $0.enabled, acts: $0.acts) }.flatMap { $0.toolNames.isEmpty ? nil : $0 }
+        let tools = server?.toolNames ?? []
         let job = Self.job(label: label, executable: executable, choice: choice, system: system, tools: tools, scratch: scratch)
         guard let data = try? PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0),
               (try? data.write(to: plist)) != nil
@@ -99,6 +103,7 @@ actor ClaudeCodeRunner {
         self.label = label
         cancelled = false
         lastReads = [:]
+        lastActions = 0
         defer {
             PlanRunner.launchctl(["bootout", PlanRunner.domain + "/" + label])
             self.label = nil
@@ -247,6 +252,7 @@ actor ClaudeCodeRunner {
     /// The read log: what the run sent Claude, as counts by category, never content.
     private func record(_ server: ClaudeTools.Server?) {
         lastReads = server?.counts ?? [:]
+        lastActions = server?.actions ?? 0
         for (category, count) in lastReads {
             DiagnosticLog.shared.record(.claudeRead, number: count, detail: ClaudeTools.Category.allCases.firstIndex(of: category))
         }

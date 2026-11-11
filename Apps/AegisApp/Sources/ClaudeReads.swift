@@ -51,6 +51,8 @@ struct ClaudeReads: ClaudeToolSource {
         case .memoryNotes:
             guard case let .memories(notes) = await service.handle(.memories) else { return Self.unavailable }
             return ClaudeTools.memories(notes, enabled: enabled)
+        case .act:
+            return .refused("Aegis doesn't act on this request.")
         case .sourceHealth:
             guard case let .status(status) = await service.handle(.status) else { return Self.unavailable }
             return ClaudeTools.health(status, enabled: enabled)
