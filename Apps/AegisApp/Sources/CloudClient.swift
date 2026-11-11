@@ -287,9 +287,21 @@ enum CloudKeys {
         set { UserDefaults.aegis.set(newValue, forKey: planKey) }
     }
 
-    /// The provider answers through the owner's plan app rather than an API key.
+    static let claudePlanKey = "cloudUseClaudePlan"
+
+    /// Use the owner's Claude plan through Claude Code when there's no Claude key (ADR-0038). On unless turned off.
+    static var useClaudePlan: Bool {
+        get { UserDefaults.aegis.object(forKey: claudePlanKey) as? Bool ?? true }
+        set { UserDefaults.aegis.set(newValue, forKey: claudePlanKey) }
+    }
+
+    /// The provider answers through the owner's plan app rather than an API key. Claude Code counts once a handshake
+    /// (the Claude and ChatGPT window runs one when it opens) found it signed in and set up as Aegis needs.
     static func viaPlan(_ provider: CloudHandOff.Provider) -> Bool {
-        provider == .chatgpt && !hasKey(.chatgpt) && useChatGPTPlan && PlanRunner.codex != nil
+        switch provider {
+        case .chatgpt: !hasKey(.chatgpt) && useChatGPTPlan && PlanRunner.codex != nil
+        case .claude: !hasKey(.claude) && useClaudePlan && ClaudeCodeRunner.signedIn && ClaudeCodeRunner.executable != nil
+        }
     }
 
     static var automatic: Bool {

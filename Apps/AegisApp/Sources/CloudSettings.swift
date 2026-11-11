@@ -9,6 +9,10 @@ struct CloudSettingsView: View {
     @State private var saved: [CloudHandOff.Provider: Bool] = [:]
     @State private var automatic = CloudKeys.automatic
     @State private var chatGPTPlan = CloudKeys.useChatGPTPlan
+    @State private var claudePlan = CloudKeys.useClaudePlan
+    @State private var claudeChoice = ClaudeCodeRunner.choice
+    @State private var claudeModels = ClaudeCodeRunner.models
+    @State private var claudeStatus: String?
     @State private var notice: String?
 
     var body: some View {
@@ -27,6 +31,9 @@ struct CloudSettingsView: View {
                 Text("It counts against your ChatGPT plan's limits. An OpenAI key below, if saved, is used instead.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            if ClaudeCodeRunner.executable != nil {
+                claudePlanRows
+            }
             keyRow(.claude, placeholder: "Claude API key (platform.claude.com)", text: $claudeKey)
             keyRow(.chatgpt, placeholder: "OpenAI API key (platform.openai.com)", text: $openAIKey)
             Toggle("Hand off complex general questions automatically", isOn: $automatic)
@@ -43,6 +50,47 @@ struct CloudSettingsView: View {
         .onAppear {
             for provider in CloudHandOff.Provider.allCases {
                 saved[provider] = CloudKeys.hasKey(provider)
+            }
+            checkClaude()
+        }
+    }
+
+    /// The owner's Claude plan through Claude Code (ADR-0038), its model and effort.
+    @ViewBuilder private var claudePlanRows: some View {
+        Toggle("Use my Claude plan through Claude Code (no key needed)", isOn: $claudePlan)
+            .onChange(of: claudePlan) { _, on in
+                CloudKeys.useClaudePlan = on
+                checkClaude()
+            }
+        if claudePlan {
+            HStack {
+                Picker("Model", selection: $claudeChoice.model) {
+                    ForEach(claudeModels.isEmpty ? [ClaudeCode.Model(value: claudeChoice.model, name: "Recommended")] : claudeModels) {
+                        Text($0.name).tag($0.value)
+                    }
+                }
+                Picker("Effort", selection: $claudeChoice.effort) {
+                    ForEach(ClaudeCode.Effort.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+            }
+            .onChange(of: claudeChoice) { _, choice in ClaudeCodeRunner.choice = choice }
+            Text(claudeStatus ?? "It counts against your Claude plan's limits. A Claude key below, if saved, is used instead.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Asks Claude Code who's signed in and which models the plan offers, without sending anything to Claude.
+    private func checkClaude() {
+        guard claudePlan, ClaudeCodeRunner.executable != nil else { return }
+        claudeStatus = "Checking Claude Code…"
+        Task {
+            let ending = await ClaudeCodeRunner().check()
+            claudeModels = ClaudeCodeRunner.models
+            claudeStatus = switch ending {
+            case .ready: nil
+            case .outcome(.signedOut): "Claude Code isn't signed in. Run claude auth login in Terminal once, then reopen this window."
+            case .outcome(.refused): "Claude Code has settings or add-ons turned on that Aegis doesn't allow, so it won't be used."
+            default: "Claude Code didn't answer the check. Reopen this window to try again."
             }
         }
     }

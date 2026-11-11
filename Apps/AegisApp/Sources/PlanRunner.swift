@@ -2,13 +2,14 @@ import AegisKit
 import Foundation
 import OSLog
 
-/// The owner's ChatGPT plan through the Codex app inside ChatGPT.app (#235, ADR-0017): questions run read-only
+/// The owner's ChatGPT plan through the Codex app inside ChatGPT.app (#235, ADR-0017), and their Claude plan through
+/// Claude Code (ADR-0038's contained bridge, `ClaudeCodeRunner`). Codex questions run read-only
 /// in an empty temporary folder; tasks may write only inside their own folder. Codex runs as its own launchd job,
 /// not as Aegis's child, so it doesn't inherit Aegis's privacy permissions. Only what AegisCore's gate
 /// approved goes in, no session is saved, and the transcript is deleted at once. Logs carry codes only.
 actor PlanRunner {
     enum Failure: Error, Sendable {
-        case unavailable, busy, limit(String?), timedOut, cancelled, failed(Int32)
+        case unavailable, busy, limit(String?), timedOut, cancelled, failed(Int32), signedOut, declined, refusedSetup
 
         func message(_ provider: CloudHandOff.Provider) -> String {
             let name = provider.name
@@ -21,6 +22,9 @@ actor PlanRunner {
             case .timedOut: "\(name) took too long, so I stopped it."
             case .cancelled: "Stopped."
             case .failed: "\(name) didn't finish that. Could you try again?"
+            case .signedOut: "Claude Code isn't signed in on this Mac. Run claude auth login in Terminal once, then ask again."
+            case .declined: "\(name) declined to answer that one."
+            case .refusedSetup: "Claude Code has settings or add-ons turned on that Aegis doesn't allow, so I didn't send that."
             }
         }
     }
@@ -57,10 +61,14 @@ actor PlanRunner {
     }
 
     private var current: Run?
+    private let claudeCode = ClaudeCodeRunner()
     private let log = Logger(subsystem: "dev.aegis.app", category: "plan")
 
     /// A question: read-only, in a new empty folder that's removed afterwards.
     func answer(_ request: CloudHandOff.Request) async -> Result<String, Failure> {
+        if request.provider == .claude {
+            return await claude(request, timeout: 180)
+        }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("aegis-ask-" + UUID().uuidString)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
@@ -78,6 +86,21 @@ actor PlanRunner {
             DiagnosticLog.shared.record(.planFailed, number: -3)
             return .failure(.failed(-3))
         }
+        if request.provider == .claude {
+            // Claude Code runs with no tools, so it can't work in the folder: its answer is saved there instead.
+            let result = await claude(
+                CloudHandOff.Request(provider: .claude, question: request.question, history: request.history),
+                timeout: 20 * 60
+            )
+            guard case let .success(text) = result else { return result }
+            guard Self.validFolder(folder, base: base),
+                  (try? text.write(to: folder.appendingPathComponent("Claude.md"), atomically: true, encoding: .utf8)) != nil
+            else {
+                DiagnosticLog.shared.record(.planFailed, number: -3)
+                return .failure(.failed(-3))
+            }
+            return .success("I've saved Claude's answer in the task's folder.")
+        }
         return await run(request, in: folder.resolvingSymlinksInPath(), sandbox: "workspace-write", effort: "medium", timeout: 20 * 60)
     }
 
@@ -91,10 +114,39 @@ actor PlanRunner {
     }
 
     /// Stops the running question or task: launchd ends its whole process group.
-    func cancel() {
+    func cancel() async {
+        await claudeCode.cancel()
         guard let current else { return }
         current.cancelled = true
         _ = Self.launchctl(["bootout", Self.domain + "/" + current.label])
+    }
+
+    /// Through the owner's Claude plan: only the gated request, with the owner's chosen model and effort.
+    private func claude(_ request: CloudHandOff.Request, timeout: Double) async -> Result<String, Failure> {
+        let ending = await claudeCode.run(
+            system: ClaudeCode.handOffSystem, prompt: CloudHandOff.planPrompt(request), choice: ClaudeCodeRunner.choice, timeout: timeout
+        ) { _ in }
+        let failure: Failure
+        switch ending {
+        case let .outcome(.answer(text, _)): return .success(text)
+        case let .outcome(.limit(resets)): failure = .limit(resets?.formatted(date: .omitted, time: .shortened))
+        case .outcome(.signedOut): failure = .signedOut
+        case .outcome(.declined): failure = .declined
+        case .outcome(.refused): failure = .refusedSetup
+        case .outcome(.failed), .ready: failure = .failed(-6)
+        case .unavailable: failure = .unavailable
+        case .busy: failure = .busy
+        case .timedOut: failure = .timedOut
+        case .cancelled: return .failure(.cancelled)
+        case let .failed(number): failure = .failed(Int32(number))
+        }
+        if case let .failed(number) = failure {
+            DiagnosticLog.shared.record(.planFailed, number: Int(number))
+        } else {
+            DiagnosticLog.shared.record(.planFailed)
+        }
+        log.notice("claude: \(String(describing: failure), privacy: .public)")
+        return .failure(failure)
     }
 
     /// Runs Codex as its own launchd job rather than a child of Aegis, so it doesn't inherit Aegis's privacy
@@ -228,12 +280,12 @@ actor PlanRunner {
         ]
     }
 
-    private static var domain: String {
+    static var domain: String {
         "gui/\(getuid())"
     }
 
     /// Running while launchd lists a PID for the job.
-    private static func state(of label: String) -> JobState {
+    static func state(of label: String) -> JobState {
         let output = Pipe()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
@@ -263,7 +315,7 @@ actor PlanRunner {
     }
 
     @discardableResult
-    private static func launchctl(_ arguments: [String]) -> Int32 {
+    static func launchctl(_ arguments: [String]) -> Int32 {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         process.arguments = arguments
