@@ -116,6 +116,7 @@ final class ShellController {
     @ObservationIgnored private let dockQueue = ShellQueue()
     @ObservationIgnored private var screens: (any NSObjectProtocol)?
     @ObservationIgnored private var occlusion: [any NSObjectProtocol] = []
+    @ObservationIgnored private var desktops: (any NSObjectProtocol)?
 
     /// Engaging, engaged or leaving: AegisShell's bar replaces the everyday menu bar icon.
     var isOn: Bool {
@@ -135,6 +136,18 @@ final class ShellController {
         hotKeyLabel = hotKey == nil ? nil : choice.label
         if settings.saved != nil {
             Task { await settings.restore() }
+        }
+        desktops = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.desktopShown() } }
+    }
+
+    /// Each desktop shown: darkened while engaged, its own wallpaper back once disengaged.
+    private func desktopShown() {
+        switch phase {
+        case .engaging, .engaged: settings.darkenShowingSpace()
+        case .off: settings.restoreShownSpace()
+        case .leaving: break
         }
     }
 

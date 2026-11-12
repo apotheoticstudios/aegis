@@ -12,27 +12,42 @@ protocol ShellDock {
     func setNow(autohide: Bool) -> Bool
 }
 
-/// The other: each display's wallpaper. macOS colours the see-through menu bar's items for the wallpaper, not for the
-/// windows behind them, so a dark one while engaged keeps them light and the whole bar dark over AegisShell's desktop.
+/// The other: the wallpaper of each desktop (Space). macOS colours the see-through menu bar's items for the wallpaper,
+/// not for the windows behind them, so a dark one while engaged keeps them light and the whole bar dark over AegisShell's
+/// desktop. macOS only changes the desktop showing, so each desktop is darkened when shown and marked to tell it apart.
 @MainActor
 protocol ShellWallpaper {
-    /// Each display's picture; nil when one can't be read.
+    /// Each display's picture on the desktop showing; nil when one can't be read.
     func current() -> [ShellSettings.Wallpaper]?
-    /// Puts AegisShell's dark picture on every display; whether that worked.
+    /// Whether the desktop showing already has AegisShell's picture.
+    func darkened() -> Bool
+    /// Puts AegisShell's dark picture on the desktop showing; whether that worked.
     func darken() -> Bool
-    /// Puts the saved pictures back wherever AegisShell's still shows; whether that worked.
+    /// Puts the saved pictures back on the desktop showing, where AegisShell's still shows; whether that worked.
     func restore(_ pictures: [ShellSettings.Wallpaper]) -> Bool
+    /// Marks the desktop showing, to know it again.
+    func mark() -> UUID
+    /// Whether the desktop showing is the one marked.
+    func isShowing(_ mark: UUID) -> Bool
+    func unmark(_ mark: UUID)
 }
 
 /// What AegisShell changes is saved before it changes it and put back on disengage, on quit, and on the next launch
-/// after a crash (ADR-0033). The saved file is written before anything changes and removed only once the restore
-/// worked, so a failure is retried at the next launch.
+/// after a crash (ADR-0033). The saved file is written before anything changes and removed only once everything is
+/// back, so a failure is retried at the next launch. Desktops other than the one showing are put back when next shown.
 @MainActor
 final class ShellSettings {
     struct Saved: Codable, Equatable {
-        var dockAutohide: Bool
-        /// Missing in files saved before AegisShell changed the wallpaper, and when it couldn't be read.
-        var wallpapers: [Wallpaper]?
+        /// The owner's Dock setting; nil once it's back.
+        var dockAutohide: Bool?
+        /// Each desktop AegisShell darkened, in the order shown. Missing while none is.
+        var spaces: [Space]?
+    }
+
+    /// A darkened desktop: its mark and its own pictures.
+    struct Space: Codable, Equatable {
+        let mark: UUID
+        let pictures: [Wallpaper]
     }
 
     /// One display's picture and how it's shown.
@@ -59,49 +74,90 @@ final class ShellSettings {
         (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) }
     }
 
-    /// Saves the Dock's setting and the wallpaper, then hides the Dock and darkens the wallpaper. Whether the Dock is hidden.
+    /// Saves the Dock's setting, then hides it, and darkens the desktop showing. Whether the Dock is hidden.
     func apply() async -> Bool {
+        var state = saved ?? Saved()
         // Engaged again before a restore went through: the first saving is the owner's own setting.
-        if saved == nil {
-            guard let current = dock.autohide(),
-                  let data = try? JSONEncoder().encode(Saved(dockAutohide: current, wallpapers: wallpaper?.current()))
-            else { return false }
-            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            guard FileManager.default.createFile(atPath: file.path, contents: data, attributes: [.posixPermissions: 0o600]) else {
-                return false
-            }
+        if state.dockAutohide == nil {
+            guard let current = dock.autohide() else { return false }
+            state.dockAutohide = current
+            guard save(state) else { return false }
         }
-        // Only over a saved picture, so it can always go back. If it fails, the menu bar's strip still shows the wallpaper.
-        if saved?.wallpapers != nil {
-            _ = wallpaper?.darken()
-        }
+        darkenShowingSpace()
         return dock.autohide() == true ? true : await dock.set(autohide: true)
     }
 
-    /// Puts back what was saved. Whether macOS is as it was.
+    /// While engaged, each desktop as it's shown: its pictures saved, then darkened. If either fails, the menu bar's
+    /// strip still shows that desktop's wallpaper, so its items stay readable.
+    func darkenShowingSpace() {
+        guard let wallpaper, var state = saved, !wallpaper.darkened(), let pictures = wallpaper.current() else { return }
+        let mark = wallpaper.mark()
+        state.spaces = (state.spaces ?? []) + [Space(mark: mark, pictures: pictures)]
+        guard save(state) else { return wallpaper.unmark(mark) }
+        _ = wallpaper.darken()
+    }
+
+    /// Puts back the Dock and the desktop showing. Whether those are as they were.
     @discardableResult
     func restore() async -> Bool {
-        guard let saved else { return true }
-        if let pictures = saved.wallpapers, wallpaper?.restore(pictures) == false {
-            return false
+        guard var state = saved else { return true }
+        if let autohide = state.dockAutohide {
+            if dock.autohide() != autohide {
+                guard await dock.set(autohide: autohide) else { return false }
+            }
+            state.dockAutohide = nil
         }
-        if dock.autohide() != saved.dockAutohide {
-            guard await dock.set(autohide: saved.dockAutohide) else { return false }
-        }
-        try? FileManager.default.removeItem(at: file)
-        return true
+        let back = restoringShowingSpace(&state)
+        keep(state)
+        return back
     }
 
     /// The same, before Aegis quits.
     @discardableResult
     func restoreNow() -> Bool {
-        guard let saved else { return true }
-        if let pictures = saved.wallpapers, wallpaper?.restore(pictures) == false {
-            return false
+        guard var state = saved else { return true }
+        if let autohide = state.dockAutohide {
+            guard dock.autohide() == autohide || dock.setNow(autohide: autohide) else { return false }
+            state.dockAutohide = nil
         }
-        guard dock.autohide() == saved.dockAutohide || dock.setNow(autohide: saved.dockAutohide) else { return false }
-        try? FileManager.default.removeItem(at: file)
+        let back = restoringShowingSpace(&state)
+        keep(state)
+        return back
+    }
+
+    /// After disengaging: a desktop AegisShell darkened gets its own wallpaper back when it's next shown.
+    func restoreShownSpace() {
+        guard var state = saved, state.dockAutohide == nil else { return }
+        _ = restoringShowingSpace(&state)
+        keep(state)
+    }
+
+    /// The desktop showing, if AegisShell darkened it: found by its mark. Whether it's back.
+    private func restoringShowingSpace(_ state: inout Saved) -> Bool {
+        guard let wallpaper, var spaces = state.spaces, !spaces.isEmpty, wallpaper.darkened() else { return true }
+        // shortcut: after a crash the marks are gone and the first saved pictures go back, exact when every desktop had
+        // the same wallpaper. Upgrade if owners lose per-desktop wallpapers that way.
+        let index = spaces.firstIndex { wallpaper.isShowing($0.mark) } ?? 0
+        guard wallpaper.restore(spaces[index].pictures) else { return false }
+        wallpaper.unmark(spaces[index].mark)
+        spaces.remove(at: index)
+        state.spaces = spaces.isEmpty ? nil : spaces
         return true
+    }
+
+    /// Writes what's still to put back, or removes the file once nothing is.
+    private func keep(_ state: Saved) {
+        if state == Saved() {
+            try? FileManager.default.removeItem(at: file)
+        } else {
+            _ = save(state)
+        }
+    }
+
+    private func save(_ state: Saved) -> Bool {
+        guard let data = try? JSONEncoder().encode(state) else { return false }
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        return FileManager.default.createFile(atPath: file.path, contents: data, attributes: [.posixPermissions: 0o600])
     }
 }
 
@@ -136,10 +192,48 @@ struct SystemDock: ShellDock {
 }
 
 /// The real wallpaper, through NSWorkspace.
-struct SystemWallpaper: ShellWallpaper {
+@MainActor
+final class SystemWallpaper: ShellWallpaper {
     /// Where AegisShell's dark picture is kept: one per theme, so macOS never shows a stale colour.
-    let folder: URL
+    private let folder: URL
     private static let prefix = "shell-wallpaper-"
+    /// One invisible window left on each darkened desktop: it stays there, so `isOnActiveSpace` tells the desktop apart.
+    private var marks: [UUID: NSWindow] = [:]
+
+    init(folder: URL) {
+        self.folder = folder
+    }
+
+    func darkened() -> Bool {
+        NSScreen.screens.contains { NSWorkspace.shared.desktopImageURL(for: $0)?.lastPathComponent.hasPrefix(Self.prefix) == true }
+    }
+
+    func mark() -> UUID {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
+        // Not on all desktops: it stays on the one showing now.
+        window.collectionBehavior = [.ignoresCycle, .stationary]
+        window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+        window.orderBack(nil)
+        let mark = UUID()
+        marks[mark] = window
+        return mark
+    }
+
+    func isShowing(_ mark: UUID) -> Bool {
+        marks[mark]?.isOnActiveSpace == true
+    }
+
+    func unmark(_ mark: UUID) {
+        marks.removeValue(forKey: mark)?.close()
+    }
 
     func current() -> [ShellSettings.Wallpaper]? {
         let pictures = NSScreen.screens.map { screen -> ShellSettings.Wallpaper? in
@@ -170,8 +264,8 @@ struct SystemWallpaper: ShellWallpaper {
     }
 
     func restore(_ pictures: [ShellSettings.Wallpaper]) -> Bool {
-        // shortcut: the current Space on each display; a Space first shown while engaged keeps AegisShell's picture until
-        // it is engaged and left there again. Upgrade if owners keep different wallpapers per Space.
+        // shortcut: one mark per desktop of the main display; with "Displays have separate Spaces", another display's
+        // desktops go back with the main display's. Upgrade if owners switch desktops per display.
         NSScreen.screens.allSatisfy { screen in
             // A picture the owner chose while engaged stays; a saved one that's gone can't come back.
             guard let display = Self.display(screen), let picture = pictures.first(where: { $0.display == display }),
