@@ -46,6 +46,8 @@ final class ShellMenuBar: NSObject {
             Self.frame(screen: $0.frame, visible: $0.visibleFrame, notchLeft: $0.auxiliaryTopLeftArea)
         }
         guard frames != bars.map(\.frame) else { return }
+        // With no menu bar to sit on, Aegis's everyday icon stays as the way out (in a menu bar that slides down).
+        shell.barShown = !frames.isEmpty
         closeMenu()
         bars.forEach { $0.orderOut(nil) }
         bars = frames.map { frame in
@@ -73,15 +75,15 @@ final class ShellMenuBar: NSObject {
         observers = []
         bars.forEach { $0.orderOut(nil) }
         bars = []
+        shell.barShown = false
     }
 
     private func toggleMenu() {
         if menu != nil {
             return closeMenu()
         }
-        // Under the hexagon of the bar that was clicked.
-        let pointer = NSEvent.mouseLocation
-        guard let bar = bars.first(where: { $0.frame.minX <= pointer.x && pointer.x < $0.frame.maxX }) ?? bars.first else { return }
+        // Under the hexagon of the bar that was clicked (the first, when it came from VoiceOver rather than a click).
+        guard let bar = bars.first(where: { $0 === NSApp.currentEvent?.window }) ?? bars.first else { return }
         let content = NSHostingView(rootView: ShellMenu(shell: shell) { [weak self] in self?.closeMenu() })
         let size = content.fittingSize
         let panel = NSPanel(
@@ -124,7 +126,7 @@ final class ShellMenuBar: NSObject {
 /// The bar itself, on the void so it melts into the desktop behind the see-through menu bar: the hexagon with the
 /// status word, the hidden mark and an urgent count (it opens ShellMenu); the workspaces; the launcher and Talk; and Exit.
 /// It takes the menu bar's own type, so it reads like the menus it covers; only the hexagon, the pips and the dot carry
-/// the theme's colour. Where the full row doesn't fit, the workspaces fold to their pips and the one showing.
+/// the theme's colour. Where the full row doesn't fit, it folds (`Fit`).
 struct ShellBar: View {
     let shell: ShellController
     let menu: () -> Void
@@ -137,8 +139,9 @@ struct ShellBar: View {
         TimelineView(.animation(paused: !moving)) { context in
             HStack(spacing: 0) {
                 ViewThatFits(in: .horizontal) {
-                    controls(folded: false)
-                    controls(folded: true)
+                    controls(.full)
+                    controls(.folded)
+                    controls(.least)
                 }
                 Spacer(minLength: 0)
             }
@@ -170,17 +173,25 @@ struct ShellBar: View {
         }
     }
 
-    private func controls(folded: Bool) -> some View {
+    /// How much of the row fits: all of it; the workspaces folded to their pips; or, on the narrowest menu bar, only the
+    /// hexagon and Exit, so the way out is never cut off (the menu still has everything).
+    enum Fit {
+        case full, folded, least
+    }
+
+    private func controls(_ fit: Fit) -> some View {
         HStack(spacing: 2) {
             identity
             if shell.itemComplete {
-                divider
-                ForEach(ShellWorkspace.allCases, id: \.self) { workspace in
-                    workspaceButton(workspace, named: !folded || workspace == shell.workspace)
+                if fit != .least {
+                    divider
+                    ForEach(ShellWorkspace.allCases, id: \.self) { workspace in
+                        workspaceButton(workspace, named: fit == .full || workspace == shell.workspace)
+                    }
+                    divider
+                    button("Launcher", help: Self.help("Launcher", shell.panelKey)) { ShellLauncher.shared.open() }
+                    button("Talk", icon: .mic, help: Self.help("Talk", shell.talkKey)) { shell.talk() }
                 }
-                divider
-                button("Launcher", help: Self.help("Launcher", shell.panelKey)) { ShellLauncher.shared.open() }
-                button("Talk", icon: .mic, help: Self.help("Talk", shell.talkKey)) { shell.talk() }
                 divider
                 button("Exit", icon: .power, help: Self.help("Disengage AegisShell", shell.hotKeyLabel)) { shell.disengage() }
             }

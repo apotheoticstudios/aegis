@@ -9,8 +9,8 @@ struct AegisApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        // While AegisShell is on, its own bar (ShellMenuBar) stands in for this one.
-        MenuBarExtra(isInserted: Binding(get: { !ShellController.shared.isOn }, set: { _ in })) {
+        // While AegisShell is on, its own bar (ShellMenuBar) stands in for this one, wherever there's a menu bar to sit on.
+        MenuBarExtra(isInserted: Binding(get: { !ShellController.shared.isOn || !ShellController.shared.barShown }, set: { _ in })) {
             MenuContent(delegate: delegate)
         } label: {
             if case .unavailable = delegate.model.phase {
@@ -201,8 +201,9 @@ struct MenuContent: View {
     var body: some View {
         Button("Open your Aegis" + (delegate.hotKeyLabel.map { "   \($0)" } ?? "")) { delegate.togglePanel() }
         Button("Talk to your Aegis" + (delegate.talkKeyLabel.map { "   \($0)" } ?? "")) { delegate.talk() }
-        Button("Engage AegisShell" + (ShellController.shared.hotKeyLabel.map { "   \($0)" } ?? "")) {
-            Task { await ShellController.shared.engage() }
+        let shell = ShellController.shared
+        Button((shell.isOn ? "Disengage AegisShell" : "Engage AegisShell") + (shell.hotKeyLabel.map { "   \($0)" } ?? "")) {
+            shell.toggle()
         }
         Button("Refresh brief") { Task { await delegate.model.refresh() } }
         Button(delegate.model.writing ? "Writing a brief…" : "Write a brief now") {

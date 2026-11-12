@@ -374,6 +374,7 @@ final class ShellTests: XCTestCase {
         shell.panelKey = "⌥Space"
         try snap(ShellBar(shell: shell, menu: {}, close: {}), bar, "bar.png")
         try snap(ShellBar(shell: shell, menu: {}, close: {}), CGSize(width: 480, height: 37), "bar-folded.png")
+        try snap(ShellBar(shell: shell, menu: {}, close: {}), CGSize(width: 300, height: 37), "bar-least.png")
         try snap(ShellMenu(shell: shell) {}.background(Color.black), CGSize(width: 320, height: 520), "menu.png")
         let launcher = ShellLauncher()
         launcher.query = "example"

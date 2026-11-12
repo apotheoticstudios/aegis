@@ -57,5 +57,5 @@ The owner asked for AegisShell's controls to replace the left of the menu bar, w
 - **The front app's menus are covered while engaged** and reached by their shortcuts (owner's choice; no button to show them). They return the moment AegisShell disengages.
 - **It shows only where a menu bar takes room.** It skips a menu bar that hides itself and a second display without its own, so it never covers a window's buttons. It stays out of full-screen Spaces, where the app keeps its own menu bar. It follows display and Space changes.
 - **Contents:** the hexagon with the status word, the hidden mark and an urgent count (it opens ShellMenu), the four workspaces, Launcher, Talk and Exit, in the menu bar's own type. It is drawn on the void, so it melts into the desktop behind the see-through menu bar, and it arrives and leaves with the desktop's wash. Still silent: visual only, and nothing while disengaged.
-- **The way out** is now the bar's Exit, ShellMenu's Disengage, ⌃⌥A and "stand down". Where no bar shows, ⌃⌥A and "stand down" remain.
+- **The way out** is now the bar's Exit, ShellMenu's Disengage, ⌃⌥A and "stand down". On the narrowest menu bar the bar folds to the hexagon and Exit, so Exit is never cut off. Where no bar shows at all (a menu bar that hides itself), Aegis's everyday icon stays while engaged, with Disengage in its menu.
 
