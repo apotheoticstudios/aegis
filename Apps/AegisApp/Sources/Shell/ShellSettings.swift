@@ -158,10 +158,13 @@ struct SystemWallpaper: ShellWallpaper {
 
     func darken() -> Bool {
         let theme = UserDefaults.aegis.string(forKey: HUDTheme.storeKey).flatMap(HUDTheme.init) ?? .arc
-        let url = folder.appendingPathComponent(Self.prefix + theme.rawValue + ".png")
-        guard Self.write(theme.rgba(.void), to: url) else { return false }
+        let void = Self.color(theme.rgba(.void))
+        let url = folder.appendingPathComponent(Self.prefix + theme.rawValue + "-\(Self.side).png")
+        guard Self.write(void, to: url) else { return false }
         let options: [NSWorkspace.DesktopImageOptionKey: Any] = [
             .imageScaling: NSImageScaling.scaleAxesIndependently.rawValue, .allowClipping: true,
+            // macOS 27 paints its own blue round a picture it doesn't stretch; the fill keeps the whole wallpaper void.
+            .fillColor: void,
         ]
         return NSScreen.screens.allSatisfy { (try? NSWorkspace.shared.setDesktopImageURL(url, for: $0, options: options)) != nil }
     }
@@ -193,19 +196,27 @@ struct SystemWallpaper: ShellWallpaper {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 
-    /// A one-pixel picture in the theme's void, stretched across the display.
-    private static func write(_ rgba: UInt32, to url: URL) -> Bool {
+    /// The picture's edge in pixels: big enough that macOS draws it, still a tiny file.
+    private static let side = 64
+
+    private static func color(_ rgba: UInt32) -> NSColor {
+        NSColor(srgbRed: HUDTheme.channel(rgba, 24), green: HUDTheme.channel(rgba, 16), blue: HUDTheme.channel(rgba, 8), alpha: 1)
+    }
+
+    /// A small picture in the theme's void, stretched across the display.
+    private static func write(_ color: NSColor, to url: URL) -> Bool {
         if FileManager.default.fileExists(atPath: url.path) {
             return true
         }
         guard let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+            bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
             isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         ) else { return false }
-        rep.setColor(
-            NSColor(srgbRed: HUDTheme.channel(rgba, 24), green: HUDTheme.channel(rgba, 16), blue: HUDTheme.channel(rgba, 8), alpha: 1),
-            atX: 0, y: 0
-        )
+        for x in 0 ..< side {
+            for y in 0 ..< side {
+                rep.setColor(color, atX: x, y: y)
+            }
+        }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         return rep.representation(using: .png, properties: [:]).map { (try? $0.write(to: url)) != nil } ?? false
     }
