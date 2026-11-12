@@ -27,7 +27,7 @@ enum ShellMotion {
     static let reduced = 0.3
     /// The Dock returns 600 ms into disengaging.
     static let dockReturns = 0.6
-    /// The Aegis menu bar item shows the workspace, the status and Exit at 900 ms.
+    /// AegisShell's bar shows its controls at 900 ms.
     static let itemShows = 0.9
 
     /// `time` seconds into engaging. The design's frame traced round the screen is left out (owner's choice).

@@ -488,14 +488,14 @@ AegisShell turns the Mac into a Aegis operating environment: a shell over macOS 
 | --- | --- |
 | Hotkey | ⌃⌥A (separate from the ⌥ Space panel hotkey) |
 | Voice | "Aegis, engage" (only when the wake word is enabled) |
-| Menu bar | "Engage AegisShell" from Aegis's menu bar icon; Exit beside Aegis's item while engaged |
+| Menu bar | "Engage AegisShell" from Aegis's menu bar icon; Exit on AegisShell's bar while engaged |
 | Panel | An Engage button in the HUD |
 | Optional schedule or workspace | e.g. engage automatically on the Mac mini hub, or when the "Work" workspace starts; off by default |
 
-- **On engage:** a short transition (about 1.9 s: the shield forms over the screen and breaks into the live desktop); the Dock hides, macOS's own menu bar stays with Aegis's item in it (hexagon, workspace, status, Exit), and the live HUD desktop and custom widgets appear.
-- **On disengage** (same hotkey, "Aegis, stand down", Exit or Disengage in Aegis's menu): everything AegisShell added is removed, the Dock returns, and anything AegisShell moved goes back. How it sits on macOS: ADR-0033.
+- **On engage:** a short transition (about 1.9 s: the shield forms over the screen and breaks into the live desktop); the Dock hides, AegisShell's bar covers the left of macOS's menu bar (hexagon and status, workspaces, launcher, Talk, Exit), and the live HUD desktop and custom widgets appear.
+- **On disengage** (same hotkey, "Aegis, stand down", Exit on the bar or Disengage in its menu): everything AegisShell added is removed, the Dock returns, and anything AegisShell moved goes back. How it sits on macOS: ADR-0033.
 - **Resources:** the live desktop, top bar and custom widgets use no RAM or GPU while AegisShell is not engaged.
-- **Always available exit:** if AegisShell ever misbehaves, the disengage hotkey and the menu bar icon still restore normal macOS.
+- **Always available exit:** if AegisShell ever misbehaves, the disengage hotkey and the bar's Exit still restore normal macOS.
 
 ### Why a shell, not a real OS
 
@@ -508,7 +508,7 @@ AegisShell turns the Mac into a Aegis operating environment: a shell over macOS 
 | Feature | What it does |
 | --- | --- |
 | Live HUD desktop | Aegis draws on the desktop layer beneath windows: reactor, event stream, schedule and home status become a living wallpaper |
-| Aegis menu bar item | The Dock auto-hides; macOS's menu bar stays, and Aegis's item in it shows the hexagon, workspace, status, urgent count and Exit, with its own menu (owner's choice, 2026-10-27) |
+| AegisShell's bar | The Dock auto-hides. Over the left of macOS's menu bar, where the Apple menu and the front app's menus sit, AegisShell's bar shows the hexagon with the status, the hidden mark and an urgent count (it opens its own menu), the workspaces, the launcher, Talk and Exit. The front app's menus are reached by their shortcuts while it's engaged; the rest of the menu bar is macOS's own (owner's choice, 2026-11-12) |
 | Launcher | ⌥ Space replaces Spotlight and Launchpad: open apps, files and settings, ask questions and run commands from one bar |
 | Window management | Arrange windows by command ("Mail left, calendar right"), saved workspace layouts, focus layouts per activity |
 | Workspaces | One-tap modes such as Work, Focus, Evening and Movie, each changing layouts, widgets, Focus mode and home scenes |
@@ -841,7 +841,7 @@ The parts communicate through XPC. Each side checks the other's code signature (
 | Multiple monitors | NSScreen and screen-change notifications |
 | Performance guards | Window occlusion state, thermal state, power source |
 
-AegisShell does not control Spaces (no public API) and does not replace Finder or the real menu bar.
+AegisShell does not control Spaces (no public API) and does not replace Finder; its bar sits over the real menu bar without changing it.
 
 ## Development plan
 

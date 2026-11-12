@@ -2,71 +2,90 @@ import AegisKit
 import AppKit
 import SwiftUI
 
-/// Aegis's item in macOS's own menu bar while AegisShell is on (the design system's ShellMenuExtra): the hexagon,
-/// filled and glowing, then the workspace with its pip, the status word with its dot and an urgent count; beside it an
-/// always-visible Exit. Two status items, so each is an ordinary menu bar button macOS highlights itself.
+/// AegisShell's bar over the left of macOS's menu bar, where the Apple menu and the front app's menus sit, while it's
+/// engaged (owner's choice, 2026-11-12; ADR-0033). One borderless panel per menu bar, just above the bar's level and
+/// under its menus, so the front app's menus are reached by their shortcuts only. Nothing hides or changes the menu
+/// bar itself, and full-screen apps keep theirs.
 @MainActor
-final class ShellMenuBarItems: NSObject {
-    private let exit = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let main = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+final class ShellMenuBar: NSObject {
     private let shell: ShellController
+    private var bars: [NSPanel] = []
     private var menu: NSPanel?
     private var outside: [Any] = []
+    private var observers: [(NotificationCenter, any NSObjectProtocol)] = []
 
     init(shell: ShellController) {
         self.shell = shell
         super.init()
-        if let button = exit.button {
-            button.image = ShellIcon.image(.power, size: 12)
-            button.imagePosition = .imageLeading
-            button.title = "Exit"
-            button.toolTip = "Disengage AegisShell" + (shell.hotKeyLabel.map { " (\($0))" } ?? "")
-            button.target = self
-            button.action = #selector(leave)
+        place()
+        // A display added, removed or rearranged, or a Space whose menu bar shows or hides: the bars follow.
+        let follow: @Sendable (Notification) -> Void = { [weak self] _ in MainActor.assumeIsolated { self?.place() } }
+        let workspace = NSWorkspace.shared.notificationCenter
+        observers = [
+            (.default, NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main, using: follow
+            )),
+            (
+                workspace,
+                workspace.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main, using: follow)
+            ),
+        ]
+    }
+
+    /// Over the left of a display's menu bar: from its left edge to the notch, or halfway across a display without one.
+    /// Nil where no menu bar takes room (one that hides itself, or a second display without its own), so the bar never
+    /// covers a window's buttons.
+    static func frame(screen: NSRect, visible: NSRect, notchLeft: NSRect?) -> NSRect? {
+        let height = screen.maxY - visible.maxY
+        guard height > 0 else { return nil }
+        return NSRect(x: screen.minX, y: screen.maxY - height, width: notchLeft?.width ?? screen.width / 2, height: height)
+    }
+
+    private func place() {
+        let frames = NSScreen.screens.compactMap {
+            Self.frame(screen: $0.frame, visible: $0.visibleFrame, notchLeft: $0.auxiliaryTopLeftArea)
         }
-        exit.isVisible = false
-        if let button = main.button {
-            let host = SizedHostingView(rootView: ShellMenuExtra(shell: shell))
-            host.resized = { [weak self, weak shell] width in
-                self?.main.length = width
-                self?.exit.isVisible = shell?.itemComplete == true
-            }
-            host.translatesAutoresizingMaskIntoConstraints = false
-            button.addSubview(host)
-            NSLayoutConstraint.activate([
-                host.leadingAnchor.constraint(equalTo: button.leadingAnchor),
-                host.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-            ])
-            main.length = host.intrinsicContentSize.width
-            button.target = self
-            button.action = #selector(toggleMenu)
-            button.setAccessibilityLabel("Aegis")
+        guard frames != bars.map(\.frame) else { return }
+        closeMenu()
+        bars.forEach { $0.orderOut(nil) }
+        bars = frames.map { frame in
+            let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.level = .statusBar
+            // On every Space but not beside full-screen apps, still in Mission Control, out of the window cycle.
+            panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.isReleasedWhenClosed = false
+            panel.contentView = NSHostingView(rootView: ShellBar(
+                shell: shell, menu: { [weak self] in self?.toggleMenu() }, close: { [weak self] in self?.closeMenu() }
+            ))
+            panel.setFrame(frame, display: false)
+            panel.orderFront(nil)
+            return panel
         }
     }
 
-    /// Takes both items out of the menu bar.
+    /// Takes the bars out of the menu bar.
     func remove() {
         closeMenu()
-        NSStatusBar.system.removeStatusItem(main)
-        NSStatusBar.system.removeStatusItem(exit)
+        observers.forEach { $0.0.removeObserver($0.1) }
+        observers = []
+        bars.forEach { $0.orderOut(nil) }
+        bars = []
     }
 
-    @objc private func leave() {
-        closeMenu()
-        shell.disengage()
-    }
-
-    @objc private func toggleMenu() {
+    private func toggleMenu() {
         if menu != nil {
             return closeMenu()
         }
-        guard let button = main.button, let window = button.window else { return }
-        let item = window.convertToScreen(button.convert(button.bounds, to: nil))
+        // Under the hexagon of the bar that was clicked.
+        let pointer = NSEvent.mouseLocation
+        guard let bar = bars.first(where: { $0.frame.minX <= pointer.x && pointer.x < $0.frame.maxX }) ?? bars.first else { return }
         let content = NSHostingView(rootView: ShellMenu(shell: shell) { [weak self] in self?.closeMenu() })
         let size = content.fittingSize
-        // Right-aligned under the item, 320 wide, as the design hangs it.
         let panel = NSPanel(
-            contentRect: NSRect(x: item.maxX - size.width, y: item.minY - size.height - 4, width: size.width, height: size.height),
+            contentRect: NSRect(x: bar.frame.minX + 6, y: bar.frame.minY - size.height - 4, width: size.width, height: size.height),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
         panel.level = .popUpMenu
@@ -84,8 +103,8 @@ final class ShellMenuBarItems: NSObject {
             } as Any,
             NSEvent.addLocalMonitorForEvents(matching: clicks) { [weak self] event in
                 MainActor.assumeIsolated {
-                    // The item's own click toggles it.
-                    if let self, event.window !== self.menu, event.window !== self.main.button?.window {
+                    // The bar's own controls close or toggle it themselves.
+                    if let self, event.window !== self.menu, !self.bars.contains(where: { $0 === event.window }) {
                         self.closeMenu()
                     }
                 }
@@ -102,75 +121,176 @@ final class ShellMenuBarItems: NSObject {
     }
 }
 
-/// A hosting view that tells its owner when its content's width changes, and lets clicks through to the menu bar
-/// button underneath.
-private final class SizedHostingView<Content: View>: NSHostingView<Content> {
-    var resized: (CGFloat) -> Void = { _ in }
-
-    override func invalidateIntrinsicContentSize() {
-        super.invalidateIntrinsicContentSize()
-        resized(intrinsicContentSize.width)
-    }
-
-    override func hitTest(_: NSPoint) -> NSView? {
-        nil
-    }
-}
-
-/// The item itself: it takes the menu bar's own type and colour so it sits among the other items; only the hexagon,
-/// the pip and the dot carry the theme's colour.
-struct ShellMenuExtra: View {
+/// The bar itself, on the void so it melts into the desktop behind the see-through menu bar: the hexagon with the
+/// status word, the hidden mark and an urgent count (it opens ShellMenu); the workspaces; the launcher and Talk; and Exit.
+/// It takes the menu bar's own type, so it reads like the menus it covers; only the hexagon, the pips and the dot carry
+/// the theme's colour. Where the full row doesn't fit, the workspaces fold to their pips and the one showing.
+struct ShellBar: View {
     let shell: ShellController
+    let menu: () -> Void
+    let close: () -> Void
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
     @Environment(\.accessibilityReduceMotion) private var still
 
     var body: some View {
-        let status = ShellStatus(shell)
-        let urgent = shell.model?.glow == true ? shell.readings.urgent : 0
-        HStack(spacing: 7) {
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !status.breathes || still)) { context in
-                ShellGlyph(filled: true)
-                    .foregroundStyle(theme.color(urgent > 0 ? .critical : .primary))
-                    .shadow(color: theme.color(urgent > 0 ? .critical : .primary), radius: urgent > 0 ? 5 : 3)
-                    .opacity(status.breathes && !still ? HUDMotion.breathe(context.date.timeIntervalSinceReferenceDate * 2) : 1)
-            }
-            if shell.itemComplete {
-                HStack(spacing: 5) {
-                    Rectangle().fill(theme.color(shell.workspace.accent)).frame(width: 6, height: 6)
-                    Text(shell.workspace.name)
+        // It arrives and leaves with the desktop's wash, so the void never shows over the wallpaper on its own.
+        TimelineView(.animation(paused: !moving)) { context in
+            HStack(spacing: 0) {
+                ViewThatFits(in: .horizontal) {
+                    controls(folded: false)
+                    controls(folded: true)
                 }
-                HStack(spacing: 5) {
-                    Rectangle().fill(theme.color(status.tone)).frame(width: 5, height: 5)
-                        .shadow(color: status.live ? theme.color(.primary) : .clear, radius: 5)
-                    Text(status.word)
-                }
-                .opacity(0.86)
+                Spacer(minLength: 0)
             }
-            if shell.hideDetails {
-                ShellIconView(icon: .hidden, size: 13).opacity(0.86)
-            }
-            if urgent > 0 {
-                HStack(spacing: 4) {
-                    ShellIconView(icon: .alert, size: 11)
-                    Text("\(urgent)").fontWeight(.semibold)
-                }
-                .font(.system(size: 12))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 5)
-                .frame(height: 17)
-                .background(theme.color(.critical), in: RoundedRectangle(cornerRadius: 4))
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(theme.color(.void))
+            .opacity(arrived(at: context.date))
         }
         .font(Font(NSFont.menuBarFont(ofSize: 0)))
+        .foregroundStyle(.white)
         .lineLimit(1)
+        .environment(\.hudTheme, theme)
+        .environment(\.colorScheme, .dark)
+    }
+
+    private var moving: Bool {
+        switch shell.phase {
+        case .engaging, .leaving: true
+        case .off, .engaged: false
+        }
+    }
+
+    private func arrived(at date: Date) -> Double {
+        switch shell.phase {
+        case let .engaging(start):
+            let frame = ShellMotion.engage(date.timeIntervalSince(start), reduced: still)
+            return frame.all * frame.wall
+        case let .leaving(start): return ShellMotion.disengage(date.timeIntervalSince(start), reduced: still).all
+        case .off, .engaged: return 1
+        }
+    }
+
+    private func controls(folded: Bool) -> some View {
+        HStack(spacing: 2) {
+            identity
+            if shell.itemComplete {
+                divider
+                ForEach(ShellWorkspace.allCases, id: \.self) { workspace in
+                    workspaceButton(workspace, named: !folded || workspace == shell.workspace)
+                }
+                divider
+                button("Launcher", help: Self.help("Launcher", shell.panelKey)) { ShellLauncher.shared.open() }
+                button("Talk", icon: .mic, help: Self.help("Talk", shell.talkKey)) { shell.talk() }
+                divider
+                button("Exit", icon: .power, help: Self.help("Disengage AegisShell", shell.hotKeyLabel)) { shell.disengage() }
+            }
+        }
         .fixedSize()
-        .padding(.horizontal, 7)
-        .frame(height: 24)
-        .accessibilityElement(children: .ignore)
+        .padding(.leading, 8)
+    }
+
+    /// The hexagon, filled and glowing, with the status word: Aegis's menu.
+    private var identity: some View {
+        let status = ShellStatus(shell)
+        let urgent = shell.model?.glow == true ? shell.readings.urgent : 0
+        return Button(action: menu) {
+            HStack(spacing: 7) {
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !status.breathes || still)) { context in
+                    ShellGlyph(filled: true)
+                        .foregroundStyle(theme.color(urgent > 0 ? .critical : .primary))
+                        .shadow(color: theme.color(urgent > 0 ? .critical : .primary), radius: urgent > 0 ? 5 : 3)
+                        .opacity(status.breathes && !still ? HUDMotion.breathe(context.date.timeIntervalSinceReferenceDate * 2) : 1)
+                }
+                if shell.itemComplete {
+                    HStack(spacing: 5) {
+                        Rectangle().fill(theme.color(status.tone)).frame(width: 5, height: 5)
+                            .shadow(color: status.live ? theme.color(.primary) : .clear, radius: 5)
+                        Text(status.word)
+                    }
+                    .opacity(0.86)
+                }
+                if shell.hideDetails {
+                    ShellIconView(icon: .hidden, size: 13).opacity(0.86)
+                }
+                if urgent > 0 {
+                    HStack(spacing: 4) {
+                        ShellIconView(icon: .alert, size: 11)
+                        Text("\(urgent)").fontWeight(.semibold)
+                    }
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 5)
+                    .frame(height: 17)
+                    .background(theme.color(.critical))
+                }
+            }
+            .modifier(BarItem())
+        }
+        .buttonStyle(ShellRowStyle())
         .accessibilityLabel(
-            "Aegis: \(shell.workspace.name), \(status.word)" + (shell.hideDetails ? ", details hidden" : "")
-                + (urgent > 0 ? ", \(urgent) urgent" : "")
+            "Aegis: \(status.word)" + (shell.hideDetails ? ", details hidden" : "") + (urgent > 0 ? ", \(urgent) urgent" : "")
         )
+        .accessibilityHint("Opens AegisShell's menu")
+    }
+
+    /// A workspace: its pip and name, the one showing underlined in its accent; folded, the others are just their pips.
+    private func workspaceButton(_ workspace: ShellWorkspace, named: Bool) -> some View {
+        let chosen = workspace == shell.workspace
+        let accent = theme.color(workspace.accent)
+        return Button {
+            close()
+            shell.switchTo(workspace)
+        } label: {
+            HStack(spacing: 5) {
+                Rectangle().fill(accent).frame(width: 6, height: 6)
+                if named {
+                    Text(workspace.name)
+                }
+            }
+            .opacity(chosen ? 1 : 0.62)
+            .modifier(BarItem())
+            .overlay(alignment: .bottom) {
+                if chosen {
+                    Rectangle().fill(accent).frame(height: 2).shadow(color: accent, radius: 3)
+                }
+            }
+        }
+        .buttonStyle(ShellRowStyle())
+        .help(Self.help(workspace.name, shell.workspaceKeyLabels[workspace]))
+        .accessibilityLabel("\(workspace.name) workspace")
+        .accessibilityAddTraits(chosen ? .isSelected : [])
+    }
+
+    /// "Focus (⌃2)": a control's name and its shortcut, if it has one.
+    static func help(_ name: String, _ keys: String?) -> String {
+        keys.map { "\(name) (\($0))" } ?? name
+    }
+
+    private func button(_ title: String, icon: ShellIcon? = nil, help: String, action: @escaping () -> Void) -> some View {
+        Button {
+            close()
+            action()
+        } label: {
+            HStack(spacing: 5) {
+                if let icon {
+                    ShellIconView(icon: icon, size: 12)
+                }
+                Text(title)
+            }
+            .modifier(BarItem())
+        }
+        .buttonStyle(ShellRowStyle())
+        .help(help)
+    }
+
+    private var divider: some View {
+        Rectangle().fill(.white.opacity(0.18)).frame(width: 1, height: 14).padding(.horizontal, 6)
+    }
+}
+
+/// A bar control's room: as tall as macOS's own menu highlight, a little padding either side.
+private struct BarItem: ViewModifier {
+    func body(content: Content) -> some View {
+        content.padding(.horizontal, 8).frame(height: 24).contentShape(Rectangle())
     }
 }
 
@@ -231,9 +351,9 @@ struct ShellGlyph: View {
     }
 }
 
-/// The menu under Aegis's item (the design system's ShellMenu), its own glass panel rather than a native menu: the
-/// emblem, name and status; the urgent count; the panel; and Disengage. Workspaces, the launcher, arranging, window
-/// layouts and the privacy switches join it with their stages.
+/// The menu under the bar's hexagon (the design system's ShellMenu), its own glass panel rather than a native menu: the
+/// emblem, name and status; the urgent item; the workspaces with their shortcuts; the launcher, the panel and Talk; the
+/// privacy switches; and Disengage.
 struct ShellMenu: View {
     let shell: ShellController
     let close: () -> Void

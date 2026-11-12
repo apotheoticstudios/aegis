@@ -48,3 +48,14 @@ AegisShell makes the Mac feel like Aegis's own environment while it's engaged an
 ## Amendment (2026-10-28): voice over any app
 
 While AegisShell is engaged with details showing, Talk to Aegis (its key, the menu, the ask line's mic) shows the design's voice overlay centred under the menu bar instead of opening the panel. It runs the panel's own voice turn and counts as an open Aegis surface for the silent rule: Aegis speaks only while it shows, it fades 3 s after the answer, disengaging silences it, and anything needing a confirmation (or voice that can't be used) hands over to the panel. The wake listener treats it as the open panel. With details hidden, Talk opens the panel as before, because the overlay would show your data over whatever is on screen. "Hey Aegis" still opens the panel.
+
+## Amendment (2026-11-12): AegisShell's bar over the left of the menu bar
+
+The owner asked for AegisShell's controls to replace the left of the menu bar, where the Apple menu and the front app's menus sit, while it's engaged (#175). This replaces the two status items on the right.
+
+- **One borderless, non-activating panel per menu bar**, just above the menu bar's level (`NSWindow.Level.statusBar`) and below its menus. It runs from the display's left edge to the notch (`NSScreen.auxiliaryTopLeftArea`), or halfway across a display without one, as tall as the menu bar. Public APIs only: the menu bar itself isn't hidden, moved or changed, so Control Centre, the status items and the notch behave as always.
+- **The front app's menus are covered while engaged** and reached by their shortcuts (owner's choice; no button to show them). They return the moment AegisShell disengages.
+- **It shows only where a menu bar takes room.** It skips a menu bar that hides itself and a second display without its own, so it never covers a window's buttons. It stays out of full-screen Spaces, where the app keeps its own menu bar. It follows display and Space changes.
+- **Contents:** the hexagon with the status word, the hidden mark and an urgent count (it opens ShellMenu), the four workspaces, Launcher, Talk and Exit, in the menu bar's own type. It is drawn on the void, so it melts into the desktop behind the see-through menu bar, and it arrives and leaves with the desktop's wash. Still silent: visual only, and nothing while disengaged.
+- **The way out** is now the bar's Exit, ShellMenu's Disengage, ⌃⌥A and "stand down". Where no bar shows, ⌃⌥A and "stand down" remain.
+

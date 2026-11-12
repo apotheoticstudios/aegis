@@ -173,6 +173,29 @@ final class ShellTests: XCTestCase {
         }
     }
 
+    func testTheBarCoversTheLeftOfEachMenuBar() {
+        // A notched MacBook: from the left edge to the notch, as tall as the menu bar.
+        let mac = NSRect(x: 0, y: 0, width: 1512, height: 982)
+        XCTAssertEqual(
+            ShellMenuBar.frame(
+                screen: mac,
+                visible: NSRect(x: 0, y: 0, width: 1512, height: 944),
+                notchLeft: NSRect(x: 0, y: 944, width: 654, height: 38)
+            ),
+            NSRect(x: 0, y: 944, width: 654, height: 38)
+        )
+        // A display without a notch, to the right of the main one and with the Dock on its left: halfway across.
+        let wide = NSRect(x: 1512, y: -200, width: 2560, height: 1440)
+        XCTAssertEqual(
+            ShellMenuBar.frame(screen: wide, visible: NSRect(x: 1560, y: -200, width: 2512, height: 1415), notchLeft: nil),
+            NSRect(x: 1512, y: 1215, width: 1280, height: 25)
+        )
+        // No menu bar taking room (it hides itself, or the display has none): no bar, so no window's buttons are covered.
+        XCTAssertNil(ShellMenuBar.frame(screen: wide, visible: NSRect(x: 1512, y: -200, width: 2560, height: 1440), notchLeft: nil))
+        XCTAssertEqual(ShellBar.help("Focus", "⌃2"), "Focus (⌃2)")
+        XCTAssertEqual(ShellBar.help("Talk", nil), "Talk")
+    }
+
     func testTheDesktopHoldsStillForTheRightReason() {
         func reason(
             thermal: ProcessInfo.ThermalState = .nominal,
@@ -282,7 +305,7 @@ final class ShellTests: XCTestCase {
         XCTAssertEqual(ShellLauncher.apps(matching: "", in: [folder.path]), [])
     }
 
-    /// Renders the desktop at the MacBook's size through the transition and built, the menu bar item and its menu, to
+    /// Renders the desktop at the MacBook's size through the transition and built, AegisShell's bar and its menu, to
     /// compare with the design's AegisShell cards. Opt-in: `TEST_RUNNER_AEGIS_RENDER_SHELL=<folder>`.
     func testRendersTheShell() throws {
         guard let folder = ProcessInfo.processInfo.environment["AEGIS_RENDER_SHELL"] else {
@@ -344,10 +367,13 @@ final class ShellTests: XCTestCase {
             try snap(ShellDesktop(shell: shell, size: size), size, "workspace-\(workspace.rawValue).png")
         }
         shell.switchTo(.work)
-        try snap(ShellMenuExtra(shell: shell).background(Color(white: 0.08)), CGSize(width: 260, height: 24), "item-engaging.png")
+        // The bar over the left of the menu bar: a 14" MacBook's left-of-notch area, then narrower, where it folds.
+        let bar = CGSize(width: 650, height: 37)
+        try snap(ShellBar(shell: shell, menu: {}, close: {}), bar, "bar-engaging.png")
         shell.itemComplete = true
         shell.panelKey = "⌥Space"
-        try snap(ShellMenuExtra(shell: shell).background(Color(white: 0.08)), CGSize(width: 260, height: 24), "item.png")
+        try snap(ShellBar(shell: shell, menu: {}, close: {}), bar, "bar.png")
+        try snap(ShellBar(shell: shell, menu: {}, close: {}), CGSize(width: 480, height: 37), "bar-folded.png")
         try snap(ShellMenu(shell: shell) {}.background(Color.black), CGSize(width: 320, height: 520), "menu.png")
         let launcher = ShellLauncher()
         launcher.query = "example"

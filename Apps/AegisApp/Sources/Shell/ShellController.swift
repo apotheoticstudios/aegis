@@ -3,8 +3,8 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// AegisShell (DESIGN.md › AegisShell, ADR-0033): on demand only, it hides the Dock, keeps macOS's own menu bar with
-/// Aegis's item in it, and puts a live HUD on the desktop under every window; disengaging puts macOS back as it was.
+/// AegisShell (DESIGN.md › AegisShell, ADR-0033): on demand only, it hides the Dock, puts its own bar over the left of
+/// macOS's menu bar, and puts a live HUD on the desktop under every window; disengaging puts macOS back as it was.
 /// Nothing here runs while it's off: no windows, no timers.
 @MainActor @Observable
 final class ShellController {
@@ -15,7 +15,7 @@ final class ShellController {
     }
 
     var phase = Phase.off
-    /// From 900 ms into engaging, the Aegis menu bar item shows the workspace, the status and Exit.
+    /// From 900 ms into engaging, the bar shows the status, the workspaces, the launcher, Talk and Exit.
     var itemComplete = false
     /// What the desktop shows round the core, refreshed while engaged.
     var readings = Readings()
@@ -105,7 +105,7 @@ final class ShellController {
         dock: SystemDock(), file: WorldSidecar.folder.deletingLastPathComponent().appendingPathComponent("shell-state.json")
     )
     @ObservationIgnored private var windows: [NSWindow] = []
-    @ObservationIgnored private var items: ShellMenuBarItems?
+    @ObservationIgnored private var bar: ShellMenuBar?
     @ObservationIgnored private var hotKey: GlobalHotKey?
     @ObservationIgnored private var workspaceKeys: [GlobalHotKey] = []
     @ObservationIgnored private var refresher: Task<Void, Never>?
@@ -113,7 +113,7 @@ final class ShellController {
     @ObservationIgnored private var screens: (any NSObjectProtocol)?
     @ObservationIgnored private var occlusion: [any NSObjectProtocol] = []
 
-    /// Engaging, engaged or leaving: Aegis's own item replaces the everyday menu bar icon.
+    /// Engaging, engaged or leaving: AegisShell's bar replaces the everyday menu bar icon.
     var isOn: Bool {
         phase != .off
     }
@@ -193,7 +193,7 @@ final class ShellController {
         phase = .engaging(start)
         itemComplete = false
         HUDPresence.shared.shell = true
-        items = ShellMenuBarItems(shell: self)
+        bar = ShellMenuBar(shell: self)
         // ⌃1–4 switch workspaces while engaged; ⌃⌥1–4 as a set when another app holds any of them, so they match.
         registerWorkspaceKeys(modifiers: controlKey, prefix: "⌃")
         if workspaceKeys.count < ShellWorkspace.allCases.count {
@@ -281,8 +281,8 @@ final class ShellController {
         occlusion.forEach(NotificationCenter.default.removeObserver)
         occlusion = []
         still = nil
-        items?.remove()
-        items = nil
+        bar?.remove()
+        bar = nil
         workspaceKeys.forEach { $0.unregister() }
         workspaceKeys = []
         ShellWindows.restore()

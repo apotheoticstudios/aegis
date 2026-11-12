@@ -9,7 +9,7 @@ struct AegisApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        // While AegisShell is on, its own item (ShellMenuBarItems) stands in for this one.
+        // While AegisShell is on, its own bar (ShellMenuBar) stands in for this one.
         MenuBarExtra(isInserted: Binding(get: { !ShellController.shared.isOn }, set: { _ in })) {
             MenuContent(delegate: delegate)
         } label: {
