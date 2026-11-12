@@ -8,13 +8,16 @@ import SwiftUI
 struct ShellDesktop: View {
     let shell: ShellController
     let size: CGSize
+    /// The menu bar's height on this display, 0 where none takes room.
+    let menuBar: CGFloat
     private let noise: [String]
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
     @Environment(\.accessibilityReduceMotion) private var reduced
 
-    init(shell: ShellController, size: CGSize) {
+    init(shell: ShellController, size: CGSize, menuBar: CGFloat = 0) {
         self.shell = shell
         self.size = size
+        self.menuBar = menuBar
         noise = Self.noise(cols: Int(size.width / 6) + 1, rows: Int(size.height / 12) + 1)
     }
 
@@ -48,6 +51,8 @@ struct ShellDesktop: View {
             .opacity(frame.all)
         }
         .frame(width: size.width, height: size.height)
+        // macOS colours the see-through menu bar's items for the wallpaper, so the wallpaper stays behind them.
+        .mask(alignment: .bottom) { Rectangle().frame(height: max(0, size.height - menuBar)) }
         .environment(\.hudTheme, theme)
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)

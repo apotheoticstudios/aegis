@@ -352,7 +352,8 @@ final class ShellTests: XCTestCase {
             try snap(ShellDesktop(shell: shell, size: size), size, "engage-\(Int(moment * 1000)).png")
         }
         shell.phase = .engaged
-        try snap(ShellDesktop(shell: shell, size: size), size, "desktop.png")
+        // A 14" MacBook's menu bar: the strip under it stays see-through to the wallpaper.
+        try snap(ShellDesktop(shell: shell, size: size, menuBar: 37), size, "desktop.png")
         shell.hideDetails = true
         shell.still = .held
         try snap(ShellDesktop(shell: shell, size: size), size, "desktop-hidden-still.png")

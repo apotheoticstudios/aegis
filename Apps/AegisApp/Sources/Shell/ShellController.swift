@@ -396,7 +396,8 @@ final class ShellController {
             window.hasShadow = false
             window.isReleasedWhenClosed = false
             window.backgroundColor = .clear
-            window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size))
+            let menuBar = ShellMenuBar.frame(screen: screen.frame, visible: screen.visibleFrame, notchLeft: nil)?.height ?? 0
+            window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size, menuBar: menuBar))
             window.setFrame(screen.frame, display: false)
             // Left out of screenshots and screen sharing where macOS honours it; hiding details covers the rest.
             window.sharingType = .none
