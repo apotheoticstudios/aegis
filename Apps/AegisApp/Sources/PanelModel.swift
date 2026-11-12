@@ -176,6 +176,9 @@ final class PanelModel {
     func draftReply(_ person: Brief.Person) async {
         guard drafts[person.id] != .drafting else { return }
         drafts[person.id] = .drafting
+        if let state = await brainDraft(person) {
+            return drafts[person.id] = state
+        }
         switch await service.handle(.draftReply(personID: person.id)) {
         case let .draft(draft):
             drafts[person.id] = .ready(draft)
@@ -286,27 +289,7 @@ final class PanelModel {
         updateGlow()
     }
 
-    /// Meeting prep (#184): recent contact with an event's attendees, shown in the conversation like an answer.
-    func prep(_ row: TodayRow) async {
-        guard let id = row.prepID else { return }
-        let asked = "Prep for " + row.title
-        let turn = beginQuestion(asked)
-        defer { finishQuestion(turn) }
-        let response = await service.handle(.prep(occurrenceID: id))
-        guard isCurrentQuestion(turn) else { return }
-        switch response {
-        case let .answer(answer):
-            askState = .answered(question: asked, answer: answer)
-            remember(Exchange(question: asked, answer: answer, failure: nil))
-            await finishAnswer(turn, spoken: false)
-        case let .refused(code):
-            fail(asked, BriefPresentation.askMessage(code))
-        default:
-            fail(asked, BriefPresentation.askMessage("bad_reply"))
-        }
-    }
-
-    private func fail(_ question: String, _ message: String) {
+    func fail(_ question: String, _ message: String) {
         askState = .failed(question: question, message: message)
         remember(Exchange(question: question, answer: nil, failure: message))
     }
@@ -770,33 +753,8 @@ extension PanelModel {
         questionFinished()
     }
 
-    func requestAnswer(_ trimmed: String, id: UUID) async {
-        if let world = await worldAnswer(trimmed) {
-            guard isCurrentQuestion(id) else { return }
-            askState = .answered(question: trimmed, answer: world)
-            return remember(Exchange(question: trimmed, answer: world, failure: nil))
-        }
-        // With a Claude or OpenAI key saved, AegisCore may hand the question off (#223).
-        let available = CloudKeys.availability
-        let request: CoreRequest = available.providers.isEmpty
-            ? .ask(question: trimmed) : .converse(question: trimmed, cloud: available)
-        let response = await service.handle(request)
-        guard isCurrentQuestion(id) else { return }
-        switch response {
-        case let .handOff(approved):
-            await handOff(approved, asked: trimmed, id: id)
-        case let .answer(answer):
-            askState = .answered(question: trimmed, answer: answer)
-            remember(Exchange(question: trimmed, answer: answer, failure: nil))
-        case let .refused(code):
-            fail(trimmed, BriefPresentation.askMessage(code))
-        default:
-            fail(trimmed, BriefPresentation.askMessage("bad_reply"))
-        }
-    }
-
     /// Sends what AegisCore's gate approved to Claude or ChatGPT and shows the reply like any answer.
-    private func handOff(_ request: CloudHandOff.Request, asked: String, id: UUID) async {
+    func handOff(_ request: CloudHandOff.Request, asked: String, id: UUID) async {
         if request.work == .task {
             await propose(request, asked: asked, id: id)
             return

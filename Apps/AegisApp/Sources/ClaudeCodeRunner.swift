@@ -60,6 +60,8 @@ actor ClaudeCodeRunner {
     private(set) var lastReads: [ClaudeTools.Category: Int] = [:]
     /// Action calls the last run accepted: a run that acted is never replayed on another brain (ADR-0038 §2).
     private(set) var lastActions = 0
+    /// The items the last run sent Claude in full, for the answer's sources.
+    private(set) var lastReadIDs: [String] = []
     private var cancelled = false
     private let log = Logger(subsystem: "dev.aegis.app", category: "claude")
 
@@ -104,6 +106,7 @@ actor ClaudeCodeRunner {
         cancelled = false
         lastReads = [:]
         lastActions = 0
+        lastReadIDs = []
         defer {
             PlanRunner.launchctl(["bootout", PlanRunner.domain + "/" + label])
             self.label = nil
@@ -256,6 +259,7 @@ actor ClaudeCodeRunner {
     private func record(_ server: ClaudeTools.Server?) {
         lastReads = server?.counts ?? [:]
         lastActions = server?.actions ?? 0
+        lastReadIDs = server?.readIDs ?? []
         for (category, count) in lastReads {
             DiagnosticLog.shared.record(.claudeRead, number: count, detail: ClaudeTools.Category.allCases.firstIndex(of: category))
         }

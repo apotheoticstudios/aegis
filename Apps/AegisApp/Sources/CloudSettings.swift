@@ -72,7 +72,7 @@ struct CloudSettingsView: View {
         }
         if settings.brain == .claude {
             modelRows
-            Text(Brain.leaves + " " + Brain.pending).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(Brain.leaves).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             LazyVGrid(
                 columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
                 alignment: .leading

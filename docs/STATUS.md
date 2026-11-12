@@ -10,7 +10,8 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
-| #169 | Claude as the brain (ADR-0038), stage 4: the Brain step in setup and the switch in the Claude and ChatGPT window, with sign-in check, model, effort and read switches | agent:claude | claude/169-brain-switch | In review. Next: stage 5, Aegis's jobs on the chosen brain with the local fallback |
+| #172 | Claude as the brain (ADR-0038), stage 5: questions, command planning, meeting prep and reply drafts on the chosen brain, streaming and spoken, with the local fallback said once | agent:claude | claude/172-brain-jobs | In review. Needs `claude auth login` on the Mac to try for real. Follow-up: skip the large local model when Claude is chosen |
+| #169 | Claude as the brain (ADR-0038), stage 4: the Brain step in setup and the switch in the Claude and ChatGPT window, with sign-in check, model, effort and read switches | agent:claude | claude/169-brain-switch | Merged (#171) |
 | #167 | Claude as the brain (ADR-0038), stage 3: typed action tools through the owner's own resolver, `ActionPolicy`, cards and action log (pure C), one action or one plan card per request | agent:claude | claude/167-claude-actions | Merged (#168) |
 | #165 | Claude as the brain (ADR-0038), stage 2: read tools served by Aegis over Claude Code's control channel, per-category switches on every result, per-run limits, counts-only read log | agent:claude | claude/165-claude-reads | Merged (#166) |
 | #163 | Claude as the brain (ADR-0038), stage 1: the contained Claude Code bridge; the Claude hand-off uses the owner's plan when no key is saved, with a model and effort picker | agent:claude | claude/163-claude-bridge | Merged (#164); full answers need `claude auth login` once on the Mac |

@@ -19,11 +19,11 @@ extension PanelModel {
         let id = beginQuestion(trimmed)
         defer { finishQuestion(id) }
         let stream = streamReply(id, spoken: spoken)
-        await requestAnswer(trimmed, id: id)
+        let fromClaude = await requestAnswer(trimmed, id: id, speak: spoken)
         stream.cancel()
         let streamed = await stream.value
         partialAnswer = ""
-        await finishAnswer(id, spoken: spoken, streamed: streamed)
+        await finishAnswer(id, spoken: spoken, streamed: fromClaude.isEmpty ? streamed : fromClaude)
     }
 
     /// Speaking while thinking (#263): while the model writes, AegisCore's finished, checked sentences are shown
@@ -143,6 +143,8 @@ extension PanelModel {
     func panelClosed() {
         // The globe and its server live only for this open panel session.
         WorldWindow.shared.panelClosed()
+        // Claude never runs with the panel closed (ADR-0038 §4).
+        Task { await Self.brainRunner.cancel() }
         clearAnswer()
         voice.silence()
     }

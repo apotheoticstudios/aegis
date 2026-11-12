@@ -119,11 +119,14 @@ public enum ClaudeTools {
         public let text: String
         public let counts: [Category: Int]
         public let isError: Bool
+        /// The messages, emails and notifications it sends in full, for the answer's sources.
+        public let ids: [String]
 
-        public init(text: String, counts: [Category: Int], isError: Bool) {
+        public init(text: String, counts: [Category: Int], isError: Bool, ids: [String] = []) {
             self.text = text
             self.counts = counts
             self.isError = isError
+            self.ids = ids
         }
 
         public static func refused(_ reason: String) -> Payload {
@@ -138,7 +141,7 @@ public enum ClaudeTools {
         let allowed = events.filter { enabled.contains(Category($0.source)) }
         return pack(allowed.map { event in
             (ItemView(event), [Category(event.source)])
-        })
+        }, ids: allowed.map(\.id))
     }
 
     public static func schedule(_ occurrences: [CalendarOccurrence], _ reminders: [ReminderItem], enabled: Set<Category>) -> Payload {
@@ -196,7 +199,7 @@ public enum ClaudeTools {
     }
 
     /// A name to show for a person: never a phone number or email address, which stay on the Mac.
-    static func safeName(_ name: String?) -> String? {
+    public static func safeName(_ name: String?) -> String? {
         guard var name = name?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return nil }
         if let bracket = name.firstIndex(of: "<") {
             name = name[..<bracket].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
@@ -208,7 +211,7 @@ public enum ClaudeTools {
 
     /// Items encoded one by one, as many as fit in three quarters of `Server.maxResultBytes`, leaving room for the
     /// escaping in the message that carries them. Each item counts once for every category it draws on.
-    private static func pack(_ items: [(any Encodable, Set<Category>)]) -> Payload {
+    private static func pack(_ items: [(any Encodable, Set<Category>)], ids: [String] = []) -> Payload {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -216,16 +219,20 @@ public enum ClaudeTools {
         var parts: [String] = []
         var size = head.utf8.count + 40
         var counts: [Category: Int] = [:]
-        for (item, categories) in items {
+        var sent: [String] = []
+        for (index, (item, categories)) in items.enumerated() {
             guard let data = try? encoder.encode(item), size + data.count + 1 <= Server.maxResultBytes * 3 / 4 else { break }
             parts.append(String(decoding: data, as: UTF8.self))
+            if ids.indices.contains(index) {
+                sent.append(ids[index])
+            }
             size += data.count + 1
             for category in categories {
                 counts[category, default: 0] += 1
             }
         }
         let text = head + parts.joined(separator: ",") + #"],"left_out":\#(items.count - parts.count)}"#
-        return Payload(text: text, counts: counts, isError: false)
+        return Payload(text: text, counts: counts, isError: false, ids: sent)
     }
 
     // MARK: The MCP server
@@ -275,6 +282,8 @@ public enum ClaudeTools {
         public private(set) var counts: [Category: Int] = [:]
         /// Action calls accepted this run: a run that acted is never replayed on another brain (ADR-0038 §2).
         public private(set) var actions = 0
+        /// The items sent in full this run, oldest first, for the answer's sources.
+        public private(set) var readIDs: [String] = []
 
         public init(enabled: Set<Category>, acts: Bool = false) {
             self.enabled = enabled
@@ -366,10 +375,12 @@ public enum ClaudeTools {
         public struct Reply: Equatable, Sendable {
             public let message: Data
             public let counts: [Category: Int]
+            public let ids: [String]
 
-            public init(message: Data, counts: [Category: Int]) {
+            public init(message: Data, counts: [Category: Int], ids: [String] = []) {
                 self.message = message
                 self.counts = counts
+                self.ids = ids
             }
         }
 
@@ -384,12 +395,15 @@ public enum ClaudeTools {
                 )
             }
             bytes += message.count
-            return Reply(message: message, counts: payload.counts)
+            return Reply(message: message, counts: payload.counts, ids: payload.ids)
         }
 
         /// The reply went to Claude: its items join the read log.
         public mutating func sent(_ reply: Reply) {
             counts.merge(reply.counts, uniquingKeysWith: +)
+            for id in reply.ids where !readIDs.contains(id) && readIDs.count < ClaudeTools.maxCited {
+                readIDs.append(id)
+            }
         }
 
         private static func result(_ id: RPCID, _ text: String, isError: Bool) -> Data {

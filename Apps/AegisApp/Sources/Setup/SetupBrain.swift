@@ -34,8 +34,8 @@ struct BrainScreen: View {
                 )
                 SetupParagraph(Text(settings.brain == .claude ? Brain.leaves
                         : "Every answer is worked out on this Mac. You can switch to Claude at any time in Claude and ChatGPT settings."))
-                if settings.brain == .claude {
-                    SetupNote(settings.status ?? Brain.pending)
+                if settings.brain == .claude, let status = settings.status {
+                    SetupNote(status)
                 }
             }
         }

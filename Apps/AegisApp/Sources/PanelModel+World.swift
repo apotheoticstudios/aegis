@@ -28,7 +28,8 @@ extension PanelModel {
             if let plan = await worldPlanAnswer(question) {
                 return plan
             }
-            guard let command = await commandPlanAnswer(question) else {
+            // With Claude as the brain, Claude's own action tools plan the command (ADR-0038 stage 5).
+            guard Brain.current != .claude, let command = await commandPlanAnswer(question) else {
                 // Not a command: "again" is now the chat's own (#49).
                 ActionPresence.shared.chattedSince = true
                 return nil

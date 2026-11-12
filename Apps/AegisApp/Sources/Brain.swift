@@ -22,9 +22,6 @@ enum Brain: String, CaseIterable, Sendable {
         + "limits can be billed. Voice and \u{201C}Hey Aegis\u{201D} stay on this Mac, and your data and memory are stored "
         + "only here."
 
-    /// shortcut: Aegis's jobs move to the chosen brain in ADR-0038 stage 5; remove this note then.
-    static let pending = "Coming next: chat, questions and planning move to Claude. Until then Aegis still answers on this Mac."
-
     /// The sign-in check's result for the owner; nil when all is well.
     static func status(_ ending: ClaudeCodeRunner.Ending) -> String? {
         switch ending {

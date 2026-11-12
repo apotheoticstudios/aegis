@@ -28,10 +28,12 @@ extension PanelModel {
     }
 
     static func actionLog() -> ActionLog? {
-        guard let folder = try? FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
-        ).appendingPathComponent("Aegis", isDirectory: true),
-            let file = try? ActionLogFile(url: folder.appendingPathComponent("action-log.json"))
+        // App tests run inside the real Aegis.app: they keep a log of their own, never the owner's.
+        let support = WorldSidecar.isTestHost ? FileManager.default.temporaryDirectory.appendingPathComponent("aegis-tests-\(getpid())")
+            : try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        guard let folder = support?.appendingPathComponent("Aegis", isDirectory: true),
+              (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil,
+              let file = try? ActionLogFile(url: folder.appendingPathComponent("action-log.json"))
         else { return nil }
         return ActionLog(persistence: file)
     }
