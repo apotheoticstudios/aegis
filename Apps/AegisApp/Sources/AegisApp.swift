@@ -150,6 +150,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    /// Settings (#177), from the menu; Run setup again there closes it and opens the wizard.
+    func showSettings() {
+        let app = SetupApp(model: model, wake: wake, hotKey: hotKeyLabel, shellKey: ShellController.shared.hotKeyLabel)
+        SettingsWindow.show(app) { [weak self] in self?.showSetup(again: true) }
+    }
+
     func togglePanel() {
         panel.toggle()
     }
@@ -220,6 +226,8 @@ struct MenuContent: View {
         Button("World view") { WorldWindow.shared.show() }
         Button("World view settings…") { WorldKeysWindow.show() }
         Button("Beholder research…") { BeholderWindow.show() }
+        Button("Settings…") { delegate.showSettings() }
+            .keyboardShortcut(",")
         Button("Personality…") { PersonalityWindow.show(delegate.model) }
         Button("Claude and ChatGPT…") { CloudSettingsWindow.show() }
         Button("Run setup again…") { delegate.showSetup(again: true) }

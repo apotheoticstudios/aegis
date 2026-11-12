@@ -153,7 +153,7 @@ private struct WelcomeScreen: View {
 
 // MARK: - 02 Your Mac
 
-private struct MacScreen: View {
+struct MacScreen: View {
     @Bindable var setup: SetupModel
 
     var body: some View {
@@ -202,7 +202,7 @@ private struct MacScreen: View {
 
 // MARK: - 03 Storage
 
-private struct StorageScreen: View {
+struct StorageScreen: View {
     @Bindable var setup: SetupModel
 
     var body: some View {
@@ -324,21 +324,18 @@ private struct StorageBudget: View {
 
 // MARK: - 04 Schedule
 
-private struct ScheduleScreen: View {
+struct ScheduleScreen: View {
     @Bindable var setup: SetupModel
+    /// In Settings, how the Mac runs is on General instead, as the design has it.
+    var inSettings = false
+    @Environment(\.hudChange) private var change
 
     var body: some View {
         let wizard = setup.wizard
         let quiet = setup.option("quiet", "focus")
         SetupColumns {
-            HUDSettingRow(
-                label: "This Mac runs",
-                hint: wizard.alwaysOn ? "Aegis keeps working around the clock."
-                    : "Aegis pauses while it sleeps and catches up on wake."
-            ) {
-                HUDSegmented(label: "Running mode", options: [
-                    HUDOption(value: false, label: "As a laptop"), HUDOption(value: true, label: "Always on"),
-                ], value: $setup.wizard.alwaysOn)
+            if !inSettings {
+                SetupRunningRow(setup: setup)
             }
             HUDSettingRow(
                 label: "Wake-up time",
@@ -393,7 +390,25 @@ private struct ScheduleScreen: View {
     }
 
     private func move(by minutes: Int) {
-        setup.wizard.briefMinutes = (setup.wizard.briefMinutes + minutes + 24 * 60) % (24 * 60)
+        let (setup, old) = (setup, setup.wizard.briefMinutes)
+        setup.wizard.briefMinutes = (old + minutes + 24 * 60) % (24 * 60)
+        change?.record("Wake-up time " + SetupText.time(setup.wizard.briefMinutes), "wake") { setup.wizard.briefMinutes = old }
+    }
+}
+
+/// Laptop or always on: on Schedule in setup, on General in Settings.
+struct SetupRunningRow: View {
+    @Bindable var setup: SetupModel
+
+    var body: some View {
+        HUDSettingRow(
+            label: "This Mac runs",
+            hint: setup.wizard.alwaysOn ? "Aegis keeps working around the clock." : "Aegis pauses while it sleeps and catches up on wake."
+        ) {
+            HUDSegmented(label: "Running mode", options: [
+                HUDOption(value: false, label: "As a laptop"), HUDOption(value: true, label: "Always on"),
+            ], value: $setup.wizard.alwaysOn)
+        }
     }
 }
 
@@ -488,13 +503,14 @@ private struct ScheduleDial: View {
 
 // MARK: - 05 Permissions
 
-private struct PermissionsScreen: View {
+struct PermissionsScreen: View {
+    /// In Settings: no word about the steps that come next.
+    var inSettings = false
     @State private var granted: [Permission: Bool] = [:]
 
     var body: some View {
         let needed = Permission.allCases.count - 1
-        let count = [granted[.fullDisk], granted[.contacts], granted[.calendar].flatMap { cal in granted[.reminders].map { cal && $0 } }]
-            .filter { $0 == true }.count
+        let count = needed - Permission.missing(granted)
         SetupColumns {
             HUDMeter(
                 label: "Granted",
@@ -531,7 +547,8 @@ private struct PermissionsScreen: View {
                 HUDAsciiArt(shape: .eye, cols: 36, rows: 14, label: "Watching, on this Mac only")
                 SetupParagraph(Text("macOS asks you for each one in System Settings. ") + Text("Nothing here leaves this Mac.")
                     .foregroundStyle(HUD.ink))
-                SetupNote("Sources, Home and Control come next because they can only find what these allow.")
+                SetupNote(inSettings ? "Checked live while this page shows."
+                    : "Sources, Home and Control come next because they can only find what these allow.")
             }
         }
         // The ticks follow System Settings live, only while this screen shows.
@@ -552,5 +569,13 @@ private struct PermissionsScreen: View {
                 }
             }
         }
+    }
+}
+
+extension Permission {
+    /// How many of the three rows Aegis needs (Full Disk Access, Contacts, Calendar and Reminders) aren't granted:
+    /// the Permissions page's meter and the Settings rail's warn badge. Unknown counts as missing.
+    static func missing(_ granted: [Permission: Bool]) -> Int {
+        [[Permission.fullDisk], [.contacts], [.calendar, .reminders]].filter { row in !row.allSatisfy { granted[$0] == true } }.count
     }
 }

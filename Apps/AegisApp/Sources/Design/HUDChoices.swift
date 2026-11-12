@@ -21,6 +21,7 @@ struct HUDRangeSlider<Display: View>: View {
     var disabled = false
     /// A custom readout in place of the plain value, like Storage's big Xirod figure.
     @ViewBuilder var display: Display
+    @Environment(\.hudChange) private var change
 
     var body: some View {
         let tone = warnFrom.map { value > $0 } == true ? HUD.warn : HUD.primary
@@ -45,7 +46,9 @@ struct HUDRangeSlider<Display: View>: View {
             .overlay {
                 // Its knob overhangs each end by half its width, so the native values line up with the drawn ticks.
                 HUDNativeSlider(
-                    share: Binding(get: { share(value) }, set: { value = amount(at: $0) }), label: label, readout: "\(value)",
+                    share: Binding(get: { share(value) }, set: { move(to: amount(at: $0)) }),
+                    label: label,
+                    readout: "\(value)",
                     enabled: !disabled
                 )
                 .padding(.horizontal, -HUDNativeSlider.knob / 2)
@@ -77,6 +80,13 @@ struct HUDRangeSlider<Display: View>: View {
             }
         }
         .opacity(disabled ? 0.45 : 1)
+    }
+
+    private func move(to new: Int) {
+        let (binding, old) = ($value, value)
+        guard new != old else { return }
+        value = new
+        change?.record("\(label) \(new)", label) { binding.wrappedValue = old }
     }
 
     private func track(width: CGFloat, tone: HUDColor) -> some View {

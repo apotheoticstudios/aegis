@@ -9,7 +9,11 @@ import SwiftUI
 struct SourcesScreen: View {
     @Bindable var setup: SetupModel
     let model: PanelModel
+    /// In Settings: the World view's brief switch and keys show, as its old settings window had them.
+    var inSettings = false
     @State private var coverage: [SourceKind: SourceCoverage] = [:]
+    @State private var keys = false
+    @State private var brief = WorldPresence.briefEnabled
 
     var body: some View {
         let accounts = Self.accounts.map { row in (row, setup.flag("source." + row.key, true)) }
@@ -42,9 +46,39 @@ struct SourcesScreen: View {
             }
             HUDSubhead(title: "World view", meta: "live public data")
             HUDSettingRow(label: "Globe", meta: "free Cesium key: 3D cities", compact: true) {
-                Button("Add key") { WorldKeysWindow.show() }.buttonStyle(HUDPlateStyle(compact: true))
+                if !keys, !inSettings {
+                    Button("Add key") { keys = true }.buttonStyle(HUDPlateStyle(compact: true))
+                }
                 HUDToggle(on: setup.flag("world", true), label: "World view", showState: false)
             }
+            if inSettings {
+                HUDSettingRow(
+                    label: "In the brief",
+                    hint: "Weather at home and today's flight. Home goes rounded to about 10 km (to Open-Meteo), a flight only as its "
+                        + "number (to adsb.lol). Say \u{201C}set my home here\u{201D} at home first."
+                ) {
+                    HUDToggle(on: $brief, label: "World view in the brief", showState: false)
+                }
+            }
+            if keys || inSettings {
+                ForEach(WorldKeys.Key.allCases, id: \.self) { key in
+                    let title = key.title.split(separator: "(")
+                    SetupKeyRow(
+                        name: title.first.map { $0.trimmingCharacters(in: .whitespaces) } ?? key.title,
+                        use: title.dropFirst().first.map { String($0.dropLast()) },
+                        site: key.site,
+                        isSaved: { WorldKeys.has(key) },
+                        save: { WorldKeys.set($0, for: key) },
+                        remove: { WorldKeys.set("", for: key) }
+                    )
+                }
+                SetupNote("All optional. Kept in the Keychain and used only by the World view's own server on this Mac, from the "
+                    + "next time it opens.").padding(.top, HUD.space2)
+            }
+        }
+        .onChange(of: brief) { _, on in
+            WorldPresence.briefEnabled = on
+            WorldPresence.shared.briefFetched = .distantPast
         }
         .task {
             if case let .status(status) = await model.service.handle(.status) {

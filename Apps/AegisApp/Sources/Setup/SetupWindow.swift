@@ -24,6 +24,15 @@ final class SetupModel {
         self.wizard = wizard
     }
 
+    /// Free space changes while Aegis runs; the rest was detected (or corrected by the owner) before.
+    func refreshFreeSpace(_ mac: MacProfile = .detect()) {
+        wizard.mac.diskFreeBytes = mac.diskFreeBytes
+    }
+
+    /// The one copy of the answers that the wizard and the Settings window share, so neither shows a stale choice or
+    /// overwrites the other's.
+    static let shared = SetupModel()
+
     /// Setup has been finished once on this Mac.
     static var finished: Bool {
         (try? standardFile?.load())?.finished == true
@@ -75,11 +84,12 @@ enum SetupWindow {
 
     /// Shows setup where it stopped, or from the start when `again` (from the menu) and it was finished before; `done`
     /// runs when it finishes.
-    static func show(_ app: SetupApp, again: Bool, setup: SetupModel = SetupModel(), done: @escaping () -> Void) {
+    static func show(_ app: SetupApp, again: Bool, setup: SetupModel = .shared, done: @escaping () -> Void) {
         // Closed halfway (Escape), it resumes there rather than starting over.
         if again, setup.wizard.finished {
             setup.wizard.restart()
         }
+        setup.refreshFreeSpace()
         let created = window ?? HUDWindow(
             contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: true
         )
@@ -135,7 +145,11 @@ struct SetupView: View {
             HStack(alignment: .top, spacing: HUD.space8) {
                 SetupRail(setup: setup).frame(width: 200)
                 VStack(alignment: .leading, spacing: 0) {
-                    SetupHeading(step: wizard.current, position: wizard.position)
+                    SetupHeading(
+                        code: String(format: "%02d / ", wizard.position + 1) + wizard.current.label.uppercased(),
+                        title: wizard.current.title,
+                        intro: wizard.current.intro
+                    )
                     ScrollView(.vertical) {
                         SetupScreen(setup: setup, app: app, tuning: $tuning)
                             .padding(.top, HUD.space6)
@@ -165,11 +179,10 @@ struct SetupView: View {
     }
 }
 
-/// The top bar: the emblem and the name in characters with SETUP after it, the step count in the middle and the
-/// background model download on the right.
-private struct SetupTopBar: View {
-    let position: Int
-    let count: Int
+/// The emblem and the name in characters with the window's mode after it (SETUP, SETTINGS): the two windows' shared
+/// brand bar.
+struct SetupBrandBar: View {
+    let mode: String
     @State private var banner: [String] = []
 
     var body: some View {
@@ -179,12 +192,23 @@ private struct SetupTopBar: View {
                     .accessibilityLabel("Aegis")
             }
             HUDAsciiText(lines: banner, cols: banner.map(\.count).max() ?? 0, size: 2.5, tone: HUD.primary)
-            Text("Setup").hudCaps(11, tracking: 0.22).foregroundStyle(HUD.primary).hudGlow()
+            Text(mode).hudCaps(11, tracking: 0.22).foregroundStyle(HUD.primary).hudGlow()
                 .padding(.leading, HUD.space3)
                 .overlay(alignment: .leading) { Rectangle().fill(HUD.glassEdge).frame(width: 1, height: 16) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task { banner = HUDBanner.lines("Aegis", rows: 10) }
+    }
+}
+
+/// The top bar: the brand with SETUP after it, the step count in the middle and the background model download on the
+/// right.
+private struct SetupTopBar: View {
+    let position: Int
+    let count: Int
+
+    var body: some View {
+        SetupBrandBar(mode: "Setup")
         (Text("Step ") + Text("\(position + 1)").foregroundStyle(HUD.ink) + Text(" of \(count)"))
             .font(HUDFace.mono(11)).foregroundStyle(HUD.inkMuted)
             .fixedSize()
@@ -275,7 +299,7 @@ private struct SetupRail: View {
     }
 }
 
-private struct SetupRailStyle: ButtonStyle {
+struct SetupRailStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         SetupRailRow(configuration: configuration)
     }
@@ -297,16 +321,17 @@ private struct SetupRailRow: View {
     }
 }
 
-/// The step's code, its title in Xirod and its one-line intro, over a hairline.
-private struct SetupHeading: View {
-    let step: SetupStep
-    let position: Int
+/// The step's (or settings page's) code, its title in Xirod and its one-line intro, over a hairline.
+struct SetupHeading: View {
+    let code: String
+    let title: String
+    let intro: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: HUD.space2) {
-            Text(String(format: "%02d / ", position + 1) + step.label.uppercased()).font(HUDFace.mono(11)).foregroundStyle(HUD.primary)
-            Text(step.title.uppercased()).font(HUDFace.hero(22)).tracking(0.88).foregroundStyle(HUD.ink)
-            Text(step.intro).font(HUDFace.text(12)).foregroundStyle(HUD.inkMuted).frame(maxWidth: 800, alignment: .leading)
+            Text(code).font(HUDFace.mono(11)).foregroundStyle(HUD.primary)
+            Text(title.uppercased()).font(HUDFace.hero(22)).tracking(0.88).foregroundStyle(HUD.ink)
+            Text(intro).font(HUDFace.text(12)).foregroundStyle(HUD.inkMuted).frame(maxWidth: 800, alignment: .leading)
         }
         .padding(.bottom, HUD.space4)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -357,6 +382,8 @@ struct SetupApp {
     let model: PanelModel
     let wake: WakeListener
     let hotKey: String?
+    /// AegisShell's shortcut (⌃⌥A); nil when another app holds it.
+    var shellKey: String?
 }
 
 /// The logo kit's emblem (Resources/Brand).

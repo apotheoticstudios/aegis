@@ -34,15 +34,31 @@ extension View {
     }
 }
 
+/// Where a control tells the window what it just changed and how to put it back: the Settings window's footer
+/// ("Saved: Theme: Matrix", with Undo). Nil elsewhere, so the wizard and the panel are unaffected.
+struct HUDChange {
+    /// `merge` names a control whose run of changes is one (a slider's drag): Undo goes back to before the run.
+    let record: @MainActor (_ label: String, _ merge: String?, _ undo: (@MainActor () -> Void)?) -> Void
+}
+
+extension EnvironmentValues {
+    @Entry var hudChange: HUDChange?
+}
+
 /// An on/off switch: a chamfered track with a slanted knob that slides right and glows when on, with ON or OFF in
 /// mono beside it.
 struct HUDToggle: View {
     @Binding var on: Bool
     let label: String
     var showState = true
+    @Environment(\.hudChange) private var change
 
     var body: some View {
-        Button { on.toggle() } label: {
+        Button {
+            let binding = $on
+            on.toggle()
+            change?.record(label + (on ? " on" : " off"), nil) { binding.wrappedValue.toggle() }
+        } label: {
             HStack(spacing: HUD.space2) {
                 ZStack(alignment: .leading) {
                     HUDCut(kind: .tag, cut: 4).fill(on ? HUD.primary : HUD.frame)
@@ -109,12 +125,19 @@ struct HUDSegmented<Value: Hashable>: View {
     @Binding var value: Value
     var small = false
     var locked = false
+    @Environment(\.hudChange) private var change
 
     var body: some View {
         HStack(spacing: -1) {
             ForEach(options) { option in
                 let chosen = option.value == value
-                Button { value = option.value } label: {
+                Button {
+                    let (binding, old) = ($value, value)
+                    value = option.value
+                    if !chosen {
+                        change?.record(label + ": " + option.label, nil) { binding.wrappedValue = old }
+                    }
+                } label: {
                     HStack(spacing: 6) {
                         Text(option.label).hudCaps(10)
                         if let meta = option.meta {
@@ -372,15 +395,23 @@ struct HUDTermInput: View {
     var autofocus = false
     /// Told when typing starts and stops, for a window whose Return key does something else meanwhile.
     var editing: ((Bool) -> Void)?
+    /// Dots in place of the text: keys and tokens.
+    var secure = false
     @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: HUD.space2) {
             Text(prompt).foregroundStyle(HUD.primary).fixedSize()
-            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(HUD.inkMuted))
-                .textFieldStyle(.plain)
-                .foregroundStyle(HUD.ink)
-                .focused($focused)
+            Group {
+                if secure {
+                    SecureField("", text: $text, prompt: Text(placeholder).foregroundStyle(HUD.inkMuted))
+                } else {
+                    TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(HUD.inkMuted))
+                }
+            }
+            .textFieldStyle(.plain)
+            .foregroundStyle(HUD.ink)
+            .focused($focused)
             if let hint {
                 Text(hint).font(HUDFace.mono(10)).foregroundStyle(HUD.inkMuted).fixedSize()
                     .padding(.leading, HUD.space2)

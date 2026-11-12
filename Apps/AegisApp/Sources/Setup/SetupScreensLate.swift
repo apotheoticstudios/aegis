@@ -274,7 +274,7 @@ struct InterfaceScreen: View {
 }
 
 /// One theme as a little HUD: a glowing primary bar, an accent dot and a strip of meter bars, in that theme's colours.
-private struct ThemeSwatch: View {
+struct ThemeSwatch: View {
     let theme: HUDTheme
     let chosen: Bool
     let action: () -> Void

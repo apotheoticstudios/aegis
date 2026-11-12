@@ -10,10 +10,12 @@ final class HUDPresence {
     var setup = false
     /// AegisShell's desktop is on screen (ADR-0033).
     var shell = false
+    /// The Settings window is on screen.
+    var settings = false
 
-    /// Whether the HUD's motion runs: while the panel, the wizard or AegisShell shows.
+    /// Whether the HUD's motion runs: while the panel, the wizard, Settings or AegisShell shows.
     var animating: Bool {
-        open || setup || shell
+        open || setup || shell || settings
     }
 }
 
