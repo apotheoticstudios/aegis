@@ -52,6 +52,19 @@ public enum ClaudeBrain {
         return lines.joined(separator: "\n")
     }
 
+    /// What AegisCore answers on the Mac even with Claude chosen (ADR-0038 §2): the time, sums and conversions;
+    /// remembering, forgetting and listing memory; and a hand-off the owner names to ChatGPT.
+    /// shortcut: the owner's taught phrases live in AegisCore's memory, out of the app's sight, so they reach Claude
+    /// as plain words; check them here if they should stay local.
+    public static func staysLocal(_ question: String, now: Date, calendar: Calendar) -> Bool {
+        // A provider the owner names decides it: "ask Claude…" is Claude's, "ask ChatGPT…" the hand-off's.
+        if let (provider, _) = CloudHandOff.named(question) {
+            return provider == .chatgpt
+        }
+        return MemoryCommand.parse(question) != nil || MemoryCommand.statedFact(question) != nil
+            || QuickAnswer.answer(question, now: now, calendar: calendar) != nil
+    }
+
     /// Meeting prep: who's attending, recent contact with them and anything open between them and the owner.
     public static func prep(title: String, time: String) -> String {
         "Prepare me for “\(title)” (\(time)): find it in my calendar, then recent messages and email with the people in "

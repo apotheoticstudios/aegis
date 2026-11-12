@@ -252,8 +252,8 @@ final class PanelModel {
             proposalNotice = "That matches more than one person or chat. Try the full name."
             remember(Exchange(question: trimmed, answer: nil, failure: proposalNotice))
         default:
-            await requestAnswer(trimmed, id: id)
-            await finishAnswer(id, spoken: spoken)
+            let fromClaude = await requestAnswer(trimmed, id: id, speak: spoken)
+            await finishAnswer(id, spoken: spoken, streamed: fromClaude)
         }
     }
 
@@ -300,6 +300,7 @@ final class PanelModel {
 
     /// Back to the brief.
     func clearAnswer() {
+        Self.revokeBrain()
         questionID = nil
         handingOff = nil
         voice.stopSpeaking()
@@ -735,6 +736,7 @@ enum BriefPresentation {
 /// Asking Aegis, and the memory list (#222).
 extension PanelModel {
     func beginQuestion(_ question: String) -> UUID {
+        Self.revokeBrain()
         let id = UUID()
         questionID = id
         handingOff = nil

@@ -2,20 +2,19 @@ import AegisKit
 import Foundation
 
 /// Aegis's jobs on the chosen brain (ADR-0038 stage 5). With Claude chosen and the panel open, questions that aren't
-/// fixed commands, meeting prep and reply drafts go to Claude with Aegis's tools. If Claude can't answer before any
-/// action ran, the local model answers and Aegis says so once; after an action it stops rather than replay.
+/// fixed commands or answered on the Mac, meeting prep and reply drafts go to Claude with Aegis's tools. If Claude
+/// can't answer before any action ran, the local model answers and Aegis says so once; after an action it stops.
 extension PanelModel {
-    /// The run Claude's jobs share: one at a time, and a new job, Stop or closing the panel ends the last.
+    /// The run Claude's jobs share: one at a time.
     static var brainRunner = ClaudeCodeRunner()
+    /// Each job's authority: a new job, a new question, Stop, closing the panel or a change of brain or switches
+    /// moves it on, and a job whose number is old may no longer read, act or start.
+    private(set) static var brainGeneration = 0
+    /// What Claude has been told this conversation: only the owner's own words and Claude's own replies.
+    private static var brainTurns: [(turn: ClaudeBrain.Turn, at: Date)] = []
     /// Said with the next local answer after Claude couldn't answer, once until Claude answers again.
     private(set) static var fallbackNote: String?
     private(set) static var saidFallback = false
-
-    /// Forgets that the fallback was said: a fresh start, as at launch.
-    static func resetFallback() {
-        fallbackNote = nil
-        saidFallback = false
-    }
 
     /// How a Claude job ended.
     enum BrainResult {
@@ -24,6 +23,23 @@ extension PanelModel {
         case stopped(String)
         /// Answer on this Mac instead; nothing ran.
         case fallback(String)
+    }
+
+    /// Ends the running Claude job's authority, and with `forget`, what Claude was told (its switches changed).
+    static func revokeBrain(forget: Bool = false) {
+        brainGeneration += 1
+        if forget {
+            brainTurns = []
+        }
+        let runner = brainRunner
+        let older = brainGeneration
+        Task { await runner.cancel(below: older) }
+    }
+
+    /// Forgets that the fallback was said: a fresh start, as at launch.
+    static func resetFallback() {
+        fallbackNote = nil
+        saidFallback = false
     }
 
     /// A question's answer: a World or fixed command, else Claude when chosen, else the local model. Returns what was
@@ -36,12 +52,13 @@ extension PanelModel {
             remember(Exchange(question: trimmed, answer: world, failure: nil))
             return ""
         }
-        if let spoken = await brainAnswer(trimmed, id: id, speak: speak) {
+        let claude = Self.claudeFor([]) && !ClaudeBrain.staysLocal(trimmed, now: Date(), calendar: .current)
+        if claude, let spoken = await brainAnswer(trimmed, id: id, speak: speak) {
             return spoken
         }
-        // With a Claude or OpenAI key saved, AegisCore may hand the question off (#223).
+        // With a Claude or OpenAI key saved, AegisCore may hand the question off (#223); never in place of Claude.
         let available = CloudKeys.availability
-        let request: CoreRequest = available.providers.isEmpty
+        let request: CoreRequest = available.providers.isEmpty || claude
             ? .ask(question: trimmed) : .converse(question: trimmed, cloud: available)
         let response = await service.handle(request)
         guard isCurrentQuestion(id) else { return "" }
@@ -66,13 +83,11 @@ extension PanelModel {
         let asked = "Prep for " + row.title
         let turn = beginQuestion(asked)
         defer { finishQuestion(turn) }
-        if Self.claudeFor([.calendar]) {
-            if let answer = await brainJob(ClaudeBrain.prep(title: row.title, time: row.time), id: turn) {
-                guard isCurrentQuestion(turn) else { return }
-                askState = .answered(question: asked, answer: answer)
-                remember(Exchange(question: asked, answer: answer, failure: nil))
-                return await finishAnswer(turn, spoken: false)
-            }
+        if Self.claudeFor([.calendar]), let answer = await brainJob(ClaudeBrain.prep(title: row.title, time: row.time), id: turn) {
+            guard isCurrentQuestion(turn) else { return }
+            askState = .answered(question: asked, answer: answer)
+            remember(Exchange(question: asked, answer: answer, failure: nil))
+            return await finishAnswer(turn, spoken: false)
         }
         let response = await service.handle(.prep(occurrenceID: id))
         guard isCurrentQuestion(turn) else { return }
@@ -89,9 +104,14 @@ extension PanelModel {
         }
     }
 
-    /// A reply draft from Claude, or nil to draft on this Mac. Only a person with a name goes: never a bare handle.
+    /// A reply draft from Claude, or nil to draft on this Mac. Only for someone in the owner's contacts whose open
+    /// questions all come from sources left on: never a bare handle, nor a name only a switched-off source shows.
     func brainDraft(_ person: Brief.Person) async -> DraftState? {
-        guard Self.claudeFor([.messages, .mail]), let name = ClaudeTools.safeName(person.name) else { return nil }
+        guard Self.claudeFor([.messages, .mail]), person.id.hasPrefix("contact:"), let name = ClaudeTools.safeName(person.name),
+              let waiting = people.first(where: { $0.person.id == person.id }), !waiting.eventIDs.isEmpty
+        else { return nil }
+        let sources = await ClaudeReads(service: service).sources(of: waiting.eventIDs)
+        guard waiting.eventIDs.allSatisfy({ sources[$0].map(ClaudeReads.enabled.contains) == true }) else { return nil }
         switch await runBrain(ClaudeBrain.draft(to: name), id: nil, acts: false, speak: false) {
         case let .answered(answer, _):
             return .ready(ReplyDraft(
@@ -103,23 +123,22 @@ extension PanelModel {
             ))
         case let .stopped(message):
             return .failed(message)
-        case let .fallback(note):
-            Self.note(note)
+        case .fallback:
+            // The draft is made on this Mac; the notice waits for the next answer, where it's shown.
             return nil
         }
     }
 
     /// Claude's answer, shown and remembered, and what was spoken while it wrote; nil to answer on this Mac.
     private func brainAnswer(_ question: String, id: UUID, speak: Bool) async -> String? {
-        guard Self.claudeFor([]) else { return nil }
-        let history = thread.suffix(ClaudeBrain.maxTurns).map { exchange in
-            ClaudeBrain.Turn(owner: exchange.question, reply: exchange.answer.flatMap { Self.fromClaude($0) ? $0.text : nil })
-        }
-        let prompt = ClaudeBrain.prompt(question, history: history, now: Date(), timeZone: .current)
+        Self.brainTurns.removeAll { Date().timeIntervalSince($0.at) > Chat.memory }
+        let prompt = ClaudeBrain.prompt(question, history: Self.brainTurns.map(\.turn), now: Date(), timeZone: .current)
         let result = await runBrain(prompt, id: id, acts: true, speak: speak)
         guard isCurrentQuestion(id) else { return "" }
         switch result {
         case let .answered(answer, spoken):
+            let turn = (turn: ClaudeBrain.Turn(owner: question, reply: answer.text), at: Date())
+            Self.brainTurns = Array((Self.brainTurns + [turn]).suffix(ClaudeBrain.maxTurns))
             askState = .answered(question: question, answer: answer)
             remember(Exchange(question: question, answer: answer, failure: nil))
             return spoken
@@ -146,17 +165,20 @@ extension PanelModel {
     }
 
     /// One Claude job: the reply typed on screen as it comes (and spoken, sentence by sentence, when `speak`), with
-    /// Aegis's read tools under the owner's switches, and its action tools when `acts`.
+    /// Aegis's read tools under the owner's switches, and its action tools when `acts`. It holds the owner's
+    /// authority only while it's the newest job and Claude is still chosen with the panel open.
     func runBrain(_ prompt: String, id: UUID?, acts: Bool, speak: Bool) async -> BrainResult {
+        Self.revokeBrain()
+        let generation = Self.brainGeneration
+        let live: @Sendable @MainActor () -> Bool = { generation == PanelModel.brainGeneration && PanelModel.claudeFor([]) }
         let runner = Self.brainRunner
-        await runner.cancel()
         let (pieces, sink) = AsyncStream.makeStream(of: String.self)
         let shown = Task { @MainActor [weak self] in
             var text = ""
             var said = ""
             for await piece in pieces {
                 text += piece
-                guard let self, let id, isCurrentQuestion(id) else { continue }
+                guard let self, let id, live(), isCurrentQuestion(id) else { continue }
                 partialAnswer = text
                 let done = Self.sentences(text)
                 guard speak, done.count > said.count else { continue }
@@ -169,51 +191,54 @@ extension PanelModel {
             return said
         }
         let reads = ClaudeCodeRunner.Reads(
-            source: ClaudeBrainTools(model: self, reads: ClaudeReads(service: service)), enabled: ClaudeReads.enabled, acts: acts
+            source: ClaudeBrainTools(model: self, reads: ClaudeReads(service: service), live: live), enabled: ClaudeReads.enabled,
+            acts: acts
         )
         let system = ClaudeBrain.system(name: personality.name, style: personality.style.title)
-        var ending = ClaudeCodeRunner.Ending.busy
-        // The last job takes a moment to end after it's stopped.
-        for _ in 0 ..< 25 where ending == .busy {
-            ending = await runner.run(
-                system: system, prompt: prompt, choice: ClaudeCodeRunner.choice, timeout: 180, reads: reads
+        var report = ClaudeCodeRunner.Report(ending: .busy)
+        // The last job takes a moment to end after it's stopped; this one starts only while it still has authority.
+        for _ in 0 ..< 25 where report.ending == .busy && live() {
+            report = await runner.report(
+                system: system, prompt: prompt, choice: ClaudeCodeRunner.choice, timeout: 180, reads: reads, token: generation
             ) { sink.yield($0) }
-            if ending == .busy {
+            if report.ending == .busy {
                 try? await Task.sleep(for: .milliseconds(40))
             }
         }
         sink.finish()
         let spoken = await shown.value
-        partialAnswer = ""
-        let acted = await runner.lastActions > 0
-        let read = await runner.lastReadIDs
-        switch ending {
+        if live() {
+            partialAnswer = ""
+        }
+        switch report.ending {
         case let .outcome(.answer(text, model)):
             Self.saidFallback = false
-            return .answered(
-                Answer(text: text, eventIDs: read, scheduleIDs: [], model: model.isEmpty ? "claude" : model, generatedAt: Date()),
-                spoken: spoken
+            let answer = Answer(
+                text: text,
+                eventIDs: report.readIDs,
+                scheduleIDs: [],
+                model: model.isEmpty ? "claude" : model,
+                generatedAt: Date()
             )
-        case .cancelled:
-            return .stopped("Stopped.")
+            return .answered(answer, spoken: spoken)
         case .outcome(.declined):
             return .stopped("Claude declined to answer that.")
+        case .cancelled:
+            return .stopped("Stopped.")
+        case .busy where !live():
+            return .stopped("Stopped.")
         default:
             // Never replayed once an action started: the local model might do it again.
-            if acted {
+            if report.actions > 0 {
                 return .stopped("Claude stopped partway, after starting an action. Check what it did before asking again.")
             }
-            return .fallback(Self.fallbackReason(ending))
+            return .fallback(Self.fallbackReason(report.ending))
         }
     }
 
     /// Claude is the brain, the panel is open, and (for a job that needs them) one of `sources` is switched on.
-    private static func claudeFor(_ sources: Set<ClaudeTools.Category>) -> Bool {
+    static func claudeFor(_ sources: Set<ClaudeTools.Category>) -> Bool {
         Brain.current == .claude && HUDPresence.shared.open && (sources.isEmpty || !sources.isDisjoint(with: ClaudeReads.enabled))
-    }
-
-    private static func fromClaude(_ answer: Answer) -> Bool {
-        answer.model?.hasPrefix("claude") == true
     }
 
     private static func note(_ reason: String) {
@@ -226,10 +251,7 @@ extension PanelModel {
         guard let note = fallbackNote else { return answer }
         fallbackNote = nil
         return Answer(
-            text: note + " " + answer.text,
-            eventIDs: answer.eventIDs,
-            scheduleIDs: answer.scheduleIDs,
-            model: answer.model,
+            text: note + " " + answer.text, eventIDs: answer.eventIDs, scheduleIDs: answer.scheduleIDs, model: answer.model,
             generatedAt: answer.generatedAt
         )
     }

@@ -143,8 +143,6 @@ extension PanelModel {
     func panelClosed() {
         // The globe and its server live only for this open panel session.
         WorldWindow.shared.panelClosed()
-        // Claude never runs with the panel closed (ADR-0038 §4).
-        Task { await Self.brainRunner.cancel() }
         clearAnswer()
         voice.silence()
     }

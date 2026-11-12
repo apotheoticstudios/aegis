@@ -100,8 +100,11 @@ extension PanelModel {
 struct ClaudeBrainTools: ClaudeToolSource {
     let model: PanelModel
     let reads: ClaudeReads
+    /// The job still has the owner's authority: not replaced, stopped or closed, and Claude still chosen.
+    let live: @Sendable @MainActor () -> Bool
 
     func fetch(_ call: ClaudeTools.Call, enabled: Set<ClaudeTools.Category>) async -> ClaudeTools.Payload {
+        guard await live() else { return .refused("Stopped.") }
         guard case let .act(action) = call else { return await reads.fetch(call, enabled: enabled) }
         let said = await model.claude(action)
         return ClaudeTools.Payload(text: said, counts: [:], isError: false)

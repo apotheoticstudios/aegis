@@ -42,4 +42,22 @@ final class ClaudeBrainTests: XCTestCase {
         XCTAssertEqual(server.readIDs, [first.id], "once each")
         XCTAssertEqual(ClaudeTools.brief(nil, sources: [:], enabled: [.messages]).ids, [], "summaries aren't items read")
     }
+
+    /// The time, sums, memory commands and a named ChatGPT hand-off are answered on the Mac even with Claude chosen.
+    func testWhatStaysOnTheMac() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        for local in [
+            "What time is it?",
+            "What's 12 times 4?",
+            "Remember that my locker is 42",
+            "Forget that",
+            "Ask ChatGPT why the sky is blue",
+        ] {
+            XCTAssertTrue(ClaudeBrain.staysLocal(local, now: Date(), calendar: calendar), local)
+        }
+        for claude in ["What's on today?", "Who's waiting on me?", "Ask Claude why the sky is blue", "Sort out the office thing"] {
+            XCTAssertFalse(ClaudeBrain.staysLocal(claude, now: Date(), calendar: calendar), claude)
+        }
+    }
 }

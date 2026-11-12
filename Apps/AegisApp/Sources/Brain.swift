@@ -41,7 +41,11 @@ final class BrainSettings {
     static let shared = BrainSettings()
 
     var brain = Brain.current {
-        didSet { Brain.current = brain }
+        didSet {
+            Brain.current = brain
+            // A running Claude job ends at once, and what it was told so far is forgotten.
+            PanelModel.revokeBrain(forget: true)
+        }
     }
 
     var choice = ClaudeCodeRunner.choice {
@@ -49,7 +53,12 @@ final class BrainSettings {
     }
 
     var reads = ClaudeReads.enabled {
-        didSet { ClaudeReads.enabled = reads }
+        didSet {
+            ClaudeReads.enabled = reads
+            if !oldValue.isSubset(of: reads) {
+                PanelModel.revokeBrain(forget: true)
+            }
+        }
     }
 
     private(set) var models = ClaudeCodeRunner.models

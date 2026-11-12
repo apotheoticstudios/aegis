@@ -31,7 +31,11 @@ final class ClaudeActionTests: XCTestCase {
         let ending = await runner.run(
             system: "S", prompt: "Remind me to call the office, then open Calculator", choice: .standard, timeout: 30,
             reads: .init(
-                source: ClaudeBrainTools(model: PanelModel(service: FixtureCore()), reads: ClaudeReads(service: FixtureCore())),
+                source: ClaudeBrainTools(
+                    model: PanelModel(service: FixtureCore()),
+                    reads: ClaudeReads(service: FixtureCore()),
+                    live: { true }
+                ),
                 enabled: [],
                 acts: true
             )
@@ -53,7 +57,11 @@ final class ClaudeActionTests: XCTestCase {
         let ending = await runner.run(
             system: "S", prompt: "Bins and recycling reminders", choice: .standard, timeout: 30,
             reads: .init(
-                source: ClaudeBrainTools(model: PanelModel(service: FixtureCore()), reads: ClaudeReads(service: FixtureCore())),
+                source: ClaudeBrainTools(
+                    model: PanelModel(service: FixtureCore()),
+                    reads: ClaudeReads(service: FixtureCore()),
+                    live: { true }
+                ),
                 enabled: [],
                 acts: true
             )

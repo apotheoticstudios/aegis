@@ -401,7 +401,8 @@ public enum ClaudeTools {
         /// The reply went to Claude: its items join the read log.
         public mutating func sent(_ reply: Reply) {
             counts.merge(reply.counts, uniquingKeysWith: +)
-            for id in reply.ids where !readIDs.contains(id) && readIDs.count < ClaudeTools.maxCited {
+            // Bounded by the run's call and byte limits, so every item sent is listed.
+            for id in reply.ids where !readIDs.contains(id) {
                 readIDs.append(id)
             }
         }

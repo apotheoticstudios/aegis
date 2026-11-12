@@ -85,6 +85,7 @@ final class ClaudeBrainJobTests: XCTestCase {
     func testDraftsGoToClaudeOnlyWithAName() async throws {
         PanelModel.brainRunner = try ClaudeCodeRunner(executable: standIn(turn: "  result 'Sure, Saturday works.'"))
         let model = PanelModel(service: FixtureCore())
+        await model.refresh()
         await model.draftReply(Brief.Person(id: "contact:1", name: "Alex Example"))
         guard case let .ready(draft)? = model.drafts["contact:1"]
         else { return XCTFail("\(String(describing: model.drafts["contact:1"]))") }
@@ -94,6 +95,56 @@ final class ClaudeBrainJobTests: XCTestCase {
         if case let .ready(local)? = model.drafts["handle:1"] {
             XCTAssertNotEqual(local.model, "claude-opus-5-5")
         }
+    }
+
+    /// The time, sums and memory commands stay on this Mac with Claude chosen: Claude isn't asked.
+    func testInstantAnswersAndMemoryStayOnThisMac() async throws {
+        PanelModel.brainRunner = try ClaudeCodeRunner(executable: standIn(turn: "  result 'From Claude'"))
+        let model = PanelModel(service: FixtureCore())
+        for question in ["What's 12 times 4?", "What time is it?", "Remember that my locker is 42"] {
+            await model.answerQuestion(question, spoken: false)
+            XCTAssertNotEqual(Self.answer(model)?.text, "From Claude", question)
+        }
+    }
+
+    /// Stop while Claude is writing ends the run at once, and nothing arrives afterwards.
+    func testStopEndsTheRunningJob() async throws {
+        PanelModel.brainRunner = try ClaudeCodeRunner(executable: standIn(turn: """
+          sleep 20
+          result 'Too late'
+        """))
+        let model = PanelModel(service: FixtureCore())
+        let began = Date()
+        let asking = Task { await model.answerQuestion("Sort out the office thing for me", spoken: false) }
+        try await Task.sleep(for: .seconds(1.5))
+        model.clearAnswer()
+        await asking.value
+        XCTAssertLessThan(Date().timeIntervalSince(began), 8, "the job ended with Stop, not after its 20 seconds")
+        XCTAssertNotEqual(Self.answer(model)?.text, "Too late")
+    }
+
+    /// A job that's lost its authority (a new question, Stop, closing the panel, a changed switch) can't read or act.
+    func testAJobWithoutAuthorityCantReadOrAct() async {
+        let tools = ClaudeBrainTools(model: PanelModel(service: FixtureCore()), reads: ClaudeReads(service: FixtureCore()), live: { false })
+        let read = await tools.fetch(.recentItems(limit: 5), enabled: Set(ClaudeTools.Category.allCases))
+        XCTAssertEqual(read, .refused("Stopped."))
+        let act = await tools.fetch(.act(.command(.reminder(title: "Late", due: nil))), enabled: [])
+        XCTAssertEqual(act, .refused("Stopped."))
+        XCTAssertNil(ActionPresence.shared.pending)
+    }
+
+    /// Switching the brain, or turning a source off, ends the running job's authority.
+    func testSettingsChangesRevokeTheRunningJob() {
+        let settings = BrainSettings(installed: false)
+        let before = PanelModel.brainGeneration
+        settings.reads.insert(.mail)
+        XCTAssertEqual(PanelModel.brainGeneration, before, "turning a source on keeps the job")
+        settings.reads.remove(.mail)
+        XCTAssertGreaterThan(PanelModel.brainGeneration, before)
+        let after = PanelModel.brainGeneration
+        settings.brain = .local
+        XCTAssertGreaterThan(PanelModel.brainGeneration, after)
+        settings.reads = Set(ClaudeTools.Category.allCases)
     }
 
     func testSpeechFollowsFinishedSentences() {

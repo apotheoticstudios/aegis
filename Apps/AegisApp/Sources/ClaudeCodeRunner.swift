@@ -56,6 +56,8 @@ actor ClaudeCodeRunner {
 
     private let executable: String?
     private var label: String?
+    /// The job number the running job was started for.
+    private var runToken = 0
     /// Items the last run sent Claude, by category: counts only.
     private(set) var lastReads: [ClaudeTools.Category: Int] = [:]
     /// Action calls the last run accepted: a run that acted is never replayed on another brain (ADR-0038 §2).
@@ -75,24 +77,40 @@ actor ClaudeCodeRunner {
         await run(system: "Aegis setup check.", prompt: nil, choice: Self.choice, timeout: 30) { _ in }
     }
 
-    /// Stops the running job: launchd ends its whole process group.
-    func cancel() {
-        guard let label else { return }
+    /// Stops the running job: launchd ends its whole process group. With `below`, only a job started for an
+    /// older job number than it, so a stop sent for the last job can't end the one that replaced it.
+    func cancel(below token: Int? = nil) {
+        guard let label, token.map({ runToken < $0 }) ?? true else { return }
         cancelled = true
         PlanRunner.launchctl(["bootout", PlanRunner.domain + "/" + label])
+    }
+
+    /// One run's own result: how it ended, the actions it accepted and the items it sent in full. Never another
+    /// run's, as the "last run" properties may be by the time a caller reads them.
+    struct Report: Sendable {
+        let ending: Ending
+        var actions = 0
+        var readIDs: [String] = []
     }
 
     func run(
         system: String, prompt: String?, choice: ClaudeCode.Choice, timeout: Double, reads: Reads? = nil,
         typed: @Sendable (String) -> Void
     ) async -> Ending {
-        guard let executable else { return .unavailable }
-        guard choice.isValid else { return .failed(-4) }
-        guard label == nil else { return .busy }
-        guard !Task.isCancelled else { return .cancelled }
+        await report(system: system, prompt: prompt, choice: choice, timeout: timeout, reads: reads, typed: typed).ending
+    }
+
+    func report(
+        system: String, prompt: String?, choice: ClaudeCode.Choice, timeout: Double, reads: Reads? = nil, token: Int = 0,
+        typed: @Sendable (String) -> Void
+    ) async -> Report {
+        guard let executable else { return Report(ending: .unavailable) }
+        guard choice.isValid else { return Report(ending: .failed(-4)) }
+        guard label == nil else { return Report(ending: .busy) }
+        guard !Task.isCancelled else { return Report(ending: .cancelled) }
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("aegis-claude-" + UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
-        guard let pipes = Pipes(scratch: scratch) else { return .failed(-1) }
+        guard let pipes = Pipes(scratch: scratch) else { return Report(ending: .failed(-1)) }
         defer { pipes.close() }
         let label = "dev.aegis.claude." + UUID().uuidString.lowercased()
         let plist = scratch.appendingPathComponent(label + ".plist")
@@ -101,8 +119,9 @@ actor ClaudeCodeRunner {
         let job = Self.job(label: label, executable: executable, choice: choice, system: system, tools: tools, scratch: scratch)
         guard let data = try? PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0),
               (try? data.write(to: plist)) != nil
-        else { return .failed(-1) }
+        else { return Report(ending: .failed(-1)) }
         self.label = label
+        runToken = token
         cancelled = false
         lastReads = [:]
         lastActions = 0
@@ -113,15 +132,17 @@ actor ClaudeCodeRunner {
         }
         guard PlanRunner.launchctl(["bootstrap", PlanRunner.domain, plist.path]) == 0 else {
             log.notice("claude: bootstrap failed")
-            return .unavailable
+            return Report(ending: .unavailable)
         }
         let deadline = Date().addingTimeInterval(timeout)
         if let failed = await send(ClaudeCode.handshake(served: server != nil), to: pipes, until: deadline) {
-            return failed
+            return Report(ending: failed)
         }
         var session = ClaudeCode.Session(servers: server == nil ? [] : [ClaudeTools.server], tools: Set(tools))
-        let link = Link(pipes: pipes, label: label, deadline: deadline, server: server, source: reads?.source)
-        return await pump(link, &session, prompt: prompt, typed: typed)
+        var link = Link(pipes: pipes, label: label, deadline: deadline, server: server, source: reads?.source)
+        let ending = await pump(&link, &session, prompt: prompt, typed: typed)
+        record(link.server)
+        return Report(ending: ending, actions: link.server?.actions ?? 0, readIDs: link.server?.readIDs ?? [])
     }
 
     /// The job's plist: only Aegis's own instructions, never the prompt.
@@ -159,14 +180,12 @@ actor ClaudeCodeRunner {
     /// tool calls. Stop and the deadline are checked before every read, so nothing is sent after either. Input stays
     /// open for the tools' answers; the run ends with Claude Code's result.
     private func pump(
-        _ link: Link, _ session: inout ClaudeCode.Session, prompt: String?, typed: @Sendable (String) -> Void
+        _ link: inout Link, _ session: inout ClaudeCode.Session, prompt: String?, typed: @Sendable (String) -> Void
     ) async -> Ending {
-        var link = link
         var buffer = [UInt8](repeating: 0, count: 65536)
         let began = Date()
         var checked = Date()
         var seenRunning = false
-        defer { record(link.server) }
         while true {
             if let stopped = stopped(link.deadline) {
                 return stopped

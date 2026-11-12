@@ -42,6 +42,11 @@ actor FixtureCore: CoreService {
         switch request {
         case .recentEvents: return .events(events)
         case let .sources(ids): return .events(events.filter { ids.contains($0.id) })
+        case .people:
+            return .people([PersonWaiting(
+                person: .init(id: "contact:1", name: "Alex Example"), waitingSince: Date(), questions: 1, latest: "Call about Saturday?",
+                eventIDs: [events[0].id]
+            )])
         case .latestBrief:
             let brief = Brief(
                 generatedAt: Date(), windowStart: Date(), windowEnd: Date(), model: nil, items: [

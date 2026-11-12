@@ -18,6 +18,8 @@ struct ClaudeReads: ClaudeToolSource {
     let service: any CoreService
 
     func fetch(_ call: ClaudeTools.Call, enabled: Set<ClaudeTools.Category>) async -> ClaudeTools.Payload {
+        // The owner's switches as they are now: one turned off mid-run applies to the next result.
+        let enabled = enabled.intersection(Self.enabled)
         switch call {
         case let .recentItems(limit):
             guard case let .events(events) = await service.handle(.recentEvents(limit: limit)) else { return Self.unavailable }
@@ -63,7 +65,7 @@ struct ClaudeReads: ClaudeToolSource {
 
     /// Where each cited item came from, asked of AegisCore in batches. An ID it doesn't return stays unknown, so an
     /// item citing it is left out.
-    private func sources(of ids: [String]) async -> [String: ClaudeTools.Category] {
+    func sources(of ids: [String]) async -> [String: ClaudeTools.Category] {
         var unique: [String] = []
         for id in ids where !unique.contains(id) && unique.count < ClaudeTools.maxCited {
             unique.append(id)
