@@ -71,6 +71,10 @@ private final class FakeWallpaper: ShellWallpaper {
         marks[mark] == showing
     }
 
+    func isMarked(_ mark: UUID) -> Bool {
+        marks[mark] != nil
+    }
+
     func unmark(_ mark: UUID) {
         marks[mark] = nil
     }
@@ -107,6 +111,25 @@ final class ShellWallpaperTests: XCTestCase {
         settings.restoreShownSpace()
         XCTAssertEqual(wallpaper.dark, [])
         XCTAssertEqual(wallpaper.own, original, "each desktop got its own picture back")
+        XCTAssertNil(settings.saved)
+    }
+
+    /// A desktop an earlier version left dark, with no mark, never takes another desktop's record.
+    func testAnUnmarkedDarkDesktopLeavesTheOthersRecord() async {
+        let wallpaper = FakeWallpaper(), original = wallpaper.own
+        wallpaper.dark = [0]
+        let settings = ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: file())
+        _ = await settings.apply()
+        wallpaper.showing = 1
+        settings.darkenShowingSpace()
+        wallpaper.showing = 0
+        _ = await settings.restore()
+        XCTAssertEqual(wallpaper.dark, [1], "the unmarked one is back")
+        XCTAssertEqual(settings.saved?.spaces?.count, 1, "the other's record is kept")
+        wallpaper.showing = 1
+        settings.restoreShownSpace()
+        XCTAssertEqual(wallpaper.dark, [])
+        XCTAssertEqual(wallpaper.own[1], original[1])
         XCTAssertNil(settings.saved)
     }
 

@@ -29,6 +29,8 @@ protocol ShellWallpaper {
     func mark() -> UUID
     /// Whether the desktop showing is the one marked.
     func isShowing(_ mark: UUID) -> Bool
+    /// Whether the mark is still there (a crash takes them all).
+    func isMarked(_ mark: UUID) -> Bool
     func unmark(_ mark: UUID)
 }
 
@@ -137,7 +139,12 @@ final class ShellSettings {
         guard let wallpaper, var spaces = state.spaces, !spaces.isEmpty, wallpaper.darkened() else { return true }
         // shortcut: after a crash the marks are gone and the first saved pictures go back, exact when every desktop had
         // the same wallpaper. Upgrade if owners lose per-desktop wallpapers that way.
-        let index = spaces.firstIndex { wallpaper.isShowing($0.mark) } ?? 0
+        guard let index = spaces.firstIndex(where: { wallpaper.isShowing($0.mark) })
+            ?? spaces.firstIndex(where: { !wallpaper.isMarked($0.mark) })
+        else {
+            // Darkened without a mark (by an earlier version): the first saved pictures, still kept for their own desktop.
+            return wallpaper.restore(spaces[0].pictures)
+        }
         guard wallpaper.restore(spaces[index].pictures) else { return false }
         wallpaper.unmark(spaces[index].mark)
         spaces.remove(at: index)
@@ -229,6 +236,10 @@ final class SystemWallpaper: ShellWallpaper {
 
     func isShowing(_ mark: UUID) -> Bool {
         marks[mark]?.isOnActiveSpace == true
+    }
+
+    func isMarked(_ mark: UUID) -> Bool {
+        marks[mark] != nil
     }
 
     func unmark(_ mark: UUID) {
