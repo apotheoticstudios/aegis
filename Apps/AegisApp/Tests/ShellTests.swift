@@ -4,37 +4,84 @@ import AppKit
 import SwiftUI
 import XCTest
 
-/// AegisShell, stage 1 (ADR-0033): macOS is put back exactly as it was, and the engage transition keeps the design's
-/// timing. A fake Dock and a temporary file: the owner's real Dock is never touched.
 @MainActor
-final class ShellTests: XCTestCase {
-    private final class FakeDock: ShellDock {
-        var value: Bool?
-        var works = true
-        private(set) var changes = 0
+private final class FakeDock: ShellDock {
+    var value: Bool?
+    var works = true
+    private(set) var changes = 0
 
-        init(_ value: Bool) {
-            self.value = value
-        }
-
-        func autohide() -> Bool? {
-            value
-        }
-
-        func set(autohide: Bool) async -> Bool {
-            setNow(autohide: autohide)
-        }
-
-        func setNow(autohide: Bool) -> Bool {
-            guard works else { return false }
-            value = autohide
-            changes += 1
-            return true
-        }
+    init(_ value: Bool) {
+        self.value = value
     }
 
+    func autohide() -> Bool? {
+        value
+    }
+
+    func set(autohide: Bool) async -> Bool {
+        setNow(autohide: autohide)
+    }
+
+    func setNow(autohide: Bool) -> Bool {
+        guard works else { return false }
+        value = autohide
+        changes += 1
+        return true
+    }
+}
+
+@MainActor
+private final class FakeWallpaper: ShellWallpaper {
+    var pictures: [ShellSettings.Wallpaper]? = [.init(display: 1, url: URL(fileURLWithPath: "/tmp/example-wallpaper.heic"))]
+    var dark = false
+    var works = true
+
+    func current() -> [ShellSettings.Wallpaper]? {
+        pictures
+    }
+
+    func darken() -> Bool {
+        dark = works
+        return works
+    }
+
+    func restore(_ saved: [ShellSettings.Wallpaper]) -> Bool {
+        guard works else { return false }
+        pictures = saved
+        dark = false
+        return true
+    }
+}
+
+/// AegisShell, stage 1 (ADR-0033): macOS is put back exactly as it was, and the engage transition keeps the design's
+/// timing. A fake Dock, a fake wallpaper and a temporary file: the owner's real ones are never touched.
+@MainActor
+final class ShellTests: XCTestCase {
     private func file() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("shell-\(UUID().uuidString)/shell-state.json")
+    }
+
+    /// The menu bar's items are coloured for the wallpaper: it goes dark while engaged and comes back after.
+    func testTheWallpaperDarkensAndComesBack() async {
+        let wallpaper = FakeWallpaper(), original = wallpaper.pictures, url = file()
+        let settings = ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: url)
+        _ = await settings.apply()
+        XCTAssertTrue(wallpaper.dark)
+        XCTAssertEqual(settings.saved?.wallpapers, original, "saved before it changed")
+        wallpaper.works = false
+        let failed = await settings.restore()
+        XCTAssertFalse(failed)
+        XCTAssertNotNil(settings.saved, "kept, so the next launch tries again")
+        wallpaper.works = true
+        XCTAssertTrue(settings.restoreNow())
+        XCTAssertFalse(wallpaper.dark)
+        XCTAssertEqual(wallpaper.pictures, original)
+        XCTAssertNil(settings.saved)
+        // A wallpaper that can't be read is never changed.
+        let unread = FakeWallpaper()
+        unread.pictures = nil
+        _ = await ShellSettings(dock: FakeDock(false), wallpaper: unread, file: file()).apply()
+        XCTAssertFalse(unread.dark)
     }
 
     func testTwentyEngagesLeaveTheDockAsItWas() async {

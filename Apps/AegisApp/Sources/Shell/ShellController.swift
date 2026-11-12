@@ -105,7 +105,8 @@ final class ShellController {
     @ObservationIgnored var talkKey: String?
 
     @ObservationIgnored private let settings = ShellSettings(
-        dock: SystemDock(), file: WorldSidecar.folder.deletingLastPathComponent().appendingPathComponent("shell-state.json")
+        dock: SystemDock(), wallpaper: SystemWallpaper(folder: WorldSidecar.folder.deletingLastPathComponent()),
+        file: WorldSidecar.folder.deletingLastPathComponent().appendingPathComponent("shell-state.json")
     )
     @ObservationIgnored private var windows: [NSWindow] = []
     @ObservationIgnored private var bar: ShellMenuBar?
