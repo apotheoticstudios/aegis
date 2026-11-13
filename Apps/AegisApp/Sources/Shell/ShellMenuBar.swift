@@ -83,7 +83,7 @@ final class ShellMenuBar: NSObject {
                 menu: { [weak self] in self?.toggleMenu() }, close: { [weak self] in self?.closeMenu() }
             ))
             panel.setFrame(frame, display: false)
-            panel.orderFront(nil)
+            panel.orderFrontRegardless()
             return panel
         }
     }
@@ -116,7 +116,7 @@ final class ShellMenuBar: NSObject {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.contentView = content
-        panel.orderFront(nil)
+        panel.orderFrontRegardless()
         menu = panel
         // A click anywhere else closes it, as a menu does: in another app, or in Aegis's own windows (the desktop).
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]

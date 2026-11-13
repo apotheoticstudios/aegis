@@ -400,7 +400,8 @@ final class ShellController {
             window.setFrame(screen.frame, display: false)
             // Left out of screenshots and screen sharing where macOS honours it; hiding details covers the rest.
             window.sharingType = .none
-            window.orderFront(nil)
+            // Regardless: engaging from the shortcut leaves another app active, and a plain orderFront then waited for a Space switch.
+            window.orderFrontRegardless()
             occlusion.append(NotificationCenter.default.addObserver(
                 forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
             ) { [weak self] _ in
