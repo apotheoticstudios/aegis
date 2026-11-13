@@ -1,6 +1,5 @@
-import AppKit
+import Foundation
 import Security
-import SwiftUI
 
 /// The World view's optional keys (#265), in the Mac's Keychain only: Cesium ion (3D cities), AISStream (ships),
 /// NASA FIRMS (fires) and TomTom (traffic). They go only to God's Eye View's local server, which uses them with
@@ -86,79 +85,5 @@ enum WorldKeys {
         Dictionary(uniqueKeysWithValues: Key.allCases.compactMap { key in
             has(key) ? value(key).map { (key.environment, $0) } : nil
         })
-    }
-}
-
-/// World view keys (#265): all optional; the globe works without them.
-struct WorldKeysView: View {
-    @State private var entries: [WorldKeys.Key: String] = [:]
-    @State private var saved: [WorldKeys.Key: Bool] = [:]
-    @State private var brief = WorldPresence.briefEnabled
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("World view").font(.title3.weight(.semibold))
-            Toggle("Weather at home and today's flight in the brief", isOn: $brief)
-                .onChange(of: brief) { _, on in
-                    WorldPresence.briefEnabled = on
-                    WorldPresence.shared.briefFetched = .distantPast
-                }
-            Text("Uses public data: home is sent rounded to about 10 km (to Open-Meteo), a flight only as its number "
-                + "(to adsb.lol). Say “set my home here” at home first.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Divider()
-            Text("Keys").font(.headline)
-            Text("All optional and free to get. They're kept in the Keychain and used only by the World view's own "
-                + "server on this Mac. Changes apply the next time the World view opens.")
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            ForEach(WorldKeys.Key.allCases, id: \.self) { key in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(key.title + " · " + key.site).font(.callout)
-                    HStack {
-                        SecureField(saved[key] == true ? "Saved" : "Paste the key", text: Binding(
-                            get: { entries[key] ?? "" }, set: { entries[key] = $0 }
-                        ))
-                        .textFieldStyle(.roundedBorder)
-                        Button("Save") {
-                            WorldKeys.set(entries[key] ?? "", for: key)
-                            saved[key] = WorldKeys.has(key)
-                            entries[key] = ""
-                        }
-                        .disabled((entries[key] ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
-                        Button("Remove") {
-                            WorldKeys.set("", for: key)
-                            saved[key] = false
-                        }
-                        .disabled(saved[key] != true)
-                    }
-                }
-            }
-        }
-        .padding(20)
-        .frame(width: 520)
-        .onAppear {
-            for key in WorldKeys.Key.allCases {
-                saved[key] = WorldKeys.has(key)
-            }
-        }
-    }
-}
-
-/// The World view keys window, opened from the menu bar menu.
-@MainActor
-enum WorldKeysWindow {
-    private static var window: NSWindow?
-
-    static func show() {
-        if window == nil {
-            let created = NSWindow(contentViewController: NSHostingController(rootView: WorldKeysView()))
-            created.title = "World view"
-            created.styleMask = [.titled, .closable]
-            created.isReleasedWhenClosed = false
-            window = created
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }

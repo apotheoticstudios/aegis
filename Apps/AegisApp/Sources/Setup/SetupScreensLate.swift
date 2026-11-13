@@ -78,7 +78,7 @@ struct PersonalityScreen: View {
         }
     }
 
-    /// The address as a choice; a custom one (typed in Personality… before) matches none.
+    /// The address as a choice; a custom one (typed in the old Personality window) matches none.
     private var address: Binding<String> {
         Binding(get: {
             switch chosen.callOwner.lowercased() {

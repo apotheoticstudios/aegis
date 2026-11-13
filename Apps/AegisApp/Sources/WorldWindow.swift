@@ -28,7 +28,7 @@ final class WorldPresence {
         presentationChanged(false)
     }
 
-    /// Whether weather and flight status go in the brief (on unless turned off under World view settings).
+    /// Whether weather and flight status go in the brief (on unless turned off in Settings, under Sources).
     static var briefEnabled: Bool {
         get { UserDefaults.aegis.object(forKey: "worldBriefEnabled") as? Bool ?? true }
         set { UserDefaults.aegis.set(newValue, forKey: "worldBriefEnabled") }

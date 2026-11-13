@@ -296,7 +296,7 @@ enum CloudKeys {
     }
 
     /// The provider answers through the owner's plan app rather than an API key. Claude Code counts once a handshake
-    /// (the Claude and ChatGPT window runs one when it opens) found it signed in and set up as Aegis needs.
+    /// (Settings' Brain page runs one when it opens) found it signed in and set up as Aegis needs.
     static func viaPlan(_ provider: CloudHandOff.Provider) -> Bool {
         switch provider {
         case .chatgpt: !hasKey(.chatgpt) && useChatGPTPlan && PlanRunner.codex != nil

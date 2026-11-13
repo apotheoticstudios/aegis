@@ -224,13 +224,9 @@ struct MenuContent: View {
             Text(problem)
         }
         Button("World view") { WorldWindow.shared.show() }
-        Button("World view settings…") { WorldKeysWindow.show() }
         Button("Beholder research…") { BeholderWindow.show() }
         Button("Settings…") { delegate.showSettings() }
             .keyboardShortcut(",")
-        Button("Personality…") { PersonalityWindow.show(delegate.model) }
-        Button("Claude and ChatGPT…") { CloudSettingsWindow.show() }
-        Button("Run setup again…") { delegate.showSetup(again: true) }
         Toggle("Glow for urgent items", isOn: Binding(
             get: { delegate.model.glowEnabled },
             set: { delegate.model.glowEnabled = $0 }

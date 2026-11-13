@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The Settings window's pages (the design system's SettingsWindow), in its four groups. Only pages that hold settings
 /// Aegis has today; the design's Workspaces, Memory, Shortcuts and About wait for their features. Brain isn't in the
-/// design: it mirrors setup's Brain step and holds what the Claude and ChatGPT window did.
+/// design: it mirrors setup's Brain step and holds what the old Claude and ChatGPT window did.
 enum SettingsPane: String, CaseIterable, Identifiable {
     case general, brain, personality, voice, interface, silence, schedule
     case sources, permissions, privacy, storage
