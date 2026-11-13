@@ -128,6 +128,11 @@ final class SettingsModel {
         last = Change(label: label, at: at, merge: merge, undo: kept)
     }
 
+    /// The window closed: what changed stays changed, but there's nothing left to undo or report.
+    func forget() {
+        last = nil
+    }
+
     /// One level of Undo.
     func undo() {
         guard let undo = last?.undo else { return }
@@ -149,7 +154,8 @@ enum SettingsWindow {
     private(set) static var window: NSWindow?
     static let model = SettingsModel()
 
-    /// Shows Settings (on `page`, if given); `runSetup` closes it and opens the wizard again.
+    /// Shows Settings (on `page`, if given); `runSetup` closes it and opens the wizard again. Each opening builds the
+    /// window's content afresh, so the status, shortcuts and answers are current and no Undo outlives a closing.
     static func show(_ app: SetupApp, page: SettingsPane? = nil, setup: SetupModel = .shared, runSetup: @escaping () -> Void) {
         if let page {
             model.page = page
@@ -164,14 +170,16 @@ enum SettingsWindow {
             created.isOpaque = false
             created.backgroundColor = .clear
             created.hasShadow = true
-            created.contentView = NSHostingView(rootView: SettingsView(model: model, setup: setup, app: app, runSetup: {
-                close()
-                runSetup()
-            }, close: close))
             created.center()
             window = created
         }
-        setup.refreshFreeSpace()
+        if window?.isVisible != true || window?.contentView == nil {
+            setup.refreshFreeSpace()
+            window?.contentView = NSHostingView(rootView: SettingsView(model: model, setup: setup, app: app, runSetup: {
+                close()
+                runSetup()
+            }, close: close))
+        }
         HUDPresence.shared.settings = true
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
@@ -180,6 +188,13 @@ enum SettingsWindow {
     static func close() {
         window?.orderOut(nil)
         HUDPresence.shared.settings = false
+        model.forget()
+        // Torn down after the click that closed it has finished; the pages' checks stop with it.
+        Task { @MainActor in
+            if window?.isVisible == false {
+                window?.contentView = nil
+            }
+        }
     }
 }
 
@@ -252,7 +267,12 @@ struct SettingsView: View {
         }
         // The wizard sends the brief time when it finishes; here each change goes at once.
         .onChange(of: setup.wizard.briefMinutes) { _, minutes in
-            Task { _ = await app.model.service.handle(.setBriefTime(minutes: minutes)) }
+            Task {
+                guard case .status = await app.model.service.handle(.setBriefTime(minutes: minutes)) else {
+                    model.record("Wake-up time, but AegisCore didn't get it", merge: "wake", undo: nil)
+                    return
+                }
+            }
         }
         // Permissions are checked again on each page change and whenever the window comes back to the front.
         .task(id: page) { missing = Permission.missing(Self.granted()) }
@@ -589,6 +609,8 @@ struct SetupKeyRow: View {
     /// False when the Keychain refused.
     let save: (String) -> Bool
     let remove: () -> Void
+    /// Told when typing starts and stops, so the wizard's Return saves the key rather than going to the next step.
+    var editing: ((Bool) -> Void)?
     @State private var text = ""
     @State private var saved = false
     @State private var refused = false
@@ -597,24 +619,28 @@ struct SetupKeyRow: View {
     var body: some View {
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         HUDSettingRow(label: name, hint: refused ? "The Keychain didn't save that key." : "Free from " + site, meta: use) {
-            HUDTermInput(prompt: ">", text: $text, placeholder: saved ? "saved" : "paste it here", secure: true).frame(width: 130)
-            Button(typed.isEmpty && saved ? "Remove" : "Save") {
-                if typed.isEmpty {
-                    remove()
-                    change?.record(name + " removed", nil, nil)
-                } else {
-                    refused = !save(typed)
-                    if !refused {
-                        change?.record(name + " saved", nil, nil)
-                    }
-                }
-                text = ""
+            HUDTermInput(prompt: ">", text: $text, placeholder: saved ? "saved" : "paste it here", editing: editing, secure: true)
+                .frame(width: 120)
+                .onSubmit { store(typed) }
+            Button("Save") { store(typed) }
+                .buttonStyle(HUDPlateStyle(compact: true)).fixedSize().disabled(typed.isEmpty)
+            Button("Remove") {
+                remove()
                 saved = isSaved()
+                change?.record(name + " removed", nil, nil)
             }
-            .buttonStyle(HUDPlateStyle(compact: true))
-            .fixedSize()
-            .disabled(typed.isEmpty && !saved)
+            .buttonStyle(HUDPlateStyle(compact: true)).fixedSize().disabled(!saved)
         }
         .onAppear { saved = isSaved() }
+    }
+
+    private func store(_ typed: String) {
+        guard !typed.isEmpty else { return }
+        refused = !save(typed)
+        if !refused {
+            change?.record(name + " saved", nil, nil)
+        }
+        text = ""
+        saved = isSaved()
     }
 }

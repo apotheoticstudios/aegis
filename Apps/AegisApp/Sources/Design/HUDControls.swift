@@ -55,9 +55,9 @@ struct HUDToggle: View {
 
     var body: some View {
         Button {
-            let binding = $on
+            let (binding, old) = ($on, on)
             on.toggle()
-            change?.record(label + (on ? " on" : " off"), nil) { binding.wrappedValue.toggle() }
+            change?.record(label + (on ? " on" : " off"), nil) { binding.wrappedValue = old }
         } label: {
             HStack(spacing: HUD.space2) {
                 ZStack(alignment: .leading) {

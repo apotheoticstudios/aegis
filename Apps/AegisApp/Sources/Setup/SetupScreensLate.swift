@@ -14,6 +14,8 @@ struct PersonalityScreen: View {
     @State private var chosen = Personality.standard
     @State private var loaded = false
     @State private var ownerName: String?
+    /// The last save didn't go through AegisCore.
+    @State private var unsaved = false
 
     var body: some View {
         SetupColumns {
@@ -30,13 +32,7 @@ struct PersonalityScreen: View {
             }
             HUDTermInput(prompt: "name >", text: $chosen.name, hint: "also the wake word") { setup.typing = $0 }.padding(.top, HUD.space2)
             HUDSettingRow(label: "Calls you", compact: true) {
-                HUDSegmented(label: "Calls you", options: [
-                    HUDOption(value: "name", label: "Your name", disabled: ownerName == nil),
-                    HUDOption(value: "sir", label: "Sir"), HUDOption(value: "maam", label: "Ma’am"), HUDOption(
-                        value: "none",
-                        label: "Nothing"
-                    ),
-                ], value: address, small: true)
+                HUDSegmented(label: "Calls you", options: addressOptions, value: $chosen.callOwner, small: true)
             }
             HStack(alignment: .top, spacing: HUD.space4) {
                 slider("formality", "Formality", 6, ("Casual", "Formal"))
@@ -51,6 +47,8 @@ struct PersonalityScreen: View {
             .padding(.top, HUD.space2)
             if chosen.cleaned == nil {
                 Text("The name needs letters only, up to 24; notes up to 600 characters.").font(HUDFace.text(11)).foregroundStyle(HUD.warn)
+            } else if unsaved {
+                Text("That didn't save: AegisCore didn't take it. Try again in a moment.").font(HUDFace.text(11)).foregroundStyle(HUD.warn)
             }
         } side: {
             HUDSubhead(title: "Live preview", meta: chosen.style.title, first: true)
@@ -74,28 +72,30 @@ struct PersonalityScreen: View {
         .task(id: chosen) {
             try? await Task.sleep(for: .milliseconds(600))
             guard loaded, !Task.isCancelled, let clean = chosen.cleaned, clean != model.personality else { return }
-            _ = await model.savePersonality(clean)
+            unsaved = await !model.savePersonality(clean)
+        }
+        // Leaving the page within the pause still keeps the last change.
+        .onDisappear {
+            guard loaded, let clean = chosen.cleaned, clean != model.personality else { return }
+            Task { [model] in _ = await model.savePersonality(clean) }
         }
     }
 
-    /// The address as a choice; a custom one (typed in the old Personality window) matches none.
-    private var address: Binding<String> {
-        Binding(get: {
-            switch chosen.callOwner.lowercased() {
-            case "": "none"
-            case "sir": "sir"
-            case "ma’am", "ma'am": "maam"
-            case ownerName?.lowercased() ?? "\u{0}": "name"
-            default: "custom"
-            }
-        }, set: { pick in
-            chosen.callOwner = switch pick {
-            case "name": ownerName ?? ""
-            case "sir": "sir"
-            case "maam": "ma’am"
-            default: ""
-            }
-        })
+    /// What Aegis calls the owner, each option holding the words themselves. One typed before in the old Personality
+    /// window ("boss") stays as an option of its own until another is picked.
+    private var addressOptions: [HUDOption<String>] {
+        let now = chosen.callOwner
+        let kept = { (standard: String) in now.lowercased() == standard.lowercased() ? now : standard }
+        var options = [
+            HUDOption(value: ownerName.map(kept) ?? "\u{0}", label: "Your name", disabled: ownerName == nil),
+            HUDOption(value: kept("sir"), label: "Sir"),
+            HUDOption(value: now.lowercased() == "ma'am" ? now : kept("ma’am"), label: "Ma’am"),
+            HUDOption(value: "", label: "Nothing"),
+        ]
+        if !options.contains(where: { $0.value == now }) {
+            options.append(HUDOption(value: now, label: String(now.prefix(16))))
+        }
+        return options
     }
 
     private func slider(_ key: String, _ label: String, _ recommended: Int, _ ends: (String, String)) -> some View {

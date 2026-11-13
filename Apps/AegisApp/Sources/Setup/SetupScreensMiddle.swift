@@ -69,7 +69,8 @@ struct SourcesScreen: View {
                         site: key.site,
                         isSaved: { WorldKeys.has(key) },
                         save: { WorldKeys.set($0, for: key) },
-                        remove: { WorldKeys.set("", for: key) }
+                        remove: { WorldKeys.set("", for: key) },
+                        editing: { setup.typing = $0 }
                     )
                 }
                 SetupNote("All optional. Kept in the Keychain and used only by the World view's own server on this Mac, from the "

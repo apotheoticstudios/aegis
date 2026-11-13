@@ -82,6 +82,13 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(model.last?.undo)
     }
 
+    func testClosingLeavesNothingToUndo() {
+        let model = SettingsModel()
+        model.record("Theme: Matrix", merge: nil, undo: {})
+        model.forget()
+        XCTAssertNil(model.last, "a reopened window starts with \u{201C}Changes save as you make them\u{201D}")
+    }
+
     func testMissingPermissionsCountRowsNotPermissions() {
         XCTAssertEqual(Permission.missing([:]), 3, "unknown counts as missing")
         let all = Dictionary(uniqueKeysWithValues: Permission.allCases.map { ($0, true) })
@@ -100,7 +107,9 @@ final class SettingsTests: XCTestCase {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("setup-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
         // The hand-off's plan switch would ask Claude Code who's signed in; previews don't.
+        let plan = UserDefaults.aegis.object(forKey: CloudKeys.claudePlanKey)
         UserDefaults.aegis.set(false, forKey: CloudKeys.claudePlanKey)
+        defer { UserDefaults.aegis.set(plan, forKey: CloudKeys.claudePlanKey) }
         let setup = SetupModel(file: SetupFile(url: url), mac: SetupTests.sampleMac)
         let app = SetupApp(
             model: PanelModel(service: SampleCoreService(), actions: nil), wake: WakeListener(), hotKey: "⌥Space", shellKey: "⌃⌥A"
