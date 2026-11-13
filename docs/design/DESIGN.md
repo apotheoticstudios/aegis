@@ -493,7 +493,7 @@ AegisShell turns the Mac into a Aegis operating environment: a shell over macOS 
 | Panel | An Engage button in the HUD |
 | Optional schedule or workspace | e.g. engage automatically on the Mac mini hub, or when the "Work" workspace starts; off by default |
 
-- **On engage:** a short transition (about 1.9 s: the shield forms over the screen and breaks into the live desktop); the Dock hides, AegisShell's bar covers the left of macOS's menu bar (hexagon and status, workspaces, launcher, Talk, Exit), and the live HUD desktop and custom widgets appear.
+- **On engage:** a short transition (about 1.9 s: the shield forms over the screen and breaks into the live desktop); the Dock hides, AegisShell's bar covers the whole of macOS's menu bar (hexagon and status, workspaces, launcher, Talk, Exit on the left; network, battery and clock on the right), and the live HUD desktop and custom widgets appear.
 - **On disengage** (same hotkey, "Aegis, stand down", Exit on the bar or Disengage in its menu): everything AegisShell added is removed, the Dock returns, and anything AegisShell moved goes back. How it sits on macOS: ADR-0033.
 - **Resources:** the live desktop, top bar and custom widgets use no RAM or GPU while AegisShell is not engaged.
 - **Always available exit:** if AegisShell ever misbehaves, the disengage hotkey and the bar's Exit still restore normal macOS.
@@ -509,7 +509,7 @@ AegisShell turns the Mac into a Aegis operating environment: a shell over macOS 
 | Feature | What it does |
 | --- | --- |
 | Live HUD desktop | Aegis draws on the desktop layer beneath windows: reactor, event stream, schedule and home status become a living wallpaper |
-| AegisShell's bar | The Dock auto-hides. Over the left of macOS's menu bar, where the Apple menu and the front app's menus sit, AegisShell's bar shows the hexagon with the status, the hidden mark and an urgent count (it opens its own menu), the workspaces, the launcher, Talk and Exit. The front app's menus are reached by their shortcuts while it's engaged; the rest of the menu bar is macOS's own (owner's choice, 2026-11-12) |
+| AegisShell's bar | The Dock auto-hides. AegisShell's bar covers the whole of macOS's menu bar. Left of the notch: the hexagon with the status, the hidden mark and an urgent count (it opens its own menu), the workspaces, the launcher, Talk and Exit. Right of it, in white: the network (Wi-Fi, wired or offline, never its name), the battery and the date and time; the network and battery open their System Settings pages, the clock opens the panel. The front app's menus are reached by their shortcuts while it's engaged, and macOS's own menu bar items can't be clicked (owner's choices, 2026-11-12 and 2026-11-13) |
 | Launcher | ⌥ Space replaces Spotlight and Launchpad: open apps, files and settings, ask questions and run commands from one bar |
 | Window management | Arrange windows by command ("Mail left, calendar right"), saved workspace layouts, focus layouts per activity |
 | Workspaces | One-tap modes such as Work, Focus, Evening and Movie, each changing layouts, widgets, Focus mode and home scenes |

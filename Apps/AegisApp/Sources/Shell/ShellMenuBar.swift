@@ -2,13 +2,14 @@ import AegisKit
 import AppKit
 import SwiftUI
 
-/// AegisShell's bar over the left of macOS's menu bar, where the Apple menu and the front app's menus sit, while it's
-/// engaged (owner's choice, 2026-11-12; ADR-0033). One borderless panel per menu bar, just above the bar's level and
-/// under its menus, so the front app's menus are reached by their shortcuts only. Nothing hides or changes the menu
+/// AegisShell's bar over the whole of macOS's menu bar while it's engaged (owner's choices, 2026-11-12 and 2026-11-13;
+/// ADR-0033). One borderless panel per menu bar, just above macOS's own status items and under its menus: the front
+/// app's menus are reached by their shortcuts, and Aegis draws its own right side. Nothing hides or changes the menu
 /// bar itself, and full-screen apps keep theirs.
 @MainActor
 final class ShellMenuBar: NSObject {
     private let shell: ShellController
+    private let status = ShellSystemStatus()
     private var bars: [NSPanel] = []
     private var menu: NSPanel?
     private var outside: [Any] = []
@@ -17,6 +18,7 @@ final class ShellMenuBar: NSObject {
     init(shell: ShellController) {
         self.shell = shell
         super.init()
+        status.start()
         place()
         // A display added, removed or rearranged, or a Space whose menu bar shows or hides: the bars follow.
         let follow: @Sendable (Notification) -> Void = { [weak self] _ in MainActor.assumeIsolated { self?.place() } }
@@ -32,27 +34,44 @@ final class ShellMenuBar: NSObject {
         ]
     }
 
-    /// Over the left of a display's menu bar: from its left edge to the notch, or halfway across a display without one.
-    /// Nil where no menu bar takes room (one that hides itself, or a second display without its own), so the bar never
-    /// covers a window's buttons.
-    static func frame(screen: NSRect, visible: NSRect, notchLeft: NSRect?) -> NSRect? {
+    /// Where a display's bar goes, and the room either side of the notch (each half of a display without one).
+    struct Layout: Equatable {
+        let frame: NSRect
+        let left: CGFloat
+        let right: CGFloat
+    }
+
+    /// Across a display's whole menu bar. Nil where no menu bar takes room (one that hides itself, or a second display
+    /// without its own), so the bar never covers a window's buttons.
+    static func layout(screen: NSRect, visible: NSRect, notchLeft: NSRect?, notchRight: NSRect?) -> Layout? {
         let height = screen.maxY - visible.maxY
         guard height > 0 else { return nil }
-        return NSRect(x: screen.minX, y: screen.maxY - height, width: notchLeft?.width ?? screen.width / 2, height: height)
+        return Layout(
+            frame: NSRect(x: screen.minX, y: screen.maxY - height, width: screen.width, height: height),
+            left: notchLeft?.width ?? screen.width / 2,
+            right: notchRight?.width ?? screen.width / 2
+        )
     }
 
     private func place() {
-        let frames = NSScreen.screens.compactMap {
-            Self.frame(screen: $0.frame, visible: $0.visibleFrame, notchLeft: $0.auxiliaryTopLeftArea)
+        let layouts = NSScreen.screens.compactMap {
+            Self.layout(
+                screen: $0.frame,
+                visible: $0.visibleFrame,
+                notchLeft: $0.auxiliaryTopLeftArea,
+                notchRight: $0.auxiliaryTopRightArea
+            )
         }
-        guard frames != bars.map(\.frame) else { return }
+        guard layouts.map(\.frame) != bars.map(\.frame) else { return }
         // With no menu bar to sit on, Aegis's everyday icon stays as the way out (in a menu bar that slides down).
-        shell.barShown = !frames.isEmpty
+        shell.barShown = !layouts.isEmpty
         closeMenu()
         bars.forEach { $0.orderOut(nil) }
-        bars = frames.map { frame in
+        bars = layouts.map { layout in
+            let frame = layout.frame
             let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            panel.level = .statusBar
+            // Over macOS's own status items (at the status bar's level), under its menus.
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
             // On every Space but not beside full-screen apps, still in Mission Control, out of the window cycle.
             panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
             panel.isOpaque = false
@@ -60,7 +79,8 @@ final class ShellMenuBar: NSObject {
             panel.hasShadow = false
             panel.isReleasedWhenClosed = false
             panel.contentView = NSHostingView(rootView: ShellBar(
-                shell: shell, menu: { [weak self] in self?.toggleMenu() }, close: { [weak self] in self?.closeMenu() }
+                shell: shell, status: status, left: layout.left, right: layout.right,
+                menu: { [weak self] in self?.toggleMenu() }, close: { [weak self] in self?.closeMenu() }
             ))
             panel.setFrame(frame, display: false)
             panel.orderFront(nil)
@@ -71,6 +91,7 @@ final class ShellMenuBar: NSObject {
     /// Takes the bars out of the menu bar.
     func remove() {
         closeMenu()
+        status.stop()
         observers.forEach { $0.0.removeObserver($0.1) }
         observers = []
         bars.forEach { $0.orderOut(nil) }
@@ -123,12 +144,16 @@ final class ShellMenuBar: NSObject {
     }
 }
 
-/// The bar itself, on the void so it melts into the desktop behind the see-through menu bar: the hexagon with the
-/// status word, the hidden mark and an urgent count (it opens ShellMenu); the workspaces; the launcher and Talk; and Exit.
-/// It takes the menu bar's own type, so it reads like the menus it covers; only the hexagon, the pips and the dot carry
-/// the theme's colour. Where the full row doesn't fit, it folds (`Fit`).
+/// The bar itself, on the void so it melts into the desktop: left of the notch, the hexagon with the status word, the
+/// hidden mark and an urgent count (it opens ShellMenu), the workspaces, the launcher and Talk, and Exit; right of it,
+/// the readings (`ShellBarReadings`). It takes the menu bar's own type, so it reads like the menus it covers; only the
+/// hexagon, the pips and the dot carry the theme's colour. Where the full row doesn't fit, it folds (`Fit`).
 struct ShellBar: View {
     let shell: ShellController
+    let status: ShellSystemStatus
+    /// The room left and right of the notch: nothing is drawn behind it.
+    let left: CGFloat
+    let right: CGFloat
     let menu: () -> Void
     let close: () -> Void
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
@@ -143,7 +168,9 @@ struct ShellBar: View {
                     controls(.folded)
                     controls(.least)
                 }
+                .frame(width: left, alignment: .leading)
                 Spacer(minLength: 0)
+                ShellBarReadings(shell: shell, status: status, close: close).frame(width: right, alignment: .trailing)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(theme.color(.void))
@@ -299,7 +326,7 @@ struct ShellBar: View {
 }
 
 /// A bar control's room: as tall as macOS's own menu highlight, a little padding either side.
-private struct BarItem: ViewModifier {
+struct BarItem: ViewModifier {
     func body(content: Content) -> some View {
         content.padding(.horizontal, 8).frame(height: 24).contentShape(Rectangle())
     }
@@ -542,13 +569,13 @@ private struct ShellWorkspaceRow: View {
 }
 
 /// A menu row lifts to the raised surface under the pointer.
-private struct ShellRowStyle: ButtonStyle {
+struct ShellRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         ShellRow(configuration: configuration)
     }
 }
 
-private struct ShellRow: View {
+struct ShellRow: View {
     let configuration: ButtonStyleConfiguration
     @State private var hovering = false
 
@@ -575,7 +602,7 @@ private struct VisualEffect: NSViewRepresentable {
 /// The small line icons AegisShell's controls use (the design system's ShellIcon): 16-point paths, 1.5 stroke,
 /// square caps, mitred joins, chamfers instead of curves.
 enum ShellIcon: String {
-    case power, alert, mic, hidden
+    case power, alert, mic, hidden, wifi, wired, offline, bolt
 
     var commands: String {
         switch self {
@@ -583,6 +610,10 @@ enum ShellIcon: String {
         case .alert: "M8 1.8 L15 14 H1 Z M8 6 V10 M8 11.5 V12.5"
         case .mic: "M6 2 H10 V9 L9 10 H7 L6 9 Z M3.5 7.5 V9.5 L6 12 H10 L12.5 9.5 V7.5 M8 12 V14.5"
         case .hidden: "M1.5 8 L4 5 L8 3.8 L12 5 L14.5 8 L12 11 L8 12.2 L4 11 Z M2.5 14 L13.5 2"
+        case .wifi: "M1.5 6.5 L4.5 3.5 H11.5 L14.5 6.5 M4 9.5 L6 7.5 H10 L12 9.5 M7 12 H9 V13.5 H7 Z"
+        case .wired: "M3 3.5 H13 V10 L11 12.5 H5 L3 10 Z M6 6 V8 M8 6 V8 M10 6 V8"
+        case .offline: "M1.5 6.5 L4.5 3.5 H11.5 L14.5 6.5 M4 9.5 L6 7.5 H10 L12 9.5 M7 12 H9 V13.5 H7 Z M2.5 14.5 L13.5 1.5"
+        case .bolt: "M9.5 1.5 L4 9 H8 L6.5 14.5 L12 7 H8 Z"
         }
     }
 
@@ -616,22 +647,6 @@ enum ShellIcon: String {
     private static func tokens(_ commands: String) -> [String] {
         commands.replacingOccurrences(of: #"([MLHVZ])"#, with: " $1 ", options: .regularExpression)
             .split(separator: " ").map(String.init)
-    }
-
-    /// A template image for a menu bar button.
-    @MainActor
-    static func image(_ icon: ShellIcon, size: CGFloat) -> NSImage {
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
-            let path = NSBezierPath(cgPath: icon.shape(scale: size / 16).cgPath)
-            path.lineWidth = 1.5 * size / 16
-            path.lineCapStyle = .square
-            path.lineJoinStyle = .miter
-            NSColor.black.setStroke()
-            path.stroke()
-            return true
-        }
-        image.isTemplate = true
-        return image
     }
 }
 

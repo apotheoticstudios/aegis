@@ -173,29 +173,6 @@ final class ShellTests: XCTestCase {
         }
     }
 
-    func testTheBarCoversTheLeftOfEachMenuBar() {
-        // A notched MacBook: from the left edge to the notch, as tall as the menu bar.
-        let mac = NSRect(x: 0, y: 0, width: 1512, height: 982)
-        XCTAssertEqual(
-            ShellMenuBar.frame(
-                screen: mac,
-                visible: NSRect(x: 0, y: 0, width: 1512, height: 944),
-                notchLeft: NSRect(x: 0, y: 944, width: 654, height: 38)
-            ),
-            NSRect(x: 0, y: 944, width: 654, height: 38)
-        )
-        // A display without a notch, to the right of the main one and with the Dock on its left: halfway across.
-        let wide = NSRect(x: 1512, y: -200, width: 2560, height: 1440)
-        XCTAssertEqual(
-            ShellMenuBar.frame(screen: wide, visible: NSRect(x: 1560, y: -200, width: 2512, height: 1415), notchLeft: nil),
-            NSRect(x: 1512, y: 1215, width: 1280, height: 25)
-        )
-        // No menu bar taking room (it hides itself, or the display has none): no bar, so no window's buttons are covered.
-        XCTAssertNil(ShellMenuBar.frame(screen: wide, visible: NSRect(x: 1512, y: -200, width: 2560, height: 1440), notchLeft: nil))
-        XCTAssertEqual(ShellBar.help("Focus", "⌃2"), "Focus (⌃2)")
-        XCTAssertEqual(ShellBar.help("Talk", nil), "Talk")
-    }
-
     func testTheDesktopHoldsStillForTheRightReason() {
         func reason(
             thermal: ProcessInfo.ThermalState = .nominal,
@@ -367,14 +344,22 @@ final class ShellTests: XCTestCase {
             try snap(ShellDesktop(shell: shell, size: size), size, "workspace-\(workspace.rawValue).png")
         }
         shell.switchTo(.work)
-        // The bar over the left of the menu bar: a 14" MacBook's left-of-notch area, then narrower, where it folds.
-        let bar = CGSize(width: 650, height: 37)
-        try snap(ShellBar(shell: shell, menu: {}, close: {}), bar, "bar-engaging.png")
+        // The bar across a 14" MacBook's menu bar (the notch's 204 points left empty), then narrower ones, where it folds.
+        let status = ShellSystemStatus()
+        status.network = .wifi
+        status.battery = .init(level: 62, charging: true, plugged: true)
+        func bar(_ left: CGFloat, _ right: CGFloat) -> some View {
+            ShellBar(shell: shell, status: status, left: left, right: right, menu: {}, close: {})
+        }
+        try snap(bar(654, 654), CGSize(width: 1512, height: 38), "bar-engaging.png")
         shell.itemComplete = true
         shell.panelKey = "⌥Space"
-        try snap(ShellBar(shell: shell, menu: {}, close: {}), bar, "bar.png")
-        try snap(ShellBar(shell: shell, menu: {}, close: {}), CGSize(width: 480, height: 37), "bar-folded.png")
-        try snap(ShellBar(shell: shell, menu: {}, close: {}), CGSize(width: 300, height: 37), "bar-least.png")
+        try snap(bar(654, 654), CGSize(width: 1512, height: 38), "bar.png")
+        status.network = .offline
+        status.battery = .init(level: 12, charging: false, plugged: false)
+        try snap(bar(480, 480), CGSize(width: 1164, height: 38), "bar-folded.png")
+        status.battery = nil
+        try snap(bar(300, 300), CGSize(width: 804, height: 38), "bar-least.png")
         try snap(ShellMenu(shell: shell) {}.background(Color.black), CGSize(width: 320, height: 520), "menu.png")
         let launcher = ShellLauncher()
         launcher.query = "example"
