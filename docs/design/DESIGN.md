@@ -494,7 +494,7 @@ AegisShell turns the Mac into a Aegis operating environment: a shell over macOS 
 | Optional schedule or workspace | e.g. engage automatically on the Mac mini hub, or when the "Work" workspace starts; off by default |
 
 - **On engage:** a short transition (about 1.9 s: the shield forms over the screen and breaks into the live desktop); the Dock hides, AegisShell's bar covers the left of macOS's menu bar (hexagon and status, workspaces, launcher, Talk, Exit), and the live HUD desktop and custom widgets appear.
-- **On disengage** (same hotkey, "Aegis, stand down", Exit on the bar or Disengage in its menu): everything AegisShell added is removed, the Dock and the owner's wallpaper return (a dark one keeps the whole menu bar dark while engaged), and anything AegisShell moved goes back. How it sits on macOS: ADR-0033.
+- **On disengage** (same hotkey, "Aegis, stand down", Exit on the bar or Disengage in its menu): everything AegisShell added is removed, the Dock returns, and anything AegisShell moved goes back. How it sits on macOS: ADR-0033.
 - **Resources:** the live desktop, top bar and custom widgets use no RAM or GPU while AegisShell is not engaged.
 - **Always available exit:** if AegisShell ever misbehaves, the disengage hotkey and the bar's Exit still restore normal macOS.
 
@@ -834,7 +834,7 @@ The parts communicate through XPC. Each side checks the other's code signature (
 | Live HUD desktop | Borderless AppKit window per screen at desktop level, rendered with Metal |
 | Custom widgets | SwiftUI in borderless NSPanels just above the desktop layer |
 | Top bar | Non-activating NSPanel pinned to the top edge |
-| Dock and menu bar hiding | System auto-hide settings and a dark wallpaper while engaged, saved and restored by Aegis; Aegis Core restores them if the app crashes |
+| Dock and menu bar hiding | System auto-hide settings, saved and restored by Aegis; Aegis Core restores them if the app crashes |
 | Launcher | Global hotkey, floating NSPanel, Spotlight index (NSMetadataQuery), NSWorkspace |
 | Window management | Accessibility API (AXUIElement, AXObserver) |
 | Workspaces | JSON layout files + Shortcuts (Focus) + HomeKit scenes |

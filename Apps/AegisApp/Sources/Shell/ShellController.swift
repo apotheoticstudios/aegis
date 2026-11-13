@@ -105,8 +105,7 @@ final class ShellController {
     @ObservationIgnored var talkKey: String?
 
     @ObservationIgnored private let settings = ShellSettings(
-        dock: SystemDock(), wallpaper: SystemWallpaper(folder: WorldSidecar.folder.deletingLastPathComponent()),
-        file: WorldSidecar.folder.deletingLastPathComponent().appendingPathComponent("shell-state.json")
+        dock: SystemDock(), file: WorldSidecar.folder.deletingLastPathComponent().appendingPathComponent("shell-state.json")
     )
     @ObservationIgnored private var windows: [NSWindow] = []
     @ObservationIgnored private var bar: ShellMenuBar?
@@ -116,7 +115,6 @@ final class ShellController {
     @ObservationIgnored private let dockQueue = ShellQueue()
     @ObservationIgnored private var screens: (any NSObjectProtocol)?
     @ObservationIgnored private var occlusion: [any NSObjectProtocol] = []
-    @ObservationIgnored private var desktops: (any NSObjectProtocol)?
 
     /// Engaging, engaged or leaving: AegisShell's bar replaces the everyday menu bar icon.
     var isOn: Bool {
@@ -136,12 +134,7 @@ final class ShellController {
         hotKeyLabel = hotKey == nil ? nil : choice.label
         if settings.saved != nil {
             Task { await settings.restore() }
-        } else {
-            settings.restoreShownSpace()
         }
-        desktops = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.desktopShown() } }
     }
 
     func toggle() {
@@ -403,8 +396,7 @@ final class ShellController {
             window.hasShadow = false
             window.isReleasedWhenClosed = false
             window.backgroundColor = .clear
-            let menuBar = ShellMenuBar.frame(screen: screen.frame, visible: screen.visibleFrame, notchLeft: nil)?.height ?? 0
-            window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size, menuBar: menuBar))
+            window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size))
             window.setFrame(screen.frame, display: false)
             // Left out of screenshots and screen sharing where macOS honours it; hiding details covers the rest.
             window.sharingType = .none
@@ -443,17 +435,6 @@ extension ShellWorkspace {
         case .focus: .workspaceFocus
         case .evening: .workspaceEvening
         case .movie: .workspaceMovie
-        }
-    }
-}
-
-private extension ShellController {
-    /// Each desktop shown: darkened while engaged, its own wallpaper back once disengaged.
-    func desktopShown() {
-        switch phase {
-        case .engaging, .engaged: settings.darkenShowingSpace()
-        case .off: settings.restoreShownSpace()
-        case .leaving: break
         }
     }
 }

@@ -123,7 +123,7 @@ final class ShellMenuBar: NSObject {
     }
 }
 
-/// The bar itself, on the void so it reads over the wallpaper the desktop leaves under the menu bar: the hexagon with the
+/// The bar itself, on the void so it melts into the desktop behind the see-through menu bar: the hexagon with the
 /// status word, the hidden mark and an urgent count (it opens ShellMenu); the workspaces; the launcher and Talk; and Exit.
 /// It takes the menu bar's own type, so it reads like the menus it covers; only the hexagon, the pips and the dot carry
 /// the theme's colour. Where the full row doesn't fit, it folds (`Fit`).

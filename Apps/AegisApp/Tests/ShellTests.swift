@@ -4,176 +4,39 @@ import AppKit
 import SwiftUI
 import XCTest
 
-@MainActor
-private final class FakeDock: ShellDock {
-    var value: Bool?
-    var works = true
-    private(set) var changes = 0
-
-    init(_ value: Bool) {
-        self.value = value
-    }
-
-    func autohide() -> Bool? {
-        value
-    }
-
-    func set(autohide: Bool) async -> Bool {
-        setNow(autohide: autohide)
-    }
-
-    func setNow(autohide: Bool) -> Bool {
-        guard works else { return false }
-        value = autohide
-        changes += 1
-        return true
-    }
-}
-
-/// Two desktops, each with its own picture; `showing` is the one on screen.
-@MainActor
-private final class FakeWallpaper: ShellWallpaper {
-    var own: [[ShellSettings.Wallpaper]?] = ["a", "b"].map { [.init(display: 1, url: URL(fileURLWithPath: "/tmp/example-\($0).heic"))] }
-    var dark: Set<Int> = []
-    var showing = 0
-    var works = true
-    private var marks: [UUID: Int] = [:]
-
-    func current() -> [ShellSettings.Wallpaper]? {
-        own[showing]
-    }
-
-    func darkened() -> Bool {
-        dark.contains(showing)
-    }
-
-    func darken() -> Bool {
-        if works {
-            dark.insert(showing)
-        }
-        return works
-    }
-
-    func restore(_ saved: [ShellSettings.Wallpaper]) -> Bool {
-        guard works else { return false }
-        own[showing] = saved
-        dark.remove(showing)
-        return true
-    }
-
-    func mark() -> UUID {
-        let mark = UUID()
-        marks[mark] = showing
-        return mark
-    }
-
-    func isShowing(_ mark: UUID) -> Bool {
-        marks[mark] == showing
-    }
-
-    func isMarked(_ mark: UUID) -> Bool {
-        marks[mark] != nil
-    }
-
-    func unmark(_ mark: UUID) {
-        marks[mark] = nil
-    }
-
-    /// A crash: Aegis's windows, and so the marks, are gone.
-    func crash() {
-        marks = [:]
-    }
-}
-
-private func file() -> URL {
-    FileManager.default.temporaryDirectory.appendingPathComponent("shell-\(UUID().uuidString)/shell-state.json")
-}
-
-/// The menu bar's items are coloured for each desktop's wallpaper: every desktop shown while engaged goes dark, and
-/// each gets its own wallpaper back.
-@MainActor
-final class ShellWallpaperTests: XCTestCase {
-    func testEachDesktopShownGoesDarkAndGetsItsOwnWallpaperBack() async {
-        let wallpaper = FakeWallpaper(), original = wallpaper.own
-        let settings = ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: file())
-        _ = await settings.apply()
-        wallpaper.showing = 1
-        settings.darkenShowingSpace()
-        settings.darkenShowingSpace()
-        XCTAssertEqual(wallpaper.dark, [0, 1])
-        XCTAssertEqual(settings.saved?.spaces?.map(\.pictures), original.compactMap(\.self), "each saved once, before it changed")
-        // Disengaged on the second desktop: it's back at once; the first waits until it's shown.
-        let back = await settings.restore()
-        XCTAssertTrue(back)
-        XCTAssertEqual(wallpaper.dark, [0])
-        XCTAssertNotNil(settings.saved)
-        wallpaper.showing = 0
-        settings.restoreShownSpace()
-        XCTAssertEqual(wallpaper.dark, [])
-        XCTAssertEqual(wallpaper.own, original, "each desktop got its own picture back")
-        XCTAssertNil(settings.saved)
-    }
-
-    /// A desktop an earlier version left dark, with no mark, never takes another desktop's record.
-    func testAnUnmarkedDarkDesktopLeavesTheOthersRecord() async {
-        let wallpaper = FakeWallpaper(), original = wallpaper.own
-        wallpaper.dark = [0]
-        let settings = ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: file())
-        _ = await settings.apply()
-        wallpaper.showing = 1
-        settings.darkenShowingSpace()
-        wallpaper.showing = 0
-        _ = await settings.restore()
-        XCTAssertEqual(wallpaper.dark, [1], "the unmarked one is back")
-        XCTAssertEqual(settings.saved?.spaces?.count, 1, "the other's record is kept")
-        wallpaper.showing = 1
-        settings.restoreShownSpace()
-        XCTAssertEqual(wallpaper.dark, [])
-        XCTAssertEqual(wallpaper.own[1], original[1])
-        XCTAssertNil(settings.saved)
-    }
-
-    /// A desktop left dark with no record at all still gets the last saved wallpaper back.
-    func testADesktopLeftDarkWithNoRecordGetsTheLastWallpaperBack() async {
-        let wallpaper = FakeWallpaper(), original = wallpaper.own
-        let settings = ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: file())
-        _ = await settings.apply()
-        _ = await settings.restore()
-        XCTAssertNil(settings.saved, "nothing left to put back")
-        wallpaper.dark = [1]
-        wallpaper.showing = 1
-        settings.restoreShownSpace()
-        XCTAssertEqual(wallpaper.dark, [])
-        XCTAssertEqual(wallpaper.own[1], original[0], "the last saved wallpaper")
-    }
-
-    func testAFailedOrCrashedRestoreIsRetried() async {
-        let wallpaper = FakeWallpaper(), url = file()
-        let settings = ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: url)
-        _ = await settings.apply()
-        wallpaper.works = false
-        let failed = await settings.restore()
-        XCTAssertFalse(failed)
-        XCTAssertNil(settings.saved?.dockAutohide, "the Dock is back and isn't put back again")
-        XCTAssertNotNil(settings.saved?.spaces, "kept, so the next launch tries again")
-        // After a crash, with the marks gone, the first saved picture goes back.
-        wallpaper.works = true
-        wallpaper.crash()
-        XCTAssertTrue(ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: url).restoreNow())
-        XCTAssertEqual(wallpaper.dark, [])
-        XCTAssertNil(settings.saved)
-        // A wallpaper that can't be read is never changed.
-        let unread = FakeWallpaper()
-        unread.own[0] = nil
-        _ = await ShellSettings(dock: FakeDock(false), wallpaper: unread, file: file()).apply()
-        XCTAssertEqual(unread.dark, [])
-    }
-}
-
 /// AegisShell, stage 1 (ADR-0033): macOS is put back exactly as it was, and the engage transition keeps the design's
-/// timing. A fake Dock, a fake wallpaper and a temporary file: the owner's real ones are never touched.
+/// timing. A fake Dock and a temporary file: the owner's real Dock is never touched.
 @MainActor
 final class ShellTests: XCTestCase {
+    private final class FakeDock: ShellDock {
+        var value: Bool?
+        var works = true
+        private(set) var changes = 0
+
+        init(_ value: Bool) {
+            self.value = value
+        }
+
+        func autohide() -> Bool? {
+            value
+        }
+
+        func set(autohide: Bool) async -> Bool {
+            setNow(autohide: autohide)
+        }
+
+        func setNow(autohide: Bool) -> Bool {
+            guard works else { return false }
+            value = autohide
+            changes += 1
+            return true
+        }
+    }
+
+    private func file() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("shell-\(UUID().uuidString)/shell-state.json")
+    }
+
     func testTwentyEngagesLeaveTheDockAsItWas() async {
         for original in [false, true] {
             let dock = FakeDock(original), url = file()
@@ -489,8 +352,7 @@ final class ShellTests: XCTestCase {
             try snap(ShellDesktop(shell: shell, size: size), size, "engage-\(Int(moment * 1000)).png")
         }
         shell.phase = .engaged
-        // A 14" MacBook's menu bar: the strip under it stays see-through to the wallpaper.
-        try snap(ShellDesktop(shell: shell, size: size, menuBar: 37), size, "desktop.png")
+        try snap(ShellDesktop(shell: shell, size: size), size, "desktop.png")
         shell.hideDetails = true
         shell.still = .held
         try snap(ShellDesktop(shell: shell, size: size), size, "desktop-hidden-still.png")
