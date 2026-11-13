@@ -315,6 +315,8 @@ struct ThemeSwatch: View {
 struct SilenceScreen: View {
     @Bindable var setup: SetupModel
     let model: PanelModel
+    /// In Settings: the lighthouse rather than setup's galaxy.
+    var inSettings = false
     @State private var vips: [String] = []
 
     var body: some View {
@@ -358,7 +360,14 @@ struct SilenceScreen: View {
             SetupParagraph(model.glowEnabled ? "Glowing means something urgent is waiting. Open the panel to see it."
                 : "No glow. Everything waits silently in the panel.")
                 .padding(.top, HUD.space3)
-            SetupCentre { HUDAsciiArt(shape: .galaxy, cols: 34, rows: 14, label: "Quiet") }.padding(.top, HUD.space4)
+            SetupCentre {
+                if inSettings {
+                    HUDAsciiArt(shape: .lighthouse, cols: 44, rows: 26, detail: 3, tone: HUD.primary, label: "Silent, unless it matters")
+                } else {
+                    HUDAsciiArt(shape: .galaxy, cols: 34, rows: 14, label: "Quiet")
+                }
+            }
+            .padding(.top, HUD.space4)
             SetupNote("While the panel is closed: no sounds, voice, banners or phone pushes.")
         }
         .task {
@@ -684,7 +693,7 @@ enum SetupText {
         Addon(
             key: "perf",
             name: "Performance Monitor",
-            shape: .cube,
+            shape: .chip,
             gigabytes: 0.18,
             about: "Live CPU, memory, GPU, disk, network, temperature and battery. Answers \"why is my Mac slow?\"",
             reads: "system stats",
@@ -693,7 +702,7 @@ enum SetupText {
         Addon(
             key: "mail",
             name: "Mail",
-            shape: .helix,
+            shape: .gears,
             gigabytes: 0.24,
             about: "Aegis’s own mail app, built to match. Your Apple Mail accounts stay as they are.",
             reads: "Mail store",
@@ -702,7 +711,7 @@ enum SetupText {
         Addon(
             key: "calendar",
             name: "Calendar",
-            shape: .helix,
+            shape: .gears,
             gigabytes: 0.12,
             about: "A calendar in the Aegis style, with meeting prep beside each event.",
             reads: "calendars",
@@ -711,7 +720,7 @@ enum SetupText {
         Addon(
             key: "notes",
             name: "Notes",
-            shape: .helix,
+            shape: .gears,
             gigabytes: 0.09,
             about: "Notes Aegis can write into and search, linked back to the chat.",
             reads: "Notes",
@@ -720,7 +729,7 @@ enum SetupText {
         Addon(
             key: "files",
             name: "Files",
-            shape: .helix,
+            shape: .gears,
             gigabytes: 0.15,
             about: "Find, preview and act on documents by asking.",
             reads: "folders you pick",

@@ -440,13 +440,13 @@ private struct SettingsPaneView: View {
         case .personality: PersonalityScreen(setup: setup, model: app.model)
         case .voice: VoiceScreen(setup: setup, app: app)
         case .interface: SettingsInterface(setup: setup, app: app)
-        case .silence: SilenceScreen(setup: setup, model: app.model)
+        case .silence: SilenceScreen(setup: setup, model: app.model, inSettings: true)
         case .schedule: ScheduleScreen(setup: setup, inSettings: true)
         case .sources: SourcesScreen(setup: setup, model: app.model, inSettings: true)
         case .permissions: PermissionsScreen(inSettings: true)
-        case .privacy: PrivacyScreen(setup: setup)
+        case .privacy: PrivacyScreen(setup: setup, inSettings: true)
         case .storage: StorageScreen(setup: setup)
-        case .home: HomeScreenStep(setup: setup)
+        case .home: HomeScreenStep(setup: setup, inSettings: true)
         case .control: ControlScreen(setup: setup)
         case .addons: AddonsScreen(setup: setup)
         case .mac: MacScreen(setup: setup)
@@ -592,7 +592,7 @@ private struct SettingsReset: View {
             }
             SetupNote("Aegis never deletes your own files, here or anywhere.").padding(.top, HUD.space3)
         } side: {
-            SetupCentre { HUDAsciiArt(shape: .orb, cols: 34, rows: 15, tone: HUD.accent, label: "Start again") }
+            SetupCentre { HUDAsciiArt(shape: .reform, cols: 44, rows: 22, detail: 3, tone: HUD.accent, label: "Start again") }
         }
     }
 }

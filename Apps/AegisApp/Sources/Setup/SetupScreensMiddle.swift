@@ -135,6 +135,8 @@ struct SourcesScreen: View {
 /// so what it would find shows as `----` rather than invented rooms; locks and the garage are fixed to Confirm.
 struct HomeScreenStep: View {
     @Bindable var setup: SetupModel
+    /// In Settings: the bulb rather than setup's house, so no two screens share a picture.
+    var inSettings = false
 
     var body: some View {
         let on = setup.flag("home", true)
@@ -161,11 +163,12 @@ struct HomeScreenStep: View {
         } side: {
             SetupCentre {
                 HUDAsciiArt(
-                    shape: .radar,
-                    cols: 34,
-                    rows: 17,
+                    shape: inSettings ? .bulb : .house,
+                    cols: inSettings ? 42 : 50,
+                    rows: inSettings ? 22 : 18,
+                    detail: 3,
                     tone: on.wrappedValue ? HUD.primary : HUD.ink,
-                    label: "Home devices found",
+                    label: inSettings ? "Home control" : "Your home",
                     animate: on.wrappedValue
                 )
                 HUDTermSection(title: "Rooms", rows: [.init(label: "----", value: "found once Home is connected")])
@@ -321,6 +324,8 @@ struct AddonsScreen: View {
 /// What Aegis must never read, kept with the answers, and the FileVault check.
 struct PrivacyScreen: View {
     @Bindable var setup: SetupModel
+    /// In Settings: the lens rather than setup's vault.
+    var inSettings = false
     @State private var fileVault: Bool?
     @State private var adding = false
     @State private var person = ""
@@ -365,7 +370,13 @@ struct PrivacyScreen: View {
                 HUDTag(word: fileVault.map { $0 ? "On" : "Off" } ?? "Checking", tone: fileVault == false ? HUD.warn : HUD.ok)
             }
         } side: {
-            SetupCentre { HUDEmblemArt(cols: 40, label: "The Aegis shield") }
+            SetupCentre {
+                if inSettings {
+                    HUDAsciiArt(shape: .shutter, cols: 46, rows: 23, detail: 3, label: "Closed to anything you exclude")
+                } else {
+                    HUDAsciiArt(shape: .vault, cols: 42, rows: 21, detail: 3, label: "Locked away on this Mac")
+                }
+            }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Self.rules, id: \.0) { title, text in
                     VStack(alignment: .leading, spacing: 0) {

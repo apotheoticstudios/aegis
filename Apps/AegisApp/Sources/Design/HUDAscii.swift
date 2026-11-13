@@ -57,6 +57,13 @@ enum HUDAscii {
         case tesseract
         /// An atom: three orbits at 60°, electrons with short trails and a busy nucleus.
         case atom
+        /// Photo shapes (HUDPhoto): a radio dish pulsing signal (COMMS), a laptop reading code (Your Mac), a house
+        /// lighting its windows (setup's Home), a vault door's turning wheel (setup's Privacy), a lighthouse's beam
+        /// (Silence), a padlock snapping shut (Permissions), a lens iris (Settings' Privacy), a flickering bulb
+        /// (Settings' Home) and turning gears (productivity addons).
+        case satellite, laptop, house, vault, lighthouse, lock, shutter, bulb, gears
+        /// A sphere of particles that bursts apart, drifts and gathers back: starting again.
+        case reform
     }
 
     /// The art as lines, `time` seconds in (0 is the still frame); `grit` breaks the shading up like hand-made art.
@@ -204,6 +211,8 @@ enum HUDAscii {
         case .torus: torus(fittedAcross, fittedDown, time)
         case .tesseract: tesseract(fittedAcross, fittedDown, time)
         case .atom: atom(fittedAcross, fittedDown, time)
+        case .satellite, .laptop, .house, .vault, .lighthouse, .lock, .shutter, .bulb, .gears, .reform:
+            HUDPhoto.density(shape, fittedAcross, fittedDown, time, aspect)
         }
     }
 

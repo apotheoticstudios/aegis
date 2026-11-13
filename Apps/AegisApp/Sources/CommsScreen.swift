@@ -280,7 +280,7 @@ extension CommsScreen {
         let scale = max(collected, briefed + hidden, 1)
         return VStack(alignment: .leading, spacing: 0) {
             HUDSection(title: "\(model.personality.name) summary", code: "AI.SUM", first: true) {
-                HUDAsciiArt(shape: .eye, cols: 30, rows: 10, label: "Aegis watching")
+                HUDAsciiArt(shape: .satellite, cols: 30, rows: 12, detail: 3, label: "Signals coming in")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, HUD.space2)
                 Text(model.stored.map { BriefPresentation.spoken($0.brief, now: Date(), calendar: .current) } ?? "Nothing collected yet.")

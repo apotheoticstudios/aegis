@@ -186,7 +186,7 @@ struct MacScreen: View {
             SetupNote("Read from the Mac itself. Change something only if it’s wrong.").padding(.top, HUD.space3)
         } side: {
             SetupCentre {
-                HUDAsciiArt(shape: .radar, cols: 34, rows: 17, tone: HUD.primary, label: "Hardware scan")
+                HUDAsciiArt(shape: .laptop, cols: 46, rows: 22, detail: 3, tone: HUD.primary, label: "This Mac, being read")
                 HUDTag(word: "Scan complete", tone: HUD.ok)
                 HStack(spacing: HUD.space8) {
                     HUDReadout(label: "Band", value: SetupText.band(setup.wizard).title, tone: HUD.primary)
@@ -544,7 +544,11 @@ struct PermissionsScreen: View {
             )
         } side: {
             SetupCentre {
-                HUDAsciiArt(shape: .eye, cols: 36, rows: 14, label: "Watching, on this Mac only")
+                if inSettings {
+                    HUDAsciiArt(shape: .lock, cols: 44, rows: 22, detail: 3, tone: HUD.primary, label: "Permissions")
+                } else {
+                    HUDAsciiArt(shape: .eye, cols: 36, rows: 14, label: "Watching, on this Mac only")
+                }
                 SetupParagraph(Text("macOS asks you for each one in System Settings. ") + Text("Nothing here leaves this Mac.")
                     .foregroundStyle(HUD.ink))
                 SetupNote(inSettings ? "Checked live while this page shows."
