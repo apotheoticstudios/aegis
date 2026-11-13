@@ -133,6 +133,20 @@ final class ShellWallpaperTests: XCTestCase {
         XCTAssertNil(settings.saved)
     }
 
+    /// A desktop left dark with no record at all still gets the last saved wallpaper back.
+    func testADesktopLeftDarkWithNoRecordGetsTheLastWallpaperBack() async {
+        let wallpaper = FakeWallpaper(), original = wallpaper.own
+        let settings = ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: file())
+        _ = await settings.apply()
+        _ = await settings.restore()
+        XCTAssertNil(settings.saved, "nothing left to put back")
+        wallpaper.dark = [1]
+        wallpaper.showing = 1
+        settings.restoreShownSpace()
+        XCTAssertEqual(wallpaper.dark, [])
+        XCTAssertEqual(wallpaper.own[1], original[0], "the last saved wallpaper")
+    }
+
     func testAFailedOrCrashedRestoreIsRetried() async {
         let wallpaper = FakeWallpaper(), url = file()
         let settings = ShellSettings(dock: FakeDock(false), wallpaper: wallpaper, file: url)

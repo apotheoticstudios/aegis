@@ -136,19 +136,12 @@ final class ShellController {
         hotKeyLabel = hotKey == nil ? nil : choice.label
         if settings.saved != nil {
             Task { await settings.restore() }
+        } else {
+            settings.restoreShownSpace()
         }
         desktops = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.desktopShown() } }
-    }
-
-    /// Each desktop shown: darkened while engaged, its own wallpaper back once disengaged.
-    private func desktopShown() {
-        switch phase {
-        case .engaging, .engaged: settings.darkenShowingSpace()
-        case .off: settings.restoreShownSpace()
-        case .leaving: break
-        }
     }
 
     func toggle() {
@@ -450,6 +443,17 @@ extension ShellWorkspace {
         case .focus: .workspaceFocus
         case .evening: .workspaceEvening
         case .movie: .workspaceMovie
+        }
+    }
+}
+
+private extension ShellController {
+    /// Each desktop shown: darkened while engaged, its own wallpaper back once disengaged.
+    func desktopShown() {
+        switch phase {
+        case .engaging, .engaged: settings.darkenShowingSpace()
+        case .off: settings.restoreShownSpace()
+        case .leaving: break
         }
     }
 }

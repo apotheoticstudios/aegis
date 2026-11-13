@@ -96,6 +96,7 @@ final class ShellSettings {
         let mark = wallpaper.mark()
         state.spaces = (state.spaces ?? []) + [Space(mark: mark, pictures: pictures)]
         guard save(state) else { return wallpaper.unmark(mark) }
+        try? JSONEncoder().encode(pictures).write(to: last)
         _ = wallpaper.darken()
     }
 
@@ -129,21 +130,28 @@ final class ShellSettings {
 
     /// After disengaging: a desktop AegisShell darkened gets its own wallpaper back when it's next shown.
     func restoreShownSpace() {
-        guard var state = saved, state.dockAutohide == nil else { return }
+        var state = saved ?? Saved()
+        guard state.dockAutohide == nil else { return }
         _ = restoringShowingSpace(&state)
         keep(state)
     }
 
     /// The desktop showing, if AegisShell darkened it: found by its mark. Whether it's back.
     private func restoringShowingSpace(_ state: inout Saved) -> Bool {
-        guard let wallpaper, var spaces = state.spaces, !spaces.isEmpty, wallpaper.darkened() else { return true }
+        guard let wallpaper, wallpaper.darkened() else { return true }
+        var spaces = state.spaces ?? []
         // shortcut: after a crash the marks are gone and the first saved pictures go back, exact when every desktop had
         // the same wallpaper. Upgrade if owners lose per-desktop wallpapers that way.
         guard let index = spaces.firstIndex(where: { wallpaper.isShowing($0.mark) })
             ?? spaces.firstIndex(where: { !wallpaper.isMarked($0.mark) })
         else {
-            // Darkened without a mark (by an earlier version): the first saved pictures, still kept for their own desktop.
-            return wallpaper.restore(spaces[0].pictures)
+            // Left dark with no record of its own (by an earlier version, or a step missed): the first saved pictures,
+            // still kept for their own desktop, or else the last AegisShell saved.
+            let fallback = spaces.first?.pictures ?? (try? Data(contentsOf: last)).flatMap { try? JSONDecoder().decode(
+                [Wallpaper].self,
+                from: $0
+            ) }
+            return fallback.map(wallpaper.restore) ?? true
         }
         guard wallpaper.restore(spaces[index].pictures) else { return false }
         wallpaper.unmark(spaces[index].mark)
@@ -159,6 +167,11 @@ final class ShellSettings {
         } else {
             _ = save(state)
         }
+    }
+
+    /// The last pictures saved, kept after everything is back so a desktop left dark can still be put right.
+    private var last: URL {
+        file.deletingLastPathComponent().appendingPathComponent("shell-last-wallpaper.json")
     }
 
     private func save(_ state: Saved) -> Bool {
