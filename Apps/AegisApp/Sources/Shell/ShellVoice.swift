@@ -170,6 +170,7 @@ final class ShellVoice {
         watcher?.cancel()
         // Only what this turn brings counts: a confirmation already waiting in the panel doesn't send every turn there.
         let task = model.pendingTask, action = ActionPresence.shared.pending?.request.id
+        let initial = model.voice.state
         watcher = Task { [weak self] in
             var started = false, quiet = 0.0
             while !Task.isCancelled {
@@ -198,7 +199,14 @@ final class ShellVoice {
                     || ActionPresence.shared.pending.map { $0.request.id != action } ?? false
                 // Listening that hasn't begun after 5 s (macOS asking for the microphone, say) goes on in the panel,
                 // so whatever follows is never heard without Aegis showing.
-                if confirm || unusable || (!started && quiet >= 5) {
+                // Voice failing during this turn (the microphone, or recognition after "Hey Aegis") goes on in the panel,
+                // which says why, even while a conversation is still open.
+                let failed = if case .unavailable = voice.state {
+                    voice.state != initial
+                } else {
+                    false
+                }
+                if confirm || unusable || failed || (!started && quiet >= 5) {
                     return handOver()
                 }
                 // 3 s after the answer; soon when nothing was asked.
