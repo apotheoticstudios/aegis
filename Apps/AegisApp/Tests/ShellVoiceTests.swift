@@ -48,10 +48,11 @@ final class ShellVoiceTests: XCTestCase {
     /// The launcher's own listening (ShellLauncherStates): the words beside the wave, or why voice can't be used.
     func testTheLauncherShowsWhatItHears() {
         XCTAssertNil(ShellLauncher.heard(listening: false, .listening("open notes")), "only when the launcher started it")
-        XCTAssertEqual(ShellLauncher.heard(listening: true, .listening("open notes"))?.words, "open notes")
-        XCTAssertEqual(ShellLauncher.heard(listening: true, .listening("open notes"))?.unavailable, false)
-        XCTAssertEqual(ShellLauncher.heard(listening: true, .unavailable("No microphone."))?.unavailable, true)
-        XCTAssertNil(ShellLauncher.heard(listening: true, .idle), "finished: back to typing")
+        XCTAssertEqual(ShellLauncher.heard(listening: true, .listening("open notes")), "open notes")
+        XCTAssertEqual(ShellLauncher.heard(listening: true, .listening("")), "", "listening, nothing heard yet")
+        // Voice that can't be used, or finished: back to typing (the reason shows beside the input).
+        XCTAssertNil(ShellLauncher.heard(listening: true, .unavailable("No microphone.")))
+        XCTAssertNil(ShellLauncher.heard(listening: true, .idle))
     }
 
     func testItSaysWhatAegisReadInKindsAndCounts() {

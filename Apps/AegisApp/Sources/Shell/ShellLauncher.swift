@@ -33,6 +33,7 @@ final class ShellLauncher {
     var query = "" {
         didSet {
             if query != oldValue {
+                voiceProblem = nil
                 search()
             }
         }
@@ -44,6 +45,8 @@ final class ShellLauncher {
     private(set) var nothing = false
     /// The launcher started the microphone: what's heard types in here (the design's listening state).
     private(set) var listening = false
+    /// Why the launcher couldn't listen, shown beside the input until the next try or typing.
+    private(set) var voiceProblem: String?
 
     @ObservationIgnored private var window: NSPanel?
     @ObservationIgnored private var scrims: [NSWindow] = []
@@ -110,10 +113,13 @@ final class ShellLauncher {
 
     func close(returning: Bool = true) {
         searching?.cancel()
-        // Listening ends with the launcher, and the words go nowhere.
+        // Listening ends with the launcher, and the words go nowhere (one still starting is stopped once it starts).
+        voiceProblem = nil
         if listening {
             listening = false
-            ShellController.shared.model?.voice.stop()
+            if let voice = ShellController.shared.model?.voice, voice.isListening {
+                voice.stop()
+            }
         }
         window?.orderOut(nil)
         window = nil
@@ -155,9 +161,17 @@ final class ShellLauncher {
     /// query when the owner pauses, to run with ⏎ like typed words. Again while listening, it stops early.
     func speak() {
         guard let voice = ShellController.shared.model?.voice else { return }
-        if listening, voice.isListening {
-            return voice.stop()
+        if listening {
+            // Again: stop now; what was heard so far becomes the query.
+            if voice.isListening {
+                voice.stop()
+            }
+            listening = false
+            return
         }
+        // A recording another surface started (Talk in the overlay) isn't the launcher's to take.
+        guard !voice.isListening else { return }
+        voiceProblem = nil
         listening = true
         Task {
             await voice.listen { [weak self] words in
@@ -165,17 +179,23 @@ final class ShellLauncher {
                 listening = false
                 query = words
             }
+            if !listening || !isOpen {
+                // Closed or stopped while the microphone was starting: nothing listens with the launcher gone.
+                if voice.isListening {
+                    voice.stop()
+                }
+                listening = false
+            } else if case let .unavailable(why) = voice.state {
+                listening = false
+                voiceProblem = why
+            }
         }
     }
 
-    /// What the bar shows while the launcher listens: the words so far, or why voice can't be used; nil otherwise.
-    static func heard(listening: Bool, _ state: Voice.State) -> (words: String, unavailable: Bool)? {
-        guard listening else { return nil }
-        return switch state {
-        case let .listening(words): (words, false)
-        case let .unavailable(why): (why, true)
-        case .idle: nil
-        }
+    /// The words to show while the launcher listens (empty until the first is heard); nil otherwise.
+    static func heard(listening: Bool, _ state: Voice.State) -> String? {
+        guard listening, case let .listening(words) = state else { return nil }
+        return words
     }
 
     // MARK: - Results
@@ -291,6 +311,13 @@ struct LauncherView: View {
         let shape = HUDCut(kind: .panel, cut: HUD.chamferMd)
         VStack(spacing: 0) {
             bar
+            // Why voice couldn't be used; typing still works.
+            if let problem = launcher.voiceProblem {
+                Text(problem).font(.custom(HUDType.body.fontName, size: 12)).foregroundStyle(HUD.warn)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, HUD.space4)
+                    .padding(.bottom, HUD.space2)
+            }
             Rectangle().fill(HUD.glassEdge).frame(height: 1)
             results
             Rectangle().fill(HUD.glassEdge).frame(height: 1)
@@ -326,31 +353,29 @@ struct LauncherView: View {
         }
     }
 
-    /// The words heard while the launcher listens, or why voice can't be used.
-    private var heard: (words: String, unavailable: Bool)? {
+    /// The words heard while the launcher listens.
+    private var heard: String? {
         ShellLauncher.heard(listening: launcher.listening, ShellController.shared.model?.voice.state ?? .idle)
     }
 
     private var bar: some View {
-        let heard = heard, live = heard.map { !$0.unavailable } ?? false
+        let heard = heard, live = heard != nil
         return HStack(spacing: HUD.space3) {
             Text("›").font(HUDFace.mono(22)).foregroundStyle(HUD.primary).hudGlow()
             if let heard {
                 // Listening: the words type in beside the wave.
                 HStack(spacing: HUD.space2) {
-                    Text(heard.words.isEmpty ? "Listening…" : heard.words)
-                        .font(.custom(HUDType.body.fontName, size: heard.unavailable ? 13 : 18))
-                        .foregroundStyle(heard.unavailable || heard.words.isEmpty ? HUD.inkMuted : HUD.ink)
-                        .lineLimit(heard.unavailable ? 2 : 1)
+                    Text(heard.isEmpty ? "Listening…" : heard)
+                        .font(.custom(HUDType.body.fontName, size: 18))
+                        .foregroundStyle(heard.isEmpty ? HUD.inkMuted : HUD.ink)
+                        .lineLimit(1)
                         .truncationMode(.head)
-                    if !heard.unavailable {
-                        HUDAsciiArt(shape: .wave, cols: 16, rows: 2, detail: 2, grit: 0.1, tone: HUD.primary)
-                    }
+                    HUDAsciiArt(shape: .wave, cols: 16, rows: 2, detail: 2, grit: 0.1, tone: HUD.primary)
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel(heard.unavailable ? heard.words : "Listening: \(heard.words)")
+                .accessibilityLabel("Listening: \(heard)")
             } else {
                 TextField("", text: $launcher.query, prompt: Text("Open, find, run or ask anything").foregroundStyle(HUD.inkMuted))
                     .textFieldStyle(.plain)
