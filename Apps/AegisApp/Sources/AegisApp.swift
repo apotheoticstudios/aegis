@@ -9,8 +9,10 @@ struct AegisApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        // While AegisShell is on, its own bar (ShellMenuBar) stands in for this one, wherever there's a menu bar to sit on.
-        MenuBarExtra(isInserted: Binding(get: { !ShellController.shared.isOn || !ShellController.shared.barShown }, set: { _ in })) {
+        // Always in the menu bar: while AegisShell is on, its bar covers this icon, and where no bar can show (a menu bar
+        // that hides itself) the icon stays the way out. Taking it out while engaging is a suspect for the desktop staying
+        // unseen behind other apps' windows until a Space switch (#188).
+        MenuBarExtra {
             MenuContent(delegate: delegate)
         } label: {
             if case .unavailable = delegate.model.phase {

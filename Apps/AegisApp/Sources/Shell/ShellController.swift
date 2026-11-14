@@ -17,9 +17,6 @@ final class ShellController {
     var phase = Phase.off
     /// From 900 ms into engaging, the bar shows the status, the workspaces, the launcher, Talk and Exit.
     var itemComplete = false
-    /// AegisShell's bar found a menu bar to sit on. Without one (a menu bar that hides itself), Aegis's everyday icon stays
-    /// while engaged, with Disengage in its menu.
-    var barShown = false
     /// What the desktop shows round the core, refreshed while engaged.
     var readings = Readings()
     /// The Dock couldn't be hidden: Aegis isn't allowed to control System Events.
@@ -398,6 +395,7 @@ final class ShellController {
             window.isOpaque = false
             window.hasShadow = false
             window.isReleasedWhenClosed = false
+            window.animationBehavior = .none
             window.backgroundColor = .clear
             window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size))
             window.setFrame(screen.frame, display: false)

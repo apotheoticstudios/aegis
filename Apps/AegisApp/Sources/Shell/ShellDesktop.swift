@@ -22,7 +22,9 @@ struct ShellDesktop: View {
         TimelineView(.animation(paused: !moving)) { context in
             let frame = frame(at: context.date)
             ZStack(alignment: .topLeading) {
-                wall.opacity(frame.wall)
+                // Never wholly see-through (2% of the void is invisible over the wallpaper): an empty first frame is a
+                // suspect for the desktop staying unseen behind other apps' windows until a Space switch (#188).
+                wall.opacity(max(frame.wall, 0.02))
                 if frame.noise > 0 {
                     HUDAsciiText(lines: noise, cols: noise.first?.count ?? 0, size: 12, tone: HUD.primary, aspect: HUDAscii.artAspect)
                         .opacity(frame.noise)

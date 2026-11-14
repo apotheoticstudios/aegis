@@ -63,13 +63,12 @@ final class ShellMenuBar: NSObject {
             )
         }
         guard layouts.map(\.frame) != bars.map(\.frame) else { return }
-        // With no menu bar to sit on, Aegis's everyday icon stays as the way out (in a menu bar that slides down).
-        shell.barShown = !layouts.isEmpty
         closeMenu()
         bars.forEach { $0.orderOut(nil) }
         bars = layouts.map { layout in
             let frame = layout.frame
             let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.animationBehavior = .none
             // Over macOS's own status items (at the status bar's level), under its menus.
             panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
             // On every Space but not beside full-screen apps, still in Mission Control, out of the window cycle.
@@ -96,7 +95,6 @@ final class ShellMenuBar: NSObject {
         observers = []
         bars.forEach { $0.orderOut(nil) }
         bars = []
-        shell.barShown = false
     }
 
     private func toggleMenu() {
@@ -107,7 +105,7 @@ final class ShellMenuBar: NSObject {
         guard let bar = bars.first(where: { $0 === NSApp.currentEvent?.window }) ?? bars.first else { return }
         let content = NSHostingView(rootView: ShellMenu(shell: shell) { [weak self] in self?.closeMenu() })
         let size = content.fittingSize
-        let panel = NSPanel(
+        let panel = ShellKeyPanel(
             contentRect: NSRect(x: bar.frame.minX + 6, y: bar.frame.minY - size.height - 4, width: size.width, height: size.height),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
@@ -117,6 +115,8 @@ final class ShellMenuBar: NSObject {
         panel.hasShadow = false
         panel.contentView = content
         panel.orderFrontRegardless()
+        // Key, without activating Aegis, as a menu is: Tab moves through it and esc closes it.
+        panel.makeKey()
         menu = panel
         // A click anywhere else closes it, as a menu does: in another app, or in Aegis's own windows (the desktop).
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
@@ -141,6 +141,13 @@ final class ShellMenuBar: NSObject {
         menu = nil
         outside.forEach(NSEvent.removeMonitor)
         outside = []
+    }
+}
+
+/// A borderless panel that can take the keyboard, for the menu under the bar's hexagon.
+private final class ShellKeyPanel: NSPanel {
+    override var canBecomeKey: Bool {
+        true
     }
 }
 
