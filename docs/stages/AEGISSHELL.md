@@ -74,7 +74,7 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 
 - In AegisShell, ⌥Space opens the launcher style of the panel: one bar to open apps, files and settings, ask, and run commands (reusing the general command system, ADR-0031).
 - **Done when:** the top results match what Spotlight would open for app and file names, and every action goes through ActionPolicy.
-- **Built (2026-10-27):** the design's Launcher over a dimmed desktop, a third of the way down: apps by name, files by name (Spotlight, names only), System Settings pages, a command row when the words read as one, and Ask Aegis; suggestions when nothing is typed; no results offers to ask instead. ↑↓, ⏎ (⌘⏎ asks), esc. Apps, files and settings open through ActionPolicy (`PanelModel.launch`); commands and questions go to the panel. ⌥Space opens it while engaged, as do the ask line on the desktop and Aegis's menu. Still to come: the listening state inside the launcher and the ConfirmCard in place of results.
+- **Built (2026-10-27):** the design's Launcher over a dimmed desktop, a third of the way down: apps by name, files by name (Spotlight, names only), System Settings pages, a command row when the words read as one, and Ask Aegis; suggestions when nothing is typed; no results offers to ask instead. ↑↓, ⏎ (⌘⏎ asks), esc. Apps, files and settings open through ActionPolicy (`PanelModel.launch`); commands and questions go to the panel. ⌥Space opens it while engaged, as do the ask line on the desktop and Aegis's menu. The listening state (2026-11-14, #194): the mic or Talk listens in the launcher, the words typing in beside a wave, then standing as the query. Still to come: the ConfirmCard in place of results.
 
 ## Stage 6 — Window management and workspaces
 
@@ -86,7 +86,7 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
 ## Stage 7 — Overlays and polish
 
 - Talk to Aegis and see its HUD over any app; optional interface sounds (off by default); themed wallpaper.
-- **Voice over any app (2026-10-28, ADR-0033 amendment):** with details showing, Talk to Aegis shows the voice overlay under the menu bar (listening, thinking, the answer typed as it's spoken); a click or a confirmation hands over to the panel. What Aegis read sits beneath the answer as kinds and counts ("Read: 1 calendar event · 2 messages"). "Hey Aegis" opens it too (2026-11-14, #194), with the words heard shown live and none left from the last question. Still to come: the hidden-details answer.
+- **Voice over any app (2026-10-28, ADR-0033 amendment):** with details showing, Talk to Aegis shows the voice overlay under the menu bar (listening, thinking, the answer typed as it's spoken); a click or a confirmation hands over to the panel. What Aegis read sits beneath the answer as kinds and counts ("Read: 1 calendar event · 2 messages"). "Hey Aegis" opens it too (2026-11-14, #194): the words heard live, none left from the last question, and it stays for the conversation, follow-ups included. Still to come: the hidden-details answer.
 - Optional auto-engage on a dedicated hub Mac (off by default).
 
 ## Dependencies and order
