@@ -196,6 +196,8 @@ struct HUDOrbit: View {
                 }
             }
         }
+        // One picture as before, so a fade round it blends the layers together rather than each on its own.
+        .compositingGroup()
         .frame(width: size, height: size)
         .allowsHitTesting(false)
     }
