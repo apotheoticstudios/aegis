@@ -106,6 +106,8 @@ final class ShellController {
     )
     @ObservationIgnored private var windows: [NSWindow] = []
     @ObservationIgnored private var bar: ShellMenuBar?
+    /// The engage that work belongs to, set when engaging and cleared when off: work from an earlier engage stops.
+    @ObservationIgnored private var session: Date?
     @ObservationIgnored private var hotKey: GlobalHotKey?
     @ObservationIgnored private var workspaceKeys: [GlobalHotKey] = []
     @ObservationIgnored private var refresher: Task<Void, Never>?
@@ -130,7 +132,8 @@ final class ShellController {
         hotKey = GlobalHotKey(choice, number: 3) { [weak self] in self?.toggle() }
         hotKeyLabel = hotKey == nil ? nil : choice.label
         if settings.saved != nil {
-            Task { await settings.restore() }
+            // On the Dock's own queue, so an engage straight after launch waits for this restore.
+            Task { await dock { await $0.settings.restore() } }
         }
     }
 
@@ -191,6 +194,7 @@ final class ShellController {
         guard phase == .off, !WorldSidecar.isTestHost else { return }
         let start = Date()
         phase = .engaging(start)
+        session = start
         itemComplete = false
         HUDPresence.shared.shell = true
         bar = ShellMenuBar(shell: self)
@@ -213,9 +217,9 @@ final class ShellController {
         // The Dock drops away first, as the design's engage begins.
         await dock { $0.dockProblem = await !($0.settings.apply()) }
         // Disengaged meanwhile: nothing more to start.
-        guard engaging(since: start) else { return }
+        guard current(start) else { return }
         await refreshReadings()
-        guard engaging(since: start) else { return }
+        guard current(start) else { return }
         refresher = Task { [weak self] in
             // Whether to hold still every 10 s; the NOW mark each minute; everything else every five.
             var tick = 0
@@ -246,16 +250,20 @@ final class ShellController {
         ShellVoice.shared.hide(silencing: true)
         Task {
             await settle(start, at: reduced ? 0 : ShellMotion.dockReturns) { _ in }
-            await dock { await $0.settings.restore() }
+            // The Dock comes back on its own queue: the shell never waits on System Events to take itself down.
+            Task { [weak self] in await self?.dock { await $0.settings.restore() } }
             await settle(start, at: reduced ? ShellMotion.reduced : ShellMotion.disengaged) { $0.finish() }
         }
     }
 
-    private func engaging(since start: Date) -> Bool {
-        if case let .engaging(began) = phase {
-            return began == start
+    /// Still the engage that began at `start`, and not leaving. The transition marks itself engaged on its own clock, so
+    /// this is the session, not the phase.
+    private func current(_ start: Date) -> Bool {
+        guard session == start else { return false }
+        if case .leaving = phase {
+            return false
         }
-        return false
+        return true
     }
 
     /// Dock changes run one after another, so a restore always follows any hide still under way: disengaging in the
@@ -278,6 +286,7 @@ final class ShellController {
     private func finish() {
         guard phase != .off else { return }
         phase = .off
+        session = nil
         refresher?.cancel()
         windows.forEach { $0.orderOut(nil) }
         windows = []
@@ -306,47 +315,6 @@ final class ShellController {
         case let .engaging(began) where began == start, let .leaving(began) where began == start: change(self)
         default: break
         }
-    }
-
-    private func refreshReadings() async {
-        guard let model else { return }
-        await model.checkForNewBrief()
-        let now = Date(), day = Calendar.current.startOfDay(for: now)
-        var next = Readings(now: now)
-        if case let .schedule(occurrences, _) = await model.service.handle(.schedule(from: day, to: day.addingTimeInterval(86400))) {
-            next.events = occurrences.filter { !$0.isAllDay }.sorted { $0.start < $1.start }
-                .map { HUDScheduleArc.Event(start: $0.start, end: $0.end, title: $0.title, location: $0.location) }
-        }
-        let items = model.stored?.brief.items ?? []
-        let urgent = items.filter { $0.priority == .urgent }
-        next.urgent = urgent.count
-        next.top = urgent.first?.text
-        next.topFromPerson = urgent.first?.person != nil
-        next.items = items.count
-        let urgentEvents = Set(urgent.flatMap(\.eventIDs))
-        if case let .events(recent) = await model.service.handle(.recentEvents(limit: 14)) {
-            next.stream = recent.map { Self.line($0, urgent: urgentEvents.contains($0.id)) }
-        }
-        if case let .activity(activity) = await model.service.handle(.activity(hours: 24)) {
-            next.today = activity.counts.values.reduce(0) { sum, hours in
-                sum + hours.enumerated().filter { activity.start.addingTimeInterval(Double($0.offset) * 3600) >= day }
-                    .reduce(0) { $0 + $1.element }
-            }
-        }
-        if case let .people(people) = await model.service.handle(.people) {
-            next.waiting = people.sorted { $0.waitingSince < $1.waitingSince }.map { .init(name: $0.person.name, since: $0.waitingSince) }
-        }
-        if case let .status(status) = await model.service.handle(.status) {
-            next.problems = SourceHealth.lines(status.sources, now: now).filter { $0.state != .healthy }.map(\.source)
-        }
-        next.weather = await Self.weather()
-        let system = await Task.detached(priority: .utility) {
-            var reader = SystemReader()
-            return reader.read(processes: true)
-        }.value
-        (next.diskUsed, next.diskTotal) = (system.diskUsed, system.diskTotal)
-        next.memory = system.processes.filter(\.aegis).reduce(0) { $0 + $1.memory }
-        readings = next
     }
 
     /// Today's forecast for home, home rounded to about 10 km (ADR-0024), when the owner allows the World lines.
@@ -395,6 +363,7 @@ final class ShellController {
             window.isOpaque = false
             window.hasShadow = false
             window.isReleasedWhenClosed = false
+            window.hidesOnDeactivate = false
             window.animationBehavior = .none
             window.backgroundColor = .clear
             window.contentView = NSHostingView(rootView: ShellDesktop(shell: self, size: screen.frame.size))
@@ -426,6 +395,77 @@ final class ShellController {
                 self.openWindows()
             }
         }
+    }
+}
+
+/// The readings round the core: read from AegisCore while engaged.
+extension ShellController {
+    private func refreshReadings() async {
+        guard let model, let owner = session else { return }
+        // Work for an engage that has ended stops, and never overwrites a later one's readings.
+        let stillOwner = { [weak self] in self?.session == owner }
+        await model.checkForNewBrief()
+        let now = Date(), today = Self.today(now)
+        let day = today.start
+        var next = Self.base(readings, now: now)
+        guard stillOwner() else { return }
+        if case let .schedule(occurrences, _) = await model.service.handle(.schedule(from: today.start, to: today.end)) {
+            next.events = occurrences.filter { !$0.isAllDay }.sorted { $0.start < $1.start }
+                .map { HUDScheduleArc.Event(start: $0.start, end: $0.end, title: $0.title, location: $0.location) }
+        }
+        let items = model.stored?.brief.items ?? []
+        let urgent = items.filter { $0.priority == .urgent }
+        next.urgent = urgent.count
+        next.top = urgent.first?.text
+        next.topFromPerson = urgent.first?.person != nil
+        next.items = items.count
+        let urgentEvents = Set(urgent.flatMap(\.eventIDs))
+        guard stillOwner() else { return }
+        if case let .events(recent) = await model.service.handle(.recentEvents(limit: 14)) {
+            next.stream = recent.map { Self.line($0, urgent: urgentEvents.contains($0.id)) }
+        }
+        if case let .activity(activity) = await model.service.handle(.activity(hours: 24)) {
+            next.today = activity.counts.values.reduce(0) { sum, hours in
+                sum + hours.enumerated().filter { activity.start.addingTimeInterval(Double($0.offset) * 3600) >= day }
+                    .reduce(0) { $0 + $1.element }
+            }
+        }
+        if case let .people(people) = await model.service.handle(.people) {
+            next.waiting = people.sorted { $0.waitingSince < $1.waitingSince }.map { .init(name: $0.person.name, since: $0.waitingSince) }
+        }
+        if case let .status(status) = await model.service.handle(.status) {
+            next.problems = SourceHealth.lines(status.sources, now: now).filter { $0.state != .healthy }.map(\.source)
+        }
+        guard stillOwner() else { return }
+        if let weather = await Self.weather() {
+            next.weather = weather
+        } else if !WorldPresence.briefEnabled || WorldHome.point == nil {
+            next.weather = nil
+        }
+        guard stillOwner() else { return }
+        let system = await Task.detached(priority: .utility) {
+            var reader = SystemReader()
+            return reader.read(processes: true)
+        }.value
+        (next.diskUsed, next.diskTotal) = (system.diskUsed, system.diskTotal)
+        next.memory = system.processes.filter(\.aegis).reduce(0) { $0 + $1.memory }
+        guard stillOwner() else { return }
+        readings = next
+    }
+
+    /// Today from local midnight to the next: 23 or 25 hours on the days the clocks change.
+    static func today(_ now: Date, calendar: Calendar = .current) -> (start: Date, end: Date) {
+        let start = calendar.startOfDay(for: now)
+        return (start, calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86400))
+    }
+
+    /// What a refresh starts from: the last readings while they're from today, so a read that fails keeps what was known
+    /// instead of blanking it ("Nothing else today"); fresh on a new day.
+    static func base(_ previous: Readings, now: Date, calendar: Calendar = .current) -> Readings {
+        guard calendar.isDate(previous.now, inSameDayAs: now) else { return Readings(now: now) }
+        var next = previous
+        next.now = now
+        return next
     }
 }
 
