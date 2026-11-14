@@ -23,6 +23,8 @@ final class ShellSettings {
 
     private let dock: any ShellDock
     private let file: URL
+    /// A hide is on its way: until it lands, quitting can't tell whether it will.
+    private var applying = false
 
     init(dock: any ShellDock, file: URL) {
         self.dock = dock
@@ -43,7 +45,12 @@ final class ShellSettings {
                 return false
             }
         }
-        return dock.autohide() == true ? true : await dock.set(autohide: true)
+        if dock.autohide() == true {
+            return true
+        }
+        applying = true
+        defer { applying = false }
+        return await dock.set(autohide: true)
     }
 
     /// Puts back what was saved. Whether macOS is as it was.
@@ -61,6 +68,11 @@ final class ShellSettings {
     @discardableResult
     func restoreNow() -> Bool {
         guard let saved else { return true }
+        // A hide still on its way may land after this: put the Dock back, and keep the record for the next launch.
+        if applying {
+            _ = dock.setNow(autohide: saved.dockAutohide)
+            return false
+        }
         guard dock.autohide() == saved.dockAutohide || dock.setNow(autohide: saved.dockAutohide) else { return false }
         try? FileManager.default.removeItem(at: file)
         return true
