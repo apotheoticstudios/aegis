@@ -101,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             self?.wake.panelChanged(open: open || ShellVoice.shared.isVisible)
         }
         ShellVoice.shared.model = model
+        ShellVoice.shared.conversing = { [weak self] in self?.wake.conversing ?? false }
         ShellVoice.shared.openPanel = { [weak self] in self?.panel.show() }
         ShellVoice.shared.changed = { [weak self] in
             guard let self else { return }
@@ -180,8 +181,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func talk() {
-        // In AegisShell with details showing: the voice overlay over any app (ShellVoice) rather than the panel.
-        if ShellController.shared.isOn, !ShellController.shared.hideDetails, !panel.isVisible {
+        // With AegisShell's launcher open, it listens itself; with details showing, the voice overlay over any app
+        // (ShellVoice) rather than the panel.
+        if ShellLauncher.shared.isOpen {
+            ShellLauncher.shared.speak()
+        } else if ShellController.shared.isOn, !ShellController.shared.hideDetails, !panel.isVisible {
             ShellVoice.shared.talk()
         } else {
             panel.talk()

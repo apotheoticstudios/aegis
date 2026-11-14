@@ -14,6 +14,11 @@ final class WakeListener {
 
     /// True while the microphone is open for the wake phrase.
     var listening = false
+    /// A conversation after "Hey Aegis" is under way: capturing, answering or waiting for a follow-up.
+    var conversing: Bool {
+        window.state != .waitingForWake
+    }
+
     private(set) var displaySleeping = false
     /// Why hands-free voice can't run, in plain words.
     private(set) var problem: String?
