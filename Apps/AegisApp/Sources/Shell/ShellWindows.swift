@@ -13,6 +13,10 @@ enum ShellWindows {
 
     /// What Aegis says, or nil when the words aren't a layout of apps on this Mac (so "turn left" stays a question).
     static func apply(_ placements: [WindowPlacement], model: PanelModel) async -> String? {
+        // The engage this layout belongs to: checked again after every wait, so once AegisShell has put windows back (or
+        // engaged again since), nothing from this layout opens, moves or comes forward.
+        let session = ShellController.shared.session
+        let live = { ShellController.shared.current(session) }
         let apps = placements.map { (placement: $0, app: running($0.app), installed: PanelModel.application(named: $0.app)) }
         guard apps.allSatisfy({ $0.app != nil || $0.installed != nil }) else { return nil }
         guard AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary) else {
@@ -25,15 +29,14 @@ enum ShellWindows {
         var moved: [String] = []
         for (placement, app, installed) in apps {
             var target = app
+            guard live() else { break }
             if target == nil, let installed {
                 await model.launch(.openApp(name: installed.deletingPathExtension().lastPathComponent))
                 target = await waitForLaunch(installed)
             }
-            // Disengaged while an app was opening: AegisShell has put windows back, so nothing more moves.
-            guard ShellController.shared.isOn, let target, let window = await frontWindow(of: target), ShellController.shared.isOn
-            else { continue }
+            guard live(), let target, let window = await frontWindow(of: target), live() else { continue }
             let request = ActionRequest(payload: .app(bundleID: target.bundleIdentifier ?? placement.app, verb: .move), origin: .ownerTyped)
-            guard await model.log(request, .proposed).allowed else { continue }
+            guard await model.log(request, .proposed).allowed, live() else { continue }
             let minimised = isMinimised(window)
             remember(window, minimised: minimised)
             // A minimised window comes back only once the move is allowed, and goes back down on disengage.
@@ -47,8 +50,8 @@ enum ShellWindows {
                 moved.append(target.localizedName ?? placement.app)
             }
         }
-        // The first app comes forward only when something moved.
-        if !moved.isEmpty, let first = apps.first?.app ?? apps.first.flatMap({ running($0.placement.app) }) {
+        // The first app comes forward only when something moved, and AegisShell is still on.
+        if !moved.isEmpty, live(), let first = apps.first?.app ?? apps.first.flatMap({ running($0.placement.app) }) {
             first.activate()
         }
         return moved.isEmpty ? "I couldn't move those windows." : "Done: " + moved.joined(separator: ", ") + "."

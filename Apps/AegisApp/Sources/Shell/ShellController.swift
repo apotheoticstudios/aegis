@@ -57,6 +57,8 @@ final class ShellController {
         /// Aegis's own processes.
         var memory: UInt64 = 0
         var now = Date()
+        /// When the data above was read (`now` also ticks on each minute for the NOW mark).
+        var read = Date.distantPast
     }
 
     /// Counts and kinds instead of names and words. On by default until screen sharing can be detected; the owner
@@ -107,7 +109,7 @@ final class ShellController {
     @ObservationIgnored private var windows: [NSWindow] = []
     @ObservationIgnored private var bar: ShellMenuBar?
     /// The engage that work belongs to, set when engaging and cleared when off: work from an earlier engage stops.
-    @ObservationIgnored private var session: Date?
+    @ObservationIgnored private(set) var session: Date?
     @ObservationIgnored private var hotKey: GlobalHotKey?
     @ObservationIgnored private var workspaceKeys: [GlobalHotKey] = []
     @ObservationIgnored private var refresher: Task<Void, Never>?
@@ -258,8 +260,8 @@ final class ShellController {
 
     /// Still the engage that began at `start`, and not leaving. The transition marks itself engaged on its own clock, so
     /// this is the session, not the phase.
-    private func current(_ start: Date) -> Bool {
-        guard session == start else { return false }
+    func current(_ start: Date?) -> Bool {
+        guard let start, session == start else { return false }
         if case .leaving = phase {
             return false
         }
@@ -437,11 +439,7 @@ extension ShellController {
             next.problems = SourceHealth.lines(status.sources, now: now).filter { $0.state != .healthy }.map(\.source)
         }
         guard stillOwner() else { return }
-        if let weather = await Self.weather() {
-            next.weather = weather
-        } else if !WorldPresence.briefEnabled || WorldHome.point == nil {
-            next.weather = nil
-        }
+        next.weather = await Self.weather()
         guard stillOwner() else { return }
         let system = await Task.detached(priority: .utility) {
             var reader = SystemReader()
@@ -450,6 +448,7 @@ extension ShellController {
         (next.diskUsed, next.diskTotal) = (system.diskUsed, system.diskTotal)
         next.memory = system.processes.filter(\.aegis).reduce(0) { $0 + $1.memory }
         guard stillOwner() else { return }
+        next.read = now
         readings = next
     }
 
@@ -462,7 +461,8 @@ extension ShellController {
     /// What a refresh starts from: the last readings while they're from today, so a read that fails keeps what was known
     /// instead of blanking it ("Nothing else today"); fresh on a new day.
     static func base(_ previous: Readings, now: Date, calendar: Calendar = .current) -> Readings {
-        guard calendar.isDate(previous.now, inSameDayAs: now) else { return Readings(now: now) }
+        // By when the data was read, not the clock the NOW mark ticks on each minute.
+        guard calendar.isDate(previous.read, inSameDayAs: now) else { return Readings(now: now) }
         var next = previous
         next.now = now
         return next

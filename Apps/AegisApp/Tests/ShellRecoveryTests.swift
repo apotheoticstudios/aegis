@@ -69,6 +69,7 @@ final class ShellRecoveryTests: XCTestCase {
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let morning = Date(timeIntervalSince1970: 1_800_000_000)
         var known = ShellController.Readings(now: morning)
+        known.read = morning
         known.events = [HUDScheduleArc.Event(
             start: morning.addingTimeInterval(3600),
             end: morning.addingTimeInterval(7200),
@@ -80,8 +81,11 @@ final class ShellRecoveryTests: XCTestCase {
         XCTAssertEqual(later.events, known.events)
         XCTAssertEqual(later.waiting, known.waiting)
         XCTAssertEqual(later.now, morning.addingTimeInterval(1800))
-        // The next day: nothing carried over.
+        // The next day: nothing carried over, even though the NOW mark's minute clock already ticked past midnight.
+        known.now = morning.addingTimeInterval(86400 - 60)
         let tomorrow = ShellController.base(known, now: morning.addingTimeInterval(86400), calendar: calendar)
         XCTAssertEqual(tomorrow, ShellController.Readings(now: morning.addingTimeInterval(86400)))
+        known.now = morning.addingTimeInterval(86400 + 60)
+        XCTAssertEqual(ShellController.base(known, now: morning.addingTimeInterval(86400 + 120), calendar: calendar).events, [])
     }
 }
