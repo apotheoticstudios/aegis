@@ -33,6 +33,22 @@ final class ShellVoiceTests: XCTestCase {
         XCTAssertEqual(ShellVoice.turn(heard: "", ask: .answered(question: "how long?", answer: answer), partial: "").state, .listening)
     }
 
+    /// "Hey Aegis" into the overlay (#194): the words heard, and how long the wake listener counts as listening.
+    func testAfterHeyAegisTheOverlayShowsTheWakeListenersWords() {
+        // The microphone button's own words first; after "Hey Aegis", the wake listener's; otherwise none.
+        XCTAssertEqual(ShellVoice.heard(.listening("what's next"), waking: true, hearing: "old"), "what's next")
+        XCTAssertEqual(ShellVoice.heard(.idle, waking: true, hearing: "what's next"), "what's next")
+        XCTAssertEqual(ShellVoice.heard(.idle, waking: true, hearing: ""), "")
+        XCTAssertNil(ShellVoice.heard(.idle, waking: false, hearing: "what's next"))
+        XCTAssertNil(ShellVoice.heard(.unavailable("No microphone."), waking: false, hearing: ""))
+        // Listening until the question goes, 8 s with nothing heard at all, or 20 s whatever happens.
+        XCTAssertTrue(ShellVoice.stillWaking(asking: false, elapsed: 2, hearing: ""))
+        XCTAssertFalse(ShellVoice.stillWaking(asking: true, elapsed: 2, hearing: "what's next"))
+        XCTAssertFalse(ShellVoice.stillWaking(asking: false, elapsed: 8, hearing: ""))
+        XCTAssertTrue(ShellVoice.stillWaking(asking: false, elapsed: 12, hearing: "what's next on"))
+        XCTAssertFalse(ShellVoice.stillWaking(asking: false, elapsed: 20, hearing: "what's next on"))
+    }
+
     func testItSaysWhatAegisReadInKindsAndCounts() {
         func answer(_ events: [String], _ schedule: [String]) -> Answer {
             Answer(text: "Done.", eventIDs: events, scheduleIDs: schedule, model: "synthetic", generatedAt: Date(timeIntervalSince1970: 1))

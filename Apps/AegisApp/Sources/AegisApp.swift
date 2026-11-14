@@ -82,8 +82,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         wake.stoppedTalking = { [weak self] in self?.model.voice.heardAll = true }
         wake.captureFailed = { [weak self] in self?.model.voice.inputFailed() }
         wake.openPanel = { [weak self] in
-            self?.model.voice.wakes += 1
-            self?.panel.show()
+            guard let self else { return }
+            model.voice.wakes += 1
+            // A new question: none of the last one's words.
+            model.voice.hearing = ""
+            model.voice.heardAll = false
+            // In AegisShell with details showing, the voice overlay over any app, as Talk does (#194).
+            if ShellController.shared.isOn, !ShellController.shared.hideDetails, !panel.isVisible {
+                ShellVoice.shared.wake()
+            } else {
+                panel.show()
+            }
         }
         panel.visibilityChanged = { [weak self] open in
             if open {

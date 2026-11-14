@@ -47,7 +47,7 @@ AegisShell makes the Mac feel like Aegis's own environment while it's engaged an
 
 ## Amendment (2026-10-28): voice over any app
 
-While AegisShell is engaged with details showing, Talk to Aegis (its key, the menu, the ask line's mic) shows the design's voice overlay centred under the menu bar instead of opening the panel. It runs the panel's own voice turn and counts as an open Aegis surface for the silent rule: Aegis speaks only while it shows, it fades 3 s after the answer, disengaging silences it, and anything needing a confirmation (or voice that can't be used) hands over to the panel. The wake listener treats it as the open panel. With details hidden, Talk opens the panel as before, because the overlay would show your data over whatever is on screen. "Hey Aegis" still opens the panel.
+While AegisShell is engaged with details showing, Talk to Aegis (its key, the menu, the ask line's mic) shows the design's voice overlay centred under the menu bar instead of opening the panel. It runs the panel's own voice turn and counts as an open Aegis surface for the silent rule: Aegis speaks only while it shows, it fades 3 s after the answer, disengaging silences it, and anything needing a confirmation (or voice that can't be used) hands over to the panel. The wake listener treats it as the open panel. With details hidden, Talk opens the panel as before, because the overlay would show your data over whatever is on screen. "Hey Aegis" opens the overlay too under the same rules (2026-11-14, #194): it listens while the wake listener takes the words, showing them live, until the question goes (8 s with nothing heard, 20 s at most); otherwise the panel opens as before.
 
 ## Amendment (2026-11-12): AegisShell's bar over the left of the menu bar
 
