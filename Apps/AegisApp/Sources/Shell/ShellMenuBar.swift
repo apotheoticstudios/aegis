@@ -144,8 +144,8 @@ final class ShellMenuBar: NSObject {
     }
 }
 
-/// The bar itself, on the void so it melts into the desktop: left of the notch, the hexagon with the status word, the
-/// hidden mark and an urgent count (it opens ShellMenu), the workspaces, the launcher and Talk, and Exit; right of it,
+/// The bar itself, on the void so it melts into the desktop: left of the notch, the hexagon with the status word and an
+/// urgent count (it opens ShellMenu), the workspaces, the launcher and Talk, and Exit; right of it, the privacy switch and
 /// the readings (`ShellBarReadings`). It takes the menu bar's own type, so it reads like the menus it covers; only the
 /// hexagon, the pips and the dot carry the theme's colour. Where the full row doesn't fit, it folds (`Fit`).
 struct ShellBar: View {
@@ -247,9 +247,6 @@ struct ShellBar: View {
                     }
                     .opacity(0.86)
                 }
-                if shell.hideDetails {
-                    ShellIconView(icon: .hidden, size: 13).opacity(0.86)
-                }
                 if urgent > 0 {
                     HStack(spacing: 4) {
                         ShellIconView(icon: .alert, size: 11)
@@ -265,7 +262,7 @@ struct ShellBar: View {
         }
         .buttonStyle(ShellRowStyle())
         .accessibilityLabel(
-            "Aegis: \(status.word)" + (shell.hideDetails ? ", details hidden" : "") + (urgent > 0 ? ", \(urgent) urgent" : "")
+            "Aegis: \(status.word)" + (urgent > 0 ? ", \(urgent) urgent" : "")
         )
         .accessibilityHint("Opens AegisShell's menu")
     }
@@ -602,7 +599,7 @@ private struct VisualEffect: NSViewRepresentable {
 /// The small line icons AegisShell's controls use (the design system's ShellIcon): 16-point paths, 1.5 stroke,
 /// square caps, mitred joins, chamfers instead of curves.
 enum ShellIcon: String {
-    case power, alert, mic, hidden, wifi, wired, offline, bolt
+    case power, alert, mic, hidden, eye, wifi, wired, offline, bolt, speaker, speakerLow, speakerHigh, speakerMuted
 
     var commands: String {
         switch self {
@@ -610,6 +607,11 @@ enum ShellIcon: String {
         case .alert: "M8 1.8 L15 14 H1 Z M8 6 V10 M8 11.5 V12.5"
         case .mic: "M6 2 H10 V9 L9 10 H7 L6 9 Z M3.5 7.5 V9.5 L6 12 H10 L12.5 9.5 V7.5 M8 12 V14.5"
         case .hidden: "M1.5 8 L4 5 L8 3.8 L12 5 L14.5 8 L12 11 L8 12.2 L4 11 Z M2.5 14 L13.5 2"
+        case .eye: "M1.5 8 L4 5 L8 3.8 L12 5 L14.5 8 L12 11 L8 12.2 L4 11 Z M6.5 6.5 H9.5 V9.5 H6.5 Z"
+        case .speaker: "M2 6 H5 L9 2.5 V13.5 L5 10 H2 Z"
+        case .speakerLow: "M2 6 H5 L9 2.5 V13.5 L5 10 H2 Z M11 6.5 L12 8 L11 9.5"
+        case .speakerHigh: "M2 6 H5 L9 2.5 V13.5 L5 10 H2 Z M11 6.5 L12 8 L11 9.5 M12.5 4.5 L14.5 8 L12.5 11.5"
+        case .speakerMuted: "M2 6 H5 L9 2.5 V13.5 L5 10 H2 Z M11 6 L15 10 M15 6 L11 10"
         case .wifi: "M1.5 6.5 L4.5 3.5 H11.5 L14.5 6.5 M4 9.5 L6 7.5 H10 L12 9.5 M7 12 H9 V13.5 H7 Z"
         case .wired: "M3 3.5 H13 V10 L11 12.5 H5 L3 10 Z M6 6 V8 M8 6 V8 M10 6 V8"
         case .offline: "M1.5 6.5 L4.5 3.5 H11.5 L14.5 6.5 M4 9.5 L6 7.5 H10 L12 9.5 M7 12 H9 V13.5 H7 Z M2.5 14.5 L13.5 1.5"

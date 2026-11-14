@@ -348,6 +348,7 @@ final class ShellTests: XCTestCase {
         let status = ShellSystemStatus()
         status.network = .wifi
         status.battery = .init(level: 62, charging: true, plugged: true)
+        status.volume = .init(level: 40, muted: false)
         func bar(_ left: CGFloat, _ right: CGFloat) -> some View {
             ShellBar(shell: shell, status: status, left: left, right: right, menu: {}, close: {})
         }
@@ -357,6 +358,8 @@ final class ShellTests: XCTestCase {
         try snap(bar(654, 654), CGSize(width: 1512, height: 38), "bar.png")
         status.network = .offline
         status.battery = .init(level: 12, charging: false, plugged: false)
+        status.volume = .init(level: 40, muted: true)
+        shell.hideDetails = true
         try snap(bar(480, 480), CGSize(width: 1164, height: 38), "bar-folded.png")
         status.battery = nil
         try snap(bar(300, 300), CGSize(width: 804, height: 38), "bar-least.png")

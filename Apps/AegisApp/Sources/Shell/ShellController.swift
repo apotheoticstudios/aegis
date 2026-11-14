@@ -204,6 +204,15 @@ final class ShellController {
         }
         openWindows()
         checkStill()
+        // The bar's controls show, and the transition settles, on the design's clock: not after the Dock or the readings.
+        Task { [weak self] in
+            await self?.settle(start, at: ShellMotion.itemShows) { $0.itemComplete = true }
+            await self?.settle(start, at: ShellMotion.engaged) { shell in
+                if case .engaging = shell.phase {
+                    shell.phase = .engaged
+                }
+            }
+        }
         // The Dock drops away first, as the design's engage begins.
         await dock { $0.dockProblem = await !($0.settings.apply()) }
         // Disengaged meanwhile: nothing more to start.
@@ -223,12 +232,6 @@ final class ShellController {
                 } else if tick.isMultiple(of: 6) {
                     readings.now = Date()
                 }
-            }
-        }
-        await settle(start, at: ShellMotion.itemShows) { $0.itemComplete = true }
-        await settle(start, at: ShellMotion.engaged) { shell in
-            if case .engaging = shell.phase {
-                shell.phase = .engaged
             }
         }
     }

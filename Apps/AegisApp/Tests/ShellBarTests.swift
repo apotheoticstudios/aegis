@@ -48,6 +48,13 @@ final class ShellBarTests: XCTestCase {
             battery([kIOPSIsChargingKey: true, kIOPSPowerSourceStateKey: kIOPSACPowerValue]),
             .init(level: 62, charging: true, plugged: true)
         )
+        // The time left off the charger, the time to full while charging; none while macOS works it out, or when full.
+        XCTAssertEqual(battery([kIOPSTimeToEmptyKey: 200, kIOPSTimeToFullChargeKey: 45])?.minutes, 200)
+        XCTAssertEqual(
+            battery([kIOPSIsChargingKey: true, kIOPSPowerSourceStateKey: kIOPSACPowerValue, kIOPSTimeToFullChargeKey: 45])?.minutes, 45
+        )
+        XCTAssertNil(battery([kIOPSTimeToEmptyKey: -1])?.minutes)
+        XCTAssertNil(battery([kIOPSPowerSourceStateKey: kIOPSACPowerValue, kIOPSTimeToEmptyKey: 300])?.minutes)
         // A battery that reports its capacity in mAh still reads as a percentage.
         XCTAssertEqual(battery([kIOPSCurrentCapacityKey: 2500, kIOPSMaxCapacityKey: 5000])?.level, 50)
         // A UPS or a battery with no capacity isn't the Mac's own.
@@ -56,6 +63,17 @@ final class ShellBarTests: XCTestCase {
         XCTAssertEqual(ShellBarReadings.spoken(.init(level: 62, charging: true, plugged: true)), "Battery 62%, charging")
         XCTAssertEqual(ShellBarReadings.spoken(.init(level: 100, charging: false, plugged: true)), "Battery 100%, on power")
         XCTAssertEqual(ShellBarReadings.spoken(.init(level: 9, charging: false, plugged: false)), "Battery 9%")
+        XCTAssertEqual(ShellBarReadings.spoken(.init(level: 62, charging: false, plugged: false, minutes: 200)), "Battery 62%, 3:20 left")
+        XCTAssertEqual(
+            ShellBarReadings.spoken(.init(level: 62, charging: true, plugged: true, minutes: 45)), "Battery 62%, charging, full in 0:45"
+        )
+        // The volume as a word and a speaker with waves by level; muted, crossed out whatever the level.
+        XCTAssertEqual(ShellBarReadings.spoken(ShellSystemStatus.Volume(level: 40, muted: false)), "Volume 40%")
+        XCTAssertEqual(ShellBarReadings.spoken(ShellSystemStatus.Volume(level: 40, muted: true)), "Muted")
+        XCTAssertEqual(ShellBarReadings.icon(.init(level: 0, muted: false)), .speaker)
+        XCTAssertEqual(ShellBarReadings.icon(.init(level: 30, muted: false)), .speakerLow)
+        XCTAssertEqual(ShellBarReadings.icon(.init(level: 80, muted: false)), .speakerHigh)
+        XCTAssertEqual(ShellBarReadings.icon(.init(level: 80, muted: true)), .speakerMuted)
         // The network is a kind, never its name.
         XCTAssertEqual(ShellBarReadings.words(.wifi).spoken, "Wi-Fi")
         XCTAssertEqual(ShellBarReadings.words(.offline).icon, .offline)
