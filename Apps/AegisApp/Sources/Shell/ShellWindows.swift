@@ -18,6 +18,9 @@ enum ShellWindows {
         let request: ActionRequest
     }
 
+    /// The zones showing for a layout under way, taken down at once on disengage.
+    private static var zones: ShellLayoutZones?
+
     /// The frames windows had before AegisShell first moved them, and whether they were minimised, to put back on disengage.
     private static var original: [(window: AXUIElement, frame: CGRect, minimised: Bool)] = []
 
@@ -66,19 +69,26 @@ enum ShellWindows {
         // The zones first, then the windows glide into them together (no glide under Reduce Motion), then the zones fade.
         var moved: [String] = []
         if !moves.isEmpty, live() {
-            let zones = ShellLayoutZones(moves.map { ($0.name, $0.from, $0.to) }, screen: screen, primary: primary)
+            // Kept where disengaging can take it down at once, whatever the moves below are waiting on.
+            zones = ShellLayoutZones(moves.map { ($0.name, $0.from, $0.to) }, screen: screen, primary: primary)
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 try? await Task.sleep(for: .milliseconds(200))
                 await glide(moves, live: live)
             }
-            for move in moves where live() {
+            for move in moves {
+                // Disengaged meanwhile: AegisShell puts the window back; the log says the move didn't finish.
+                guard live() else {
+                    await model.log(move.request, .cancelled)
+                    continue
+                }
                 let worked = set(move.window, move.to)
                 await model.log(move.request, worked ? .succeeded : .failed)
                 if worked {
                     moved.append(move.name)
                 }
             }
-            zones.fade()
+            zones?.fade()
+            zones = nil
         }
         // The first app comes forward only when something moved, and AegisShell is still on.
         if !moved.isEmpty, live(), let first = apps.first?.app ?? apps.first.flatMap({ running($0.placement.app) }) {
@@ -89,6 +99,8 @@ enum ShellWindows {
 
     /// On disengage: every window AegisShell moved goes back where it was.
     static func restore() {
+        zones?.close()
+        zones = nil
         for (window, frame, minimised) in original.reversed() {
             _ = set(window, frame)
             if minimised {
@@ -102,10 +114,14 @@ enum ShellWindows {
     /// each lands exactly afterwards.
     private static func glide(_ moves: [Move], live: () -> Bool) async {
         let start = Date()
-        while live() {
+        var gliding = moves
+        // A slow app answers within a quarter of a second or is left to land at the end, so it can't hold up the others
+        // (or Exit) for long.
+        gliding.forEach { AXUIElementSetMessagingTimeout($0.window, 0.25) }
+        while live(), !gliding.isEmpty {
             let progress = Date().timeIntervalSince(start) / 0.3
-            for move in moves {
-                place(move.window, ShellLayoutZones.step(from: move.from, to: move.to, progress: progress))
+            gliding = gliding.filter { move in
+                progress < 1 && live() && place(move.window, ShellLayoutZones.step(from: move.from, to: move.to, progress: progress))
             }
             if progress >= 1 {
                 return
@@ -114,15 +130,14 @@ enum ShellWindows {
         }
     }
 
-    /// One glide step: where, then how big.
-    private static func place(_ window: AXUIElement, _ frame: CGRect) {
+    /// One glide step: where, then how big; false when the window wouldn't move, so it stops gliding.
+    private static func place(_ window: AXUIElement, _ frame: CGRect) -> Bool {
         var point = frame.origin, extent = frame.size
-        if let position = AXValueCreate(.cgPoint, &point) {
-            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
-        }
-        if let size = AXValueCreate(.cgSize, &extent) {
-            AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, size)
-        }
+        guard let position = AXValueCreate(.cgPoint, &point), let size = AXValueCreate(.cgSize, &extent),
+              AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position) == .success
+        else { return false }
+        AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, size)
+        return true
     }
 
     /// A running app by the owner's name for it: exact, then one whose name starts with it.

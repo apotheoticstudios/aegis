@@ -27,7 +27,7 @@ final class ShellLayoutZones {
         window = NSPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         // Above the windows it shows the way for, under menus; it takes no clicks.
         window.level = .floating
-        window.collectionBehavior = [.transient, .ignoresCycle]
+        window.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
@@ -37,6 +37,11 @@ final class ShellLayoutZones {
         window.contentView = NSHostingView(rootView: ShellLayoutZonesView(zones: zones, size: screen.frame.size))
         window.setFrame(screen.frame, display: false)
         window.orderFrontRegardless()
+    }
+
+    /// Gone at once, as when AegisShell disengages mid-layout.
+    func close() {
+        window.orderOut(nil)
     }
 
     /// The zones fade once the windows are in place.
