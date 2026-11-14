@@ -2,12 +2,22 @@ import AegisKit
 import AppKit
 import ApplicationServices
 
-/// AegisShell's window layouts (the design system's ShellWindows, stage 6): "Mail left, calendar right" moves each
-/// app's front window into its zone with the Accessibility API, after the owner grants Accessibility. Each window's
+/// AegisShell's window layouts (the design system's ShellWindows, stage 6): "Mail left, calendar right" shows the zones
+/// (ShellLayoutZones), then glides each app's front window into its zone with the Accessibility API, after the owner
+/// grants Accessibility. Each window's
 /// first frame is kept, and every window AegisShell moved goes back on disengage. Each move is logged through the
 /// action safety system like any command.
 @MainActor
 enum ShellWindows {
+    /// One window's move in a layout, allowed by the safety system and on its way.
+    private struct Move {
+        let window: AXUIElement
+        let from: CGRect
+        let to: CGRect
+        let name: String
+        let request: ActionRequest
+    }
+
     /// The frames windows had before AegisShell first moved them, and whether they were minimised, to put back on disengage.
     private static var original: [(window: AXUIElement, frame: CGRect, minimised: Bool)] = []
 
@@ -26,7 +36,7 @@ enum ShellWindows {
         // Accessibility measures from the top left of the main display; AppKit from the bottom left.
         let visible = screen.visibleFrame
         let area = WindowArea(x: visible.minX, y: primary.frame.maxY - visible.maxY, width: visible.width, height: visible.height)
-        var moved: [String] = []
+        var moves: [Move] = []
         for (placement, app, installed) in apps {
             var target = app
             guard live() else { break }
@@ -43,12 +53,32 @@ enum ShellWindows {
             if minimised {
                 AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
             }
-            let frame = placement.zone.frame(in: area)
-            let worked = set(window, CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height))
-            await model.log(request, worked ? .succeeded : .failed)
-            if worked {
-                moved.append(target.localizedName ?? placement.app)
+            let zone = placement.zone.frame(in: area)
+            let to = CGRect(x: zone.x, y: zone.y, width: zone.width, height: zone.height)
+            moves.append(Move(
+                window: window,
+                from: frame(of: window) ?? to,
+                to: to,
+                name: target.localizedName ?? placement.app,
+                request: request
+            ))
+        }
+        // The zones first, then the windows glide into them together (no glide under Reduce Motion), then the zones fade.
+        var moved: [String] = []
+        if !moves.isEmpty, live() {
+            let zones = ShellLayoutZones(moves.map { ($0.name, $0.from, $0.to) }, screen: screen, primary: primary)
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                try? await Task.sleep(for: .milliseconds(200))
+                await glide(moves, live: live)
             }
+            for move in moves where live() {
+                let worked = set(move.window, move.to)
+                await model.log(move.request, worked ? .succeeded : .failed)
+                if worked {
+                    moved.append(move.name)
+                }
+            }
+            zones.fade()
         }
         // The first app comes forward only when something moved, and AegisShell is still on.
         if !moved.isEmpty, live(), let first = apps.first?.app ?? apps.first.flatMap({ running($0.placement.app) }) {
@@ -66,6 +96,33 @@ enum ShellWindows {
             }
         }
         original = []
+    }
+
+    /// The windows glide together: 300 ms on the design's standard curve, by the clock, so slow apps don't stretch it;
+    /// each lands exactly afterwards.
+    private static func glide(_ moves: [Move], live: () -> Bool) async {
+        let start = Date()
+        while live() {
+            let progress = Date().timeIntervalSince(start) / 0.3
+            for move in moves {
+                place(move.window, ShellLayoutZones.step(from: move.from, to: move.to, progress: progress))
+            }
+            if progress >= 1 {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(16))
+        }
+    }
+
+    /// One glide step: where, then how big.
+    private static func place(_ window: AXUIElement, _ frame: CGRect) {
+        var point = frame.origin, extent = frame.size
+        if let position = AXValueCreate(.cgPoint, &point) {
+            AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
+        }
+        if let size = AXValueCreate(.cgSize, &extent) {
+            AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, size)
+        }
     }
 
     /// A running app by the owner's name for it: exact, then one whose name starts with it.
