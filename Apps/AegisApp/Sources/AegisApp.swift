@@ -82,8 +82,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         wake.stoppedTalking = { [weak self] in self?.model.voice.heardAll = true }
         wake.captureFailed = { [weak self] in self?.model.voice.inputFailed() }
         wake.openPanel = { [weak self] in
-            self?.model.voice.wakes += 1
-            self?.panel.show()
+            guard let self else { return }
+            model.voice.wakes += 1
+            // A new question: none of the last one's words.
+            model.voice.hearing = ""
+            model.voice.heardAll = false
+            // In AegisShell with details showing, the voice overlay over any app, as Talk does (#194).
+            if ShellController.shared.isOn, !ShellController.shared.hideDetails, !panel.isVisible {
+                ShellVoice.shared.wake()
+            } else {
+                panel.show()
+            }
         }
         panel.visibilityChanged = { [weak self] open in
             if open {
@@ -92,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             self?.wake.panelChanged(open: open || ShellVoice.shared.isVisible)
         }
         ShellVoice.shared.model = model
+        ShellVoice.shared.conversing = { [weak self] in self?.wake.conversing ?? false }
         ShellVoice.shared.openPanel = { [weak self] in self?.panel.show() }
         ShellVoice.shared.changed = { [weak self] in
             guard let self else { return }
@@ -171,8 +181,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func talk() {
-        // In AegisShell with details showing: the voice overlay over any app (ShellVoice) rather than the panel.
-        if ShellController.shared.isOn, !ShellController.shared.hideDetails, !panel.isVisible {
+        // With AegisShell's launcher open, it listens itself; with details showing, the voice overlay over any app
+        // (ShellVoice) rather than the panel.
+        if ShellLauncher.shared.isOpen {
+            ShellLauncher.shared.speak()
+        } else if ShellController.shared.isOn, !ShellController.shared.hideDetails, !panel.isVisible {
             ShellVoice.shared.talk()
         } else {
             panel.talk()

@@ -3,7 +3,8 @@ import AppKit
 import SwiftUI
 
 /// AegisShell's voice over any app (the design system's ShellVoice): while engaged with details showing, Talk to Aegis
-/// shows the voice overlay centred under the menu bar instead of opening the panel; the app in front never moves. It is
+/// and "Hey Aegis" show the voice overlay centred under the menu bar instead of opening the panel; the app in front
+/// never moves. It is
 /// the panel's own voice turn (the words heard, thinking, the answer as it's spoken), and like the panel an open Aegis
 /// surface (silent rule): it fades 3 s after the answer, a click on it or anything needing a confirmation hands over to
 /// the panel, and disengaging silences it. With details hidden, Talk opens the panel instead, since the overlay would
@@ -18,6 +19,8 @@ final class ShellVoice {
     @ObservationIgnored var openPanel: () -> Void = {}
     /// The overlay came or went: the wake listener treats it as the open panel (echo cancellation, follow-ups).
     @ObservationIgnored var changed: () -> Void = {}
+    /// A "Hey Aegis" conversation is under way: the overlay stays for it, follow-ups included, as the panel does.
+    @ObservationIgnored var conversing: () -> Bool = { false }
 
     /// The ask state from before this turn, so an earlier answer never shows as this one's.
     private(set) var before: PanelModel.AskState = .idle
@@ -65,9 +68,34 @@ final class ShellVoice {
         return parts.isEmpty ? nil : "Read: " + parts.joined(separator: " · ")
     }
 
+    /// The words to show as listening: the microphone button's, else what the wake listener is hearing now (a question
+    /// or a follow-up), else an empty line while this turn has no question yet (`fresh`); nil once it has one.
+    static func heard(_ state: Voice.State, hearing: String, fresh: Bool) -> String? {
+        if case let .listening(words) = state {
+            return words
+        }
+        if !hearing.isEmpty {
+            return hearing
+        }
+        return fresh ? "" : nil
+    }
+
+    /// "Hey Aegis" while engaged with details showing: the overlay, listening, while the wake listener takes the words.
+    func wake() {
+        guard let model else { return }
+        if ShellLauncher.shared.isOpen {
+            ShellLauncher.shared.close()
+        }
+        before = model.askState
+        if window == nil {
+            show(model)
+        }
+        watch(model)
+    }
+
     func talk() {
         guard let model else { return }
-        // The launcher's own listening state is still to come: the overlay takes over from it.
+        // Talk goes to the launcher while it's open (AppDelegate.talk); from anywhere else the overlay replaces it.
         if ShellLauncher.shared.isOpen {
             ShellLauncher.shared.close()
         }
@@ -86,6 +114,10 @@ final class ShellVoice {
         guard let window else { return }
         self.window = nil
         if silencing {
+            // As closing the panel does: the turn goes too, so its answer is never spoken with nothing showing.
+            if !HUDPresence.shared.open {
+                model?.clearAnswer()
+            }
             model?.voice.silence()
         }
         NSAnimationContext.runAnimationGroup { context in
@@ -138,18 +170,23 @@ final class ShellVoice {
         watcher?.cancel()
         // Only what this turn brings counts: a confirmation already waiting in the panel doesn't send every turn there.
         let task = model.pendingTask, action = ActionPresence.shared.pending?.request.id
+        let initial = model.voice.state
         watcher = Task { [weak self] in
             var started = false, quiet = 0.0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard let self, !Task.isCancelled else { return }
+                // Details hidden mid-turn: the words and the answer go on in the panel, not over the screen.
+                if ShellController.shared.hideDetails {
+                    return handOver()
+                }
                 let voice = model.voice
                 let asking = if case .asking = model.askState {
                     true
                 } else {
                     false
                 }
-                let busy = voice.isListening || voice.speaking || asking
+                let busy = voice.isListening || voice.speaking || asking || conversing()
                 started = started || busy
                 quiet = busy ? 0 : quiet + 0.25
                 // A confirmation is answered in the panel, as is voice that can't be used (it says why).
@@ -162,7 +199,14 @@ final class ShellVoice {
                     || ActionPresence.shared.pending.map { $0.request.id != action } ?? false
                 // Listening that hasn't begun after 5 s (macOS asking for the microphone, say) goes on in the panel,
                 // so whatever follows is never heard without Aegis showing.
-                if confirm || unusable || (!started && quiet >= 5) {
+                // Voice failing during this turn (the microphone, or recognition after "Hey Aegis") goes on in the panel,
+                // which says why, even while a conversation is still open.
+                let failed = if case .unavailable = voice.state {
+                    voice.state != initial
+                } else {
+                    false
+                }
+                if confirm || unusable || failed || (!started && quiet >= 5) {
                     return handOver()
                 }
                 // 3 s after the answer; soon when nothing was asked.
@@ -181,11 +225,7 @@ private struct ShellVoiceView: View {
     @AppStorage(HUDTheme.storeKey, store: .aegis) private var theme = HUDTheme.arc
 
     var body: some View {
-        let heard: String? = if case let .listening(words) = model.voice.state {
-            words
-        } else {
-            nil
-        }
+        let heard = ShellVoice.heard(model.voice.state, hearing: model.voice.hearing, fresh: model.askState == voice.before)
         let turn = ShellVoice.turn(heard: heard, ask: model.askState == voice.before ? .idle : model.askState, partial: model.partialAnswer)
         // Typed along with the voice while it reads this very answer; whole otherwise.
         let speaking = model.voice.speaking && !turn.answer.isEmpty && model.voice.spokenText == turn.answer

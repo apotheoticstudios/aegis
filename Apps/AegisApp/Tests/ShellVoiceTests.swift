@@ -33,6 +33,28 @@ final class ShellVoiceTests: XCTestCase {
         XCTAssertEqual(ShellVoice.turn(heard: "", ask: .answered(question: "how long?", answer: answer), partial: "").state, .listening)
     }
 
+    /// "Hey Aegis" into the overlay (#194): the words heard, whoever is listening, then the turn's question and answer.
+    func testAfterHeyAegisTheOverlayShowsTheWakeListenersWords() {
+        // The microphone button's own words first; else the wake listener's, for a question or a follow-up.
+        XCTAssertEqual(ShellVoice.heard(.listening("what's next"), hearing: "old", fresh: true), "what's next")
+        XCTAssertEqual(ShellVoice.heard(.idle, hearing: "what's next", fresh: true), "what's next")
+        XCTAssertEqual(ShellVoice.heard(.idle, hearing: "and after that", fresh: false), "and after that")
+        // Nothing heard yet this turn: listening, empty. Once the question has gone: its thinking and answer.
+        XCTAssertEqual(ShellVoice.heard(.idle, hearing: "", fresh: true), "")
+        XCTAssertNil(ShellVoice.heard(.idle, hearing: "", fresh: false))
+        XCTAssertNil(ShellVoice.heard(.unavailable("No microphone."), hearing: "", fresh: false))
+    }
+
+    /// The launcher's own listening (ShellLauncherStates): the words beside the wave, or why voice can't be used.
+    func testTheLauncherShowsWhatItHears() {
+        XCTAssertNil(ShellLauncher.heard(listening: false, .listening("open notes")), "only when the launcher started it")
+        XCTAssertEqual(ShellLauncher.heard(listening: true, .listening("open notes")), "open notes")
+        XCTAssertEqual(ShellLauncher.heard(listening: true, .listening("")), "", "listening, nothing heard yet")
+        // Voice that can't be used, or finished: back to typing (the reason shows beside the input).
+        XCTAssertNil(ShellLauncher.heard(listening: true, .unavailable("No microphone.")))
+        XCTAssertNil(ShellLauncher.heard(listening: true, .idle))
+    }
+
     func testItSaysWhatAegisReadInKindsAndCounts() {
         func answer(_ events: [String], _ schedule: [String]) -> Answer {
             Answer(text: "Done.", eventIDs: events, scheduleIDs: schedule, model: "synthetic", generatedAt: Date(timeIntervalSince1970: 1))
