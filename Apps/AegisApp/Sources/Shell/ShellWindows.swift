@@ -8,8 +8,8 @@ import ApplicationServices
 /// action safety system like any command.
 @MainActor
 enum ShellWindows {
-    /// The frames windows had before AegisShell first moved them, to put back on disengage.
-    private static var original: [(window: AXUIElement, frame: CGRect)] = []
+    /// The frames windows had before AegisShell first moved them, and whether they were minimised, to put back on disengage.
+    private static var original: [(window: AXUIElement, frame: CGRect, minimised: Bool)] = []
 
     /// What Aegis says, or nil when the words aren't a layout of apps on this Mac (so "turn left" stays a question).
     static func apply(_ placements: [WindowPlacement], model: PanelModel) async -> String? {
@@ -29,10 +29,17 @@ enum ShellWindows {
                 await model.launch(.openApp(name: installed.deletingPathExtension().lastPathComponent))
                 target = await waitForLaunch(installed)
             }
-            guard let target, let window = await frontWindow(of: target) else { continue }
+            // Disengaged while an app was opening: AegisShell has put windows back, so nothing more moves.
+            guard ShellController.shared.isOn, let target, let window = await frontWindow(of: target), ShellController.shared.isOn
+            else { continue }
             let request = ActionRequest(payload: .app(bundleID: target.bundleIdentifier ?? placement.app, verb: .move), origin: .ownerTyped)
             guard await model.log(request, .proposed).allowed else { continue }
-            remember(window)
+            let minimised = isMinimised(window)
+            remember(window, minimised: minimised)
+            // A minimised window comes back only once the move is allowed, and goes back down on disengage.
+            if minimised {
+                AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+            }
             let frame = placement.zone.frame(in: area)
             let worked = set(window, CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height))
             await model.log(request, worked ? .succeeded : .failed)
@@ -40,7 +47,8 @@ enum ShellWindows {
                 moved.append(target.localizedName ?? placement.app)
             }
         }
-        if let first = apps.first?.app ?? apps.first.flatMap({ running($0.placement.app) }) {
+        // The first app comes forward only when something moved.
+        if !moved.isEmpty, let first = apps.first?.app ?? apps.first.flatMap({ running($0.placement.app) }) {
             first.activate()
         }
         return moved.isEmpty ? "I couldn't move those windows." : "Done: " + moved.joined(separator: ", ") + "."
@@ -48,8 +56,11 @@ enum ShellWindows {
 
     /// On disengage: every window AegisShell moved goes back where it was.
     static func restore() {
-        for (window, frame) in original.reversed() {
+        for (window, frame, minimised) in original.reversed() {
             _ = set(window, frame)
+            if minimised {
+                AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
+            }
         }
         original = []
     }
@@ -72,7 +83,7 @@ enum ShellWindows {
         return nil
     }
 
-    /// The app's main window, waiting a moment for one that's just opening; a minimised one comes back first.
+    /// The app's main window, waiting a moment for one that's just opening.
     private static func frontWindow(of app: NSRunningApplication) async -> AXUIElement? {
         let element = AXUIElementCreateApplication(app.processIdentifier)
         for _ in 0 ..< 15 {
@@ -81,18 +92,22 @@ enum ShellWindows {
                 || AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &value) == .success,
                 let value, CFGetTypeID(value) == AXUIElementGetTypeID()
             {
-                let window = value as! AXUIElement // swiftlint:disable:this force_cast
-                AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-                return window
+                return value as! AXUIElement // swiftlint:disable:this force_cast
             }
             try? await Task.sleep(for: .milliseconds(200))
         }
         return nil
     }
 
-    private static func remember(_ window: AXUIElement) {
+    private static func remember(_ window: AXUIElement, minimised: Bool) {
         guard !original.contains(where: { CFEqual($0.window, window) }), let frame = frame(of: window) else { return }
-        original.append((window, frame))
+        original.append((window, frame, minimised))
+    }
+
+    private static func isMinimised(_ window: AXUIElement) -> Bool {
+        var value: CFTypeRef?
+        return AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success
+            && (value as? Bool) == true
     }
 
     private static func frame(of window: AXUIElement) -> CGRect? {

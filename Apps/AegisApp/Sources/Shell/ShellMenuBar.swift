@@ -69,6 +69,7 @@ final class ShellMenuBar: NSObject {
             let frame = layout.frame
             let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.animationBehavior = .none
+            panel.hidesOnDeactivate = false
             // Over macOS's own status items (at the status bar's level), under its menus.
             panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
             // On every Space but not beside full-screen apps, still in Mission Control, out of the window cycle.
