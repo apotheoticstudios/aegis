@@ -626,13 +626,35 @@ struct HUDAsciiText: View {
     @Environment(\.hudTheme) private var theme
 
     var body: some View {
+        let face = HUDGlyphFace.face(blocks: blocks, size: size)
+        let rgba = theme.rgba(tone.token)
         Canvas { context, canvas in
-            let natural = context.resolve(styled(String(repeating: blocks ? "█" : "@", count: max(cols, 1))))
-                .measure(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)).width
+            // The row's width and the baseline as SwiftUI sets them, measured once per face, so the art sits exactly where
+            // it did when every row was set as text.
+            let natural = face.natural(cols: max(cols, 1)) {
+                context.resolve(styled(String(repeating: blocks ? "█" : "@", count: $0)))
+                    .measure(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)).width
+            }
+            let baseline = face.baseline { context.resolve(styled("@")).firstBaseline(in: CGSize(width: 10000, height: 10000)) }
             if natural > 0 {
                 context.scaleBy(x: canvas.width / natural, y: 1)
             }
-            for (row, line) in lines.enumerated() where !line.isEmpty {
+            // Glyphs straight onto the cell grid: laying every row out as styled text each frame was most of the shell's
+            // CPU. A line with a character the face lacks is set as text, as before.
+            var unset: [(Int, String)] = []
+            context.withCGContext { cg in
+                cg.setFillColor(CGColor(
+                    srgbRed: HUDTheme.channel(rgba, 24), green: HUDTheme.channel(rgba, 16), blue: HUDTheme.channel(rgba, 8),
+                    alpha: HUDTheme.channel(rgba, 0)
+                ))
+                for (row, line) in lines.enumerated() where !line.isEmpty {
+                    // Below 3 points SwiftUI packs the characters tighter than the face's advance: set those as text.
+                    if size < 3 || !face.draw(line, baseline: CGFloat(row) * size + baseline, in: cg) {
+                        unset.append((row, line))
+                    }
+                }
+            }
+            for (row, line) in unset {
                 context.draw(styled(line), at: CGPoint(x: 0, y: CGFloat(row) * size), anchor: .topLeading)
             }
         }
@@ -645,6 +667,87 @@ struct HUDAsciiText: View {
         let text = blocks ? Text(line).font(.system(size: size, design: .monospaced))
             : Text(line).font(.custom(HUDType.ascii.fontName, size: size)).tracking(size * 0.04)
         return text.foregroundStyle(theme.color(tone.token))
+    }
+}
+
+/// A character-art face: the font and one cell's width (the advance plus the design's tracking), with the row widths and
+/// baseline SwiftUI gives it, measured once. Made once per face and size, and shared.
+// Unchecked: a CTFont is immutable and safe to share between threads.
+final class HUDGlyphFace: @unchecked Sendable {
+    let font: CTFont
+    let cell: CGFloat
+    private let widths = Mutex<[Int: CGFloat]>([:])
+    private let measuredBaseline = Mutex<CGFloat?>(nil)
+
+    private struct Key: Hashable {
+        let blocks: Bool
+        let size: CGFloat
+    }
+
+    private static let made = Mutex<[Key: HUDGlyphFace]>([:])
+
+    private init(font: CTFont, sample: UniChar, tracking: CGFloat) {
+        self.font = font
+        var glyph = CGGlyph(0)
+        var sample = sample
+        CTFontGetGlyphsForCharacters(font, &sample, &glyph, 1)
+        cell = CGFloat(CTFontGetAdvancesForGlyphs(font, .horizontal, &glyph, nil, 1)) + tracking
+    }
+
+    /// The width of a row of `cols` cells, measured by `measure` the first time.
+    func natural(cols: Int, measure: (Int) -> CGFloat) -> CGFloat {
+        if let width = widths.withLock({ $0[cols] }) {
+            return width
+        }
+        let width = measure(cols)
+        widths.withLock { $0[cols] = width }
+        return width
+    }
+
+    /// The baseline below a row's top, measured by `measure` the first time.
+    func baseline(measure: () -> CGFloat) -> CGFloat {
+        if let baseline = measuredBaseline.withLock({ $0 }) {
+            return baseline
+        }
+        let baseline = measure()
+        measuredBaseline.withLock { $0 = baseline }
+        return baseline
+    }
+
+    /// Share Tech Mono with the design's tracking, or the system's monospaced face for block characters.
+    static func face(blocks: Bool, size: CGFloat) -> HUDGlyphFace {
+        made.withLock { faces in
+            let key = Key(blocks: blocks, size: size)
+            if let face = faces[key] {
+                return face
+            }
+            _ = HUDFonts.registered
+            let face = blocks
+                ? HUDGlyphFace(font: NSFont.monospacedSystemFont(ofSize: size, weight: .regular) as CTFont, sample: 0x2588, tracking: 0)
+                : HUDGlyphFace(
+                    font: CTFontCreateWithName(HUDType.ascii.fontName as CFString, size, nil),
+                    sample: 0x40,
+                    tracking: size * 0.04
+                )
+            faces[key] = face
+            return face
+        }
+    }
+
+    /// Draws `line` one glyph per cell on `baseline`; false, drawing nothing, when the face lacks a character.
+    func draw(_ line: String, baseline: CGFloat, in context: CGContext) -> Bool {
+        let characters = Array(line.utf16)
+        // One cell per character: anything outside the Basic Multilingual Plane is set as text instead.
+        guard characters.count == line.unicodeScalars.count else { return false }
+        var glyphs = [CGGlyph](repeating: 0, count: characters.count)
+        guard CTFontGetGlyphsForCharacters(font, characters, &glyphs, characters.count) else { return false }
+        let positions = characters.indices.map { CGPoint(x: CGFloat($0) * cell, y: 0) }
+        context.saveGState()
+        context.translateBy(x: 0, y: baseline)
+        context.scaleBy(x: 1, y: -1)
+        CTFontDrawGlyphs(font, glyphs, positions, glyphs.count, context)
+        context.restoreGState()
+        return true
     }
 }
 

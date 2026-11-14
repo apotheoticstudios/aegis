@@ -171,13 +171,26 @@ struct HUDOrbit: View {
     @Environment(\.hudTheme) private var theme
 
     var body: some View {
-        let spins = !still && rings.contains { $0.spin != 0 }
-        TimelineView(.animation(minimumInterval: 1.0 / 10, paused: !spins)) { context in
+        // Only turning rings redraw each frame; the rest, the arcs and their lettering above all, is drawn once. Drawing it
+        // all ten times a second was a large share of the shell's CPU. Still rings, then turning ones, then the arcs.
+        let turning = still ? [] : rings.filter { $0.spin != 0 }
+        ZStack {
             Canvas { canvas, _ in
-                let seconds = spins ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600) : 0
-                for ring in rings {
-                    draw(ring, turned: ring.spin * seconds, in: &canvas)
+                for ring in rings where still || ring.spin == 0 {
+                    draw(ring, turned: 0, in: &canvas)
                 }
+            }
+            if !turning.isEmpty {
+                TimelineView(.animation(minimumInterval: 1.0 / 10)) { context in
+                    Canvas { canvas, _ in
+                        let seconds = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600)
+                        for ring in turning {
+                            draw(ring, turned: ring.spin * seconds, in: &canvas)
+                        }
+                    }
+                }
+            }
+            Canvas { canvas, _ in
                 for arc in arcs {
                     draw(arc, in: &canvas)
                 }
