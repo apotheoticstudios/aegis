@@ -60,7 +60,8 @@ Output: `docs/stages/AEGISSHELL-SPIKE.md` with the answers (numbers only, no per
   - **The stream** (2026-10-27, with #78's recent events): one line per event at the top left, fading downwards, the urgent one marked; kinds only with details hidden.
   - **The world** rises out of the corner (the globe, home pinned when set), with today's weather at home above it (storm or sun art; the brief's forecast, home rounded to about 10 km, only with the World lines switched on). **Home** shows the floor plan marked "not set up" until Home control exists. Matrix's ground is falling code (#77's shapes, ported by Codex).
   - **Something urgent** (2026-10-28, the design's ShellDesktopUrgent): while an urgent item is new since the panel was last opened (the menu bar's glow), one line opens under the ask line between critical hairlines, with Open and Later; Later sets it aside until another item is first. The menu bar item adds the hidden mark while details are hidden, and the menu's urgent row names the top item when they aren't.
-  - **Still to come:** the tracked flight on the globe, Home control's real states, and measuring the cost on the owner's Mac.
+  - **Cost (2026-11-14, #192):** engaged at rest, Aegis used about 28% of a core (an optimised build, synthetic data; 27% measured on the owner's Mac). Character art is now drawn straight from the face's glyphs on its cell grid instead of being laid out as styled text every frame, pixel-identical in every comparison, and the system orbit redraws only its turning ring: about 15%. The rest is the art's 12 fps animation and glow, kept as designed.
+  - **Still to come:** the tracked flight on the globe, Home control's real states, and cutting the cost further toward the 5% target.
 
 ## Stage 4 — Custom desktop widgets
 
