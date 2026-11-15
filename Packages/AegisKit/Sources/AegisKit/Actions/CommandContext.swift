@@ -77,8 +77,9 @@ public enum FollowUp: Sendable, Equatable {
         let said = #"^(?:(?:no|nope|sorry|oh|ah)[,.!]?\s+)?(?:i (?:mean|meant|said|was asking for|asked for)|what i (?:meant|said) was)"#
             + #"[,:]?\s+(.+)$"#
         guard let thing = ActionCommand.capture(said, line) ?? ActionCommand.capture(#"^no,\s+(.+)$"#, line) else { return nil }
-        // "I said run the Music shortcut" stays whole: without "shortcut" it would open the Music app.
-        if CommandPlan.looksLikeCommand(thing) || ActionCommand.parse(thing, now: Date(), calendar: .current) != nil {
+        // "I said run the Music shortcut" stays whole: without "shortcut" it would open the Music app. Only a fixed command
+        // counts, so "I mean Make Coffee" is still the shortcut named that.
+        if ActionCommand.parse(thing, now: Date(), calendar: .current) != nil {
             return .instead(thing)
         }
         let bare = thing.replacingOccurrences(
@@ -157,8 +158,7 @@ public struct CommandContext: Sendable, Equatable {
             case let .openFile(path), let .automate(.finderReveal, path): return .run(.automate(.finderReveal, argument: path))
             default: return .say("That isn't a file or folder.")
             }
-        case let .instead(thing) where CommandPlan.looksLikeCommand(thing)
-            || ActionCommand.parse(thing, now: at, calendar: .current) != nil:
+        case let .instead(thing) where ActionCommand.parse(thing, now: at, calendar: .current) != nil:
             // "I said open Safari": a whole command of its own.
             return .ask(thing)
         case let .sameFor(thing), let .instead(thing):

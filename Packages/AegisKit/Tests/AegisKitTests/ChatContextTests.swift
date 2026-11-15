@@ -97,6 +97,7 @@ final class ChatContextTests: XCTestCase {
         let whole = FollowUp.parse("I said run the Music shortcut")
         XCTAssertEqual(whole, .instead("run the Music shortcut"), "kept whole, so it stays a shortcut")
         XCTAssertEqual(whole.map(misheard.resolve), .ask("run the Music shortcut"))
+        XCTAssertEqual(misheard.resolve(.instead("Make Coffee")), .ask("Run the Make Coffee shortcut."), "a name, not a command")
         let missing = CommandContext(words: "run the Synthetic shortcut", command: nil, target: "Synthetic", at: now)
         XCTAssertEqual(missing.resolve(.instead("Work")), .ask("run the Work shortcut"))
         let reminder = CommandContext(words: "remind me to call the bank", command: nil, at: now)

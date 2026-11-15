@@ -49,6 +49,11 @@ final class ChatContextCommandTests: XCTestCase {
         XCTAssertFalse(core.requests.contains("ask"), "never handed to the model")
     }
 
+    func testARequestNothingCouldDoIsAskedInstead() async throws {
+        let answer = try await model().actionAnswer("crank it up and make it brighter")
+        XCTAssertNil(answer, "no “I can't do any of that”: it goes on as a question")
+    }
+
     func testAgainAfterAFixedAnswerIsNotTheCommandBefore() async throws {
         let model = try model()
         _ = await model.worldAnswer("run the Work shortcut")

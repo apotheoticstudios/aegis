@@ -25,18 +25,22 @@ final class ChatUnderstandingTests: XCTestCase {
         for (said, meant) in cases {
             XCTAssertEqual(Chat.request(said, name: "Friday"), meant, said)
         }
-        for said in ["Yes, add it", "No, Example Dev", "Cool, thanks", "Sweet.", "Friday Dev shortcut", "and tomorrow?", "thanks"] {
+        for said in [
+            "Yes, add it", "No, Example Dev", "Cool, thanks", "Sweet.", "Friday Dev shortcut", "and tomorrow?", "thanks",
+            "run Backup Friday", "Ask Claude to explain the money I lent to Friday", "Remember that my assistant is Friday",
+        ] {
             XCTAssertEqual(Chat.request(said, name: "Friday"), said, "left as said: \(said)")
         }
     }
 
     func testFillerIsNeverTheTopic() throws {
         let now = try time("2026-10-07T15:00:00Z")
-        for phrase in ["Sweet. What have we got on today?", "What are we doing today, mate?", "Cool, what am I doing tomorrow?"] {
+        for phrase in ["What have we got on today?", "What are we doing today, mate?", "what am I doing tomorrow, guys?"] {
             let query = AskQuery(phrase, now: now, calendar: calendar)
             XCTAssertEqual(query.keywords, [], phrase)
             XCTAssertTrue(query.schedule, phrase)
         }
+        XCTAssertEqual(AskQuery("Read my messages about Nice", now: now, calendar: calendar).keywords, ["read", "messages", "nice"])
     }
 
     func testTheReportedQuestionReadsTodaysCalendar() async throws {
@@ -55,8 +59,10 @@ final class ChatUnderstandingTests: XCTestCase {
         try await store.ingest(CollectionBatch(
             source: .calendar, status: .init(ok: true, code: .ok), events: [], occurrences: [standup], reminders: [], checkpoint: nil
         ))
+        // As the panel asks it: without the lead-in.
         let input = try await Ask.prepare(
-            question: "Sweet. What have we got on today?", now: now, calendar: calendar, store: store, contacts: nil
+            question: Chat.request("Sweet. What have we got on today?", name: "Friday"), now: now, calendar: calendar, store: store,
+            contacts: nil
         )
         XCTAssertEqual(input.scheduleIDs.count, 1, "today's plan")
         XCTAssertEqual(input.eventIDs, [], "a message that says “sweet” isn't what was asked about")
@@ -68,11 +74,11 @@ final class ChatUnderstandingTests: XCTestCase {
             "make it louder",
             "I want to listen to some music",
             "let's play some jazz",
-            "get me to the airport",
+            "crank it up",
         ] {
             XCTAssertTrue(CommandPlan.looksLikeCommand(line), line)
         }
-        for line in ["what's on today", "who texted me", "how do I make pancakes"] {
+        for line in ["what's on today", "who texted me", "how do I make pancakes", "show my calendar", "find messages about the dentist"] {
             XCTAssertFalse(CommandPlan.looksLikeCommand(line), line)
         }
         let now = Date(timeIntervalSince1970: 1_800_000_000)

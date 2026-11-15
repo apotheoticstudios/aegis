@@ -45,9 +45,11 @@ extension PanelModel {
             ))
         }
         let skipped = left.isEmpty ? "" : " I'll leave out " + left.joined(separator: " and ") + ": I can't do that."
+        // Nothing in it could be done (#203): asked as a question instead ("show my calendar and find the dentist").
+        guard !steps.isEmpty else { return nil }
         guard let first = steps.compactMap(\.request).first else {
             // Only messages: each asks on its own card anyway.
-            return await Self.said(steps.isEmpty ? "I can't do any of that." : runPlan(steps) + skipped)
+            return await Self.said(runPlan(steps) + skipped)
         }
         for step in steps {
             if let request = step.request {
