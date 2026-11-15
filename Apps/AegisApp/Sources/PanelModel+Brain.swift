@@ -52,6 +52,14 @@ extension PanelModel {
             remember(Exchange(question: trimmed, answer: world, failure: nil))
             return ""
         }
+        // The Performance Monitor answers from this Mac's own readings, whichever brain is chosen.
+        if SystemReading.asksWhySlow(trimmed) {
+            let answer = await systemAnswer()
+            guard isCurrentQuestion(id) else { return "" }
+            askState = .answered(question: trimmed, answer: answer)
+            remember(Exchange(question: trimmed, answer: answer, failure: nil))
+            return ""
+        }
         let claude = Self.claudeFor([]) && !ClaudeBrain.staysLocal(trimmed, now: Date(), calendar: .current)
         if claude, let spoken = await brainAnswer(trimmed, id: id, speak: speak) {
             return spoken
@@ -75,6 +83,17 @@ extension PanelModel {
             fail(trimmed, BriefPresentation.askMessage("bad_reply"))
         }
         return ""
+    }
+
+    /// "Why is my Mac slow?": two readings a second apart, so each app's processor share is real.
+    func systemAnswer() async -> Answer {
+        let reading = await Task.detached(priority: .userInitiated) {
+            var reader = SystemReader()
+            _ = reader.read(processes: true)
+            try? await Task.sleep(for: .seconds(1))
+            return reader.read(processes: true)
+        }.value
+        return Answer(text: reading.diagnosis, eventIDs: [], scheduleIDs: [], model: "system", generatedAt: Date())
     }
 
     /// Meeting prep (#184): recent contact with an event's attendees, shown in the conversation like an answer.

@@ -73,6 +73,10 @@ public enum ActionCommand: Sendable, Equatable {
         if let other = followUp(line, now: now, calendar: calendar) {
             return other
         }
+        // "Quit Chrome": a running app, which asks about unsaved work itself ("quit it" is a follow-up).
+        if let name = capture(#"^quit\s+(?:the\s+)?(.+?)(?:\s+app)?$"#, line), !["it", "that", "this", "them"].contains(name.lowercased()) {
+            return .quitApp(name: name)
+        }
         if let rest = capture(
             #"^(?:remind me(?: to)?|set (?:a|an) reminder(?: to)?|add (?:a )?reminder(?: to)?|reminder:?)\s+(.+)$"#,
             line

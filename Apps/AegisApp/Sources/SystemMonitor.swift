@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import IOKit
+import IOKit.ps
 
 /// The Mac's own readings for the SYSTEM and HOME screens: processor, memory, disk, network and graphics load, and
 /// Aegis's processes. Sampled once a second only while one of those screens shows; counts and rates only, kept in
@@ -60,11 +61,20 @@ struct SystemReading: Sendable {
         let load: Double
     }
 
+    /// One app (its helper processes counted with it) or one other process.
     struct Process: Sendable {
         let name: String
+        /// Processor time per second: 1 is one core in full use.
         let cpu: Double
         let memory: UInt64
         let aegis: Bool
+        /// An app the owner could quit, rather than part of macOS.
+        var app = false
+    }
+
+    struct Battery: Sendable, Equatable {
+        let level: Double
+        let charging: Bool
     }
 
     var cores: [Core] = []
@@ -83,6 +93,10 @@ struct SystemReading: Sendable {
     var processes: [Process] = []
     /// The local model's memory while ModelService is loaded; nil when it has exited.
     var modelMemory: UInt64?
+    /// The other app or process using the most memory.
+    var heaviest: Process?
+    /// Nil on a Mac without a battery.
+    var battery: Battery?
 }
 
 /// Reads the counters and keeps the previous ones, to turn totals into rates.
@@ -117,8 +131,14 @@ struct SystemReader: Sendable {
         if getloadavg(&averages, 3) > 0 {
             reading.load = averages[0]
         }
+        reading.battery = Self.battery()
         if listing {
-            (reading.processes, reading.modelMemory) = processes(seconds: seconds)
+            let (all, model) = processes(seconds: seconds)
+            let own = all.filter(\.aegis).sorted { $0.memory > $1.memory }
+            let others = all.filter { !$0.aegis }
+            reading.processes = Array((own + others.sorted { $0.cpu > $1.cpu }.prefix(max(0, 6 - own.count))).prefix(6))
+            reading.modelMemory = model
+            reading.heaviest = others.max { $0.memory < $1.memory }
         }
         return reading
     }
@@ -247,9 +267,25 @@ struct SystemReader: Sendable {
         return values.isEmpty ? nil : values
     }
 
+    /// The internal battery's charge and whether it's charging, from the power sources macOS reports.
+    private static func battery() -> SystemReading.Battery? {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef]
+        else { return nil }
+        for source in sources {
+            guard let found = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
+                  found[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
+                  let current = found[kIOPSCurrentCapacityKey] as? Int, let maximum = found[kIOPSMaxCapacityKey] as? Int, maximum > 0
+            else { continue }
+            return .init(level: Double(current) / Double(maximum), charging: found[kIOPSIsChargingKey] as? Bool ?? false)
+        }
+        return nil
+    }
+
     // MARK: Processes
 
-    /// Aegis's own processes, then the busiest others to make six, with their processor share and memory.
+    /// Every app (its helpers counted with it) and other process, and Aegis's own processes one by one, with their
+    /// processor share and memory; and the model's memory.
     private mutating func processes(seconds: Double) -> ([SystemReading.Process], UInt64?) {
         let bundle = Bundle.main.bundlePath
         var buffer = [pid_t](repeating: 0, count: 4096)
@@ -268,16 +304,27 @@ struct SystemReader: Sendable {
             let cpu = processTimes[pid].map { time > $0 ? Double(time - $0) / 1e9 / seconds : 0 } ?? 0
             let path = Self.path(pid)
             let aegis = path.hasPrefix(bundle)
-            let name = aegis ? URL(fileURLWithPath: path).lastPathComponent : Self.name(pid)
+            let app = aegis ? nil : Self.appName(path)
+            let name = aegis ? URL(fileURLWithPath: path).lastPathComponent : app ?? Self.name(pid)
             if aegis, name == "ModelService" {
                 model = usage.ri_phys_footprint
             }
-            rows.append(SystemReading.Process(name: name, cpu: cpu, memory: usage.ri_phys_footprint, aegis: aegis))
+            rows.append(SystemReading.Process(name: name, cpu: cpu, memory: usage.ri_phys_footprint, aegis: aegis, app: app != nil))
         }
         processTimes = times
-        let own = rows.filter(\.aegis).sorted { $0.memory > $1.memory }
-        let others = rows.filter { !$0.aegis }.sorted { $0.cpu > $1.cpu }.prefix(max(0, 6 - own.count))
-        return (Array((own + others).prefix(6)), model)
+        // An app's helpers (a browser's tabs, say) count as the app, as the owner thinks of it.
+        let grouped = Dictionary(grouping: rows, by: \.name).values.map { group in
+            SystemReading.Process(
+                name: group[0].name, cpu: group.map(\.cpu).reduce(0, +), memory: group.map(\.memory).reduce(0, +), aegis: group[0].aegis,
+                app: group[0].app
+            )
+        }
+        return (grouped, model)
+    }
+
+    /// The app a process belongs to: the outermost .app in its path ("Google Chrome" for its helpers), or nil.
+    static func appName(_ path: String) -> String? {
+        path.split(separator: "/").first { $0.hasSuffix(".app") }.map { String($0.dropLast(4)) }
     }
 
     private static func path(_ pid: pid_t) -> String {
@@ -308,5 +355,64 @@ struct SystemReader: Sendable {
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
         var buffer = [CChar](repeating: 0, count: size)
         return sysctlbyname(name, &buffer, &size, nil, 0) == 0 ? String(cString: buffer) : nil
+    }
+}
+
+// MARK: - "Why is my Mac slow?"
+
+/// The Performance Monitor's answer (DESIGN.md › Addons): what's straining the Mac right now, the app behind it, and the
+/// words to quit it. From one reading on this Mac; nothing leaves it.
+extension SystemReading {
+    /// Questions about the Mac being slow, hot or loud, or what's using it.
+    static func asksWhySlow(_ question: String) -> Bool {
+        question.range(
+            of: #"\b(?:mac|computer|laptop)\b.*\b(?:slow|sluggish|laggy|lagging|hot|loud|freezing|struggling)\b"#
+                + #"|\bwhat'?s (?:slowing|using|eating|hogging)\b|\bwhy is (?:it|everything) (?:so )?(?:slow|laggy)\b"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    var diagnosis: String {
+        let gigabyte = 1_073_741_824.0
+        let share = Double(memoryUsed) / Double(max(memoryTotal, 1))
+        let busiest = processes.filter { !$0.aegis }.max { $0.cpu < $1.cpu }
+        let ofProcessor = busiest.map { $0.cpu / Double(max(cores.count, 1)) } ?? 0
+        var strains: [String] = []
+        var culprit: Process?
+        if thermal == .serious || thermal == .critical {
+            strains.append("it's running hot, so macOS is slowing it down to cool off")
+        }
+        if cpu >= 0.6 {
+            if let busiest, ofProcessor >= 0.2 {
+                strains.append("\(busiest.name) is using \(Self.percent(ofProcessor)) of the processor")
+                culprit = busiest
+            } else {
+                strains.append("the processor is \(Self.percent(cpu)) busy")
+            }
+        }
+        if share >= 0.85 || (Double(swapUsed) >= 2 * gigabyte && share >= 0.7) {
+            let heavy = heaviest.flatMap { Double($0.memory) >= gigabyte ? $0 : nil }
+            strains
+                .append("memory is \(Self.percent(share)) full" + (heavy.map { ", with \($0.name) using \(Self.size($0.memory))" } ?? ""))
+            culprit = culprit ?? heavy
+        }
+        if diskTotal > 0, Double(diskTotal - min(diskUsed, diskTotal)) < Double(diskTotal) * 0.1 {
+            strains.append("the disk is nearly full, with \(Self.size(diskTotal - min(diskUsed, diskTotal))) free")
+        }
+        guard !strains.isEmpty else {
+            return "Nothing is straining your Mac right now: the processor is \(Self.percent(cpu)) busy and "
+                + "\(Self.size(memoryUsed)) of \(Self.size(memoryTotal)) of memory is in use. If it was slow a moment ago, it has passed."
+        }
+        let because = strains.count == 1 ? strains[0] : strains.dropLast().joined(separator: ", ") + " and " + strains[strains.count - 1]
+        let offer = culprit.flatMap { $0.app ? " Say “quit \($0.name)” to close it; it will ask about anything unsaved." : nil } ?? ""
+        return "Your Mac is slow because " + because + "." + offer
+    }
+
+    private static func percent(_ value: Double) -> String {
+        "\(Int((min(max(value, 0), 1) * 100).rounded()))%"
+    }
+
+    private static func size(_ bytes: UInt64) -> String {
+        String(format: "%.1f GB", Double(bytes) / 1_073_741_824)
     }
 }

@@ -95,8 +95,15 @@ struct SystemScreen: View {
                 )
                 Spacer(minLength: 0)
                 HUDRing(value: disk, label: "Disk", display: HUDFormat.percent(disk), tone: disk > 0.8 ? HUD.warn : HUD.primary)
+                if let battery = reading.battery {
+                    Spacer(minLength: 0)
+                    HUDRing(
+                        value: battery.level, label: battery.charging ? "Charging" : "Battery", display: HUDFormat.percent(battery.level),
+                        tone: battery.level < 0.2 && !battery.charging ? HUD.warn : HUD.primary
+                    )
+                }
             }
-            .frame(maxWidth: 560)
+            .frame(maxWidth: reading.battery == nil ? 560 : 740)
             .scaleEffect(0.72)
             .frame(height: 120)
         }
