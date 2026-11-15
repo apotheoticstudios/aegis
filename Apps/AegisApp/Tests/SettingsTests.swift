@@ -89,6 +89,29 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(model.last, "a reopened window starts with \u{201C}Changes save as you make them\u{201D}")
     }
 
+    /// Codex's review of #184: Personality's save (after the pause, or on leaving the page) keeps a valid change and
+    /// nothing else.
+    func testPersonalityKeepsOnlyAValidChange() async {
+        let core = KeptPersonality()
+        let model = PanelModel(service: core, actions: nil)
+        var chosen = model.personality
+        let unchanged = await PersonalityScreen.keep(chosen, in: model)
+        XCTAssertNil(unchanged, "no change, nothing sent")
+        chosen.style = .friendly
+        chosen.callOwner = "boss"
+        let saved = await PersonalityScreen.keep(chosen, in: model)
+        XCTAssertEqual(saved, true)
+        let kept = await core.kept
+        XCTAssertEqual(kept?.style, .friendly)
+        XCTAssertEqual(kept?.callOwner, "boss")
+        XCTAssertEqual(model.personality.style, .friendly)
+        chosen.name = "not a name 42"
+        let refused = await PersonalityScreen.keep(chosen, in: model)
+        XCTAssertNil(refused, "a name that doesn't fit is never sent")
+        let after = await core.kept
+        XCTAssertEqual(after?.name, kept?.name)
+    }
+
     func testMissingPermissionsCountRowsNotPermissions() {
         XCTAssertEqual(Permission.missing([:]), 3, "unknown counts as missing")
         let all = Dictionary(uniqueKeysWithValues: Permission.allCases.map { ($0, true) })
@@ -140,5 +163,19 @@ final class SettingsTests: XCTestCase {
         let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: rep)
         try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: file)
+    }
+}
+
+/// The sample core, keeping the personality it's given, as AegisCore does.
+private actor KeptPersonality: CoreService {
+    private let sample = SampleCoreService()
+    private(set) var kept: Personality?
+
+    func handle(_ request: CoreRequest) async -> CoreResponse {
+        if case let .setPersonality(personality) = request {
+            kept = personality
+            return .personality(personality)
+        }
+        return await sample.handle(request)
     }
 }

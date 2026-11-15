@@ -169,10 +169,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     /// Settings (#177), from the menu; Run setup again there closes it and opens the wizard.
     func showSettings() {
-        // The panel floats above ordinary windows, so it steps aside for Settings.
-        if panel.isVisible {
-            panel.toggle()
-        }
         let app = SetupApp(model: model, wake: wake, hotKey: hotKeyLabel, shellKey: ShellController.shared.hotKeyLabel)
         SettingsWindow.show(app) { [weak self] in self?.showSetup(again: true) }
     }

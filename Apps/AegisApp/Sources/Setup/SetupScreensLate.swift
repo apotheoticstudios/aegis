@@ -71,14 +71,21 @@ struct PersonalityScreen: View {
         // Saved through AegisCore a moment after the owner stops typing.
         .task(id: chosen) {
             try? await Task.sleep(for: .milliseconds(600))
-            guard loaded, !Task.isCancelled, let clean = chosen.cleaned, clean != model.personality else { return }
-            unsaved = await !model.savePersonality(clean)
+            guard loaded, !Task.isCancelled, let saved = await Self.keep(chosen, in: model) else { return }
+            unsaved = !saved
         }
         // Leaving the page within the pause still keeps the last change.
         .onDisappear {
-            guard loaded, let clean = chosen.cleaned, clean != model.personality else { return }
-            Task { [model] in _ = await model.savePersonality(clean) }
+            guard loaded else { return }
+            Task { [chosen, model] in _ = await Self.keep(chosen, in: model) }
         }
+    }
+
+    /// Saves a valid change through AegisCore: nil when there's nothing to save (it doesn't fit, or it's what's kept
+    /// already), otherwise whether AegisCore took it.
+    static func keep(_ chosen: Personality, in model: PanelModel) async -> Bool? {
+        guard let clean = chosen.cleaned, clean != model.personality else { return nil }
+        return await model.savePersonality(clean)
     }
 
     /// What Aegis calls the owner, each option holding the words themselves. One typed before in the old Personality

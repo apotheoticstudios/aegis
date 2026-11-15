@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// A floating panel that only the hotkey (⌥Space) closes; the hotkey and "Hey Aegis" open it. It stays up when
-/// another app becomes active.
+/// The panel, which only the hotkey (⌥Space) closes; the hotkey and "Hey Aegis" open it. It stays up when another app
+/// becomes active, among that app's windows rather than in front of them (owner's request).
 @MainActor
 final class BriefPanelController: NSObject, NSWindowDelegate {
     private let panel: HUDWindow
@@ -25,11 +25,9 @@ final class BriefPanelController: NSObject, NSWindowDelegate {
             styleMask: [.borderless, .resizable],
             backing: .buffered, defer: true
         )
-        panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         // On every Space, including over other full-screen apps.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.level = .floating
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
         // Clear outside the frame's cut corners; the shadow follows the frame's shape.

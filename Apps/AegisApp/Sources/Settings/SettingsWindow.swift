@@ -246,9 +246,12 @@ struct SettingsView: View {
         } bottom: {
             SettingsFooter(model: model, close: close)
         }
-        .padding(HUD.space3)
+        // The HUD's frame is the window's edge, as the panel's is: inset by its stroke so the corner brackets draw whole,
+        // and clipped to its cut corners so no margin of ground shows round it.
+        .padding(HUD.strokeFrame)
         .frame(width: SetupWindow.size.width, height: SetupWindow.size.height)
         .background(HUDGround())
+        .clipShape(HUDCut(kind: .panel, cut: HUD.chamferLg))
         .hudType(.body)
         .foregroundStyle(HUD.ink)
         .environment(\.colorScheme, .dark)
