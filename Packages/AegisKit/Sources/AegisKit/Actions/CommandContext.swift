@@ -12,6 +12,8 @@ public enum FollowUp: Sendable, Equatable {
     case reveal
     /// The same words with the thing they named swapped for this.
     case sameFor(String)
+    /// "I mean X", "no, X", "I said X" (#203): the last command again, with X in place of what it named.
+    case instead(String)
 
     public static func parse(_ text: String) -> FollowUp? {
         let line = ActionCommand.cleaned(text).lowercased().replacingOccurrences(of: "’", with: "'")
@@ -64,7 +66,30 @@ public enum FollowUp: Sendable, Equatable {
             return .reveal
         }
         let same = #"^(?:and )?(?:do the same(?: thing)?|same(?: thing)?|do (?:it|that)) (?:for|with|to) (.+)$"#
-        return ActionCommand.capture(same, ActionCommand.cleaned(text)).map(FollowUp.sameFor)
+        if let thing = ActionCommand.capture(same, ActionCommand.cleaned(text)) {
+            return .sameFor(thing)
+        }
+        return corrected(ActionCommand.cleaned(text))
+    }
+
+    /// "I mean, Jarvis Dev", "no, the Work one", "I said Safari": what the owner meant instead. "No, thanks" isn't one.
+    private static func corrected(_ line: String) -> FollowUp? {
+        let said = #"^(?:(?:no|nope|sorry|oh|ah)[,.!]?\s+)?(?:i (?:mean|meant|said|was asking for|asked for)|what i (?:meant|said) was)"#
+            + #"[,:]?\s+(.+)$"#
+        guard let thing = ActionCommand.capture(said, line) ?? ActionCommand.capture(#"^no,\s+(.+)$"#, line) else { return nil }
+        // "I said run the Music shortcut" stays whole: without "shortcut" it would open the Music app.
+        if CommandPlan.looksLikeCommand(thing) || ActionCommand.parse(thing, now: Date(), calendar: .current) != nil {
+            return .instead(thing)
+        }
+        let bare = thing.replacingOccurrences(
+            of: #"^(?:the|my)\s+|\s+(?:one|shortcut|app|file|folder|site|website)$"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        let declined = #"^(?:thanks?|thank you|it'?s fine|that'?s fine|all good|never ?mind|forget it|don'?t|stop|leave it|nothing|"#
+            + #"not now|i'?m good|no worries|cancel|i don'?t know)\b"#
+        guard !bare.isEmpty, bare.range(of: declined, options: [.regularExpression, .caseInsensitive]) == nil else { return nil }
+        return .instead(bare)
     }
 }
 
@@ -132,7 +157,11 @@ public struct CommandContext: Sendable, Equatable {
             case let .openFile(path), let .automate(.finderReveal, path): return .run(.automate(.finderReveal, argument: path))
             default: return .say("That isn't a file or folder.")
             }
-        case let .sameFor(thing):
+        case let .instead(thing) where CommandPlan.looksLikeCommand(thing)
+            || ActionCommand.parse(thing, now: at, calendar: .current) != nil:
+            // "I said open Safari": a whole command of its own.
+            return .ask(thing)
+        case let .sameFor(thing), let .instead(thing):
             guard let target, let range = words.range(of: target, options: .caseInsensitive) else {
                 return .say("I'm not sure what to swap. Say it in full.")
             }

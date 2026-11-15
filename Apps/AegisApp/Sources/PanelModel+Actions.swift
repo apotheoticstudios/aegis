@@ -112,6 +112,9 @@ extension PanelModel {
             let more = await [resumePlan(after: pending.request.id), resumeSkill()].filter { !$0.isEmpty }.joined(separator: " ")
             return Self.said(more.isEmpty ? done : done + " " + more)
         }
+        if let fixed = await fixedAnswer(question) {
+            return fixed
+        }
         if let routine = await routineAnswer(question, origin: origin) {
             return routine
         }
@@ -131,11 +134,7 @@ extension PanelModel {
         case let .openApp(name):
             return await named(name, words: question, origin: origin)
         case let .runShortcut(name):
-            guard let shortcut = await Self.shortcut(named: name) else {
-                return Self.said("You don't have a shortcut called “\(name)”.")
-            }
-            note(question, .runShortcut(name: shortcut), target: name)
-            return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
+            return await shortcutAnswer(name, words: question, origin: origin)
         case let .findFile(name, reveal):
             let all = await Self.foundAll(name, reveal: reveal)
             guard let found = all.first else {
@@ -186,18 +185,27 @@ extension PanelModel {
         ActionPresence.shared.chattedSince = false
     }
 
-    /// "Open the other one", "the second one", "close it", "show it in Finder", "again", "do the same for X" (#49):
-    /// a follow-up to the owner's own last command, within the conversation's ten minutes. Each becomes a new request
-    /// through the policy, or the owner's own words asked again.
+    /// "Open the other one", "the second one", "close it", "show it in Finder", "again", "do the same for X" (#49) and
+    /// "I mean X" (#203): a follow-up to the owner's own last command, within the conversation's ten minutes. Each becomes
+    /// a new request through the policy, or the owner's own words asked again.
     func followUpAnswer(_ question: String, origin: ActionOrigin) async -> Answer? {
         let presence = ActionPresence.shared
-        guard let followUp = FollowUp.parse(question), let context = presence.context, context.isFresh(at: Date()),
-              followUp != .again || !presence.chattedSince
-        else { return nil }
+        guard let followUp = FollowUp.parse(question), let context = presence.context, context.isFresh(at: Date()) else { return nil }
+        let correcting = if case .instead = followUp {
+            true
+        } else {
+            false
+        }
+        // After a chat, "again" and "I mean X" belong to the chat (#49, #203).
+        guard !presence.chattedSince || (followUp != .again && !correcting) else { return nil }
         switch context.resolve(followUp) {
         case let .say(text):
             return Self.said(text)
         case let .ask(words):
+            // A card still waiting for the command being corrected gives way to the corrected one.
+            if correcting, let command = context.command, presence.pending?.command == command {
+                await cancelAction()
+            }
             return await actionAnswer(words, origin: origin) ?? Self.said("I couldn't do that one.")
         case let .run(command):
             // A card still waiting for the last command gives way to the one the owner picked now.
@@ -211,6 +219,49 @@ extension PanelModel {
             presence.context?.at = Date()
             // What the model picked asks first on every replay too (#59).
             return await Self.said(perform(command, origin: origin, guessed: context.guessed))
+        }
+    }
+
+    /// A bare "cancel" and requests about Aegis's own windows (#203): fixed answers, never a model reply, which once
+    /// claimed it had cleared the calendar.
+    private func fixedAnswer(_ question: String) async -> Answer? {
+        guard ActionReply.cancels(question) || SelfCommand.parse(question, name: personality.name) != nil else { return nil }
+        // Not a command to follow up: "again" next means this, not the command before it.
+        ActionPresence.shared.chattedSince = true
+        if ActionReply.cancels(question) {
+            guard ActionPresence.shared.pending != nil else { return Self.said("There's nothing to cancel.") }
+            await cancelAction()
+            return Self.said("Cancelled.")
+        }
+        switch SelfCommand.parse(question, name: personality.name) {
+        case .openPanel:
+            guard !HUDPresence.shared.open else { return Self.said("The panel's already open.") }
+            ShellController.shared.openPanel()
+            return Self.said("Opening the panel.")
+        case .closePanel:
+            return Self.said("Press your panel hotkey to close the panel.")
+        case .openSettings:
+            SettingsWindow.open()
+            return Self.said("Opening Settings.")
+        case nil:
+            return nil
+        }
+    }
+
+    /// "Run the X shortcut": the owner's shortcut as named, ignoring spaces and case; a misheard name ("Java's Dev" for
+    /// "JarvisDev", #203) is offered on a card, never run as heard.
+    private func shortcutAnswer(_ name: String, words: String, origin: ActionOrigin) async -> Answer {
+        switch await ShortcutName.match(name, in: Self.shortcutNames()) {
+        case let .same(shortcut):
+            note(words, .runShortcut(name: shortcut), target: name)
+            return await Self.said(ability(.runShortcut(name: shortcut), origin: origin))
+        case let .close(shortcut):
+            note(words, .runShortcut(name: shortcut), target: name, guessed: true)
+            return await Self.said(ability(.runShortcut(name: shortcut), origin: origin, guessed: true))
+        case nil:
+            // Kept so "I mean X" can correct the name.
+            note(words, nil, target: name)
+            return Self.said("You don't have a shortcut called “\(name)”.")
         }
     }
 
@@ -533,9 +584,10 @@ extension PanelModel {
         return Array(names)
     }
 
-    /// The owner's shortcut with this name, ignoring case.
+    /// The owner's shortcut with this name, ignoring case, spaces and punctuation ("Jarvis Dev" is "JarvisDev", #203).
     static func shortcut(named name: String) async -> String? {
-        await shortcutNames().first { $0.caseInsensitiveCompare(name) == .orderedSame }
+        guard case let .same(shortcut) = await ShortcutName.match(name, in: shortcutNames()) else { return nil }
+        return shortcut
     }
 
     // MARK: - EventKit
