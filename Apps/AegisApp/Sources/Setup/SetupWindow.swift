@@ -6,7 +6,25 @@ import SwiftUI
 @MainActor @Observable
 final class SetupModel {
     var wizard: SetupWizard {
-        didSet { save() }
+        didSet {
+            save()
+            startDownloads()
+        }
+    }
+
+    /// The models download in the background once the owner has chosen a brain (ADR-0030, #174): with Claude, only
+    /// the small fallback model, so the large one isn't fetched for nothing. `retry` (setup opening again) also
+    /// retries a download that failed; answer changes don't.
+    func startDownloads(retry: Bool = false) {
+        let state = ModelDownloads.shared.state
+        guard Self.mayDownload(wizard), state == .idle || retry && state != .downloading else { return }
+        ModelDownloads.shared.start()
+    }
+
+    /// Past the Brain step: which local model is needed is known.
+    static func mayDownload(_ wizard: SetupWizard) -> Bool {
+        guard let brain = wizard.steps.firstIndex(of: .brain) else { return true }
+        return wizard.position > brain
     }
 
     /// Laptop or desktop as this Mac reports it, before any correction: the Segmented marks it "detected".
@@ -112,8 +130,8 @@ enum SetupWindow {
             later: close
         ))
         window = created
-        // The models download in the background while the owner goes through the steps (ADR-0030).
-        ModelDownloads.shared.start()
+        // A setup resumed past the Brain step carries on downloading at once; otherwise it starts there.
+        setup.startDownloads(retry: true)
         HUDPresence.shared.setup = true
         NSApp.activate()
         created.center()

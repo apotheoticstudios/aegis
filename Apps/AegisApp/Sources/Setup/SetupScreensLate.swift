@@ -656,7 +656,8 @@ enum SetupText {
     }
 
     static func budget(_ wizard: SetupWizard) -> [Part] {
-        let model = Double(ModelChoice.forMemory(wizard.mac.memoryBytes).files.bytes + ModelFiles.meaning.bytes) / 1e9
+        let model = Double(Brain.model(for: Brain.current, memory: wizard.mac.memoryBytes).files.bytes + ModelFiles.meaning
+            .bytes) / 1e9
         let voice = Double(voiceBytes) / 1e9
         let app = max(0, Double(appBytes) / 1e9 - voice)
         let addons = addons.filter { wizard.answers[option: "addon." + $0.key].map { $0 == "on" } ?? ($0.key == "perf") }

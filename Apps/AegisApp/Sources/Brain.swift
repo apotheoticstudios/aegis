@@ -22,6 +22,11 @@ enum Brain: String, CaseIterable, Sendable {
         + "limits can be billed. Voice and \u{201C}Hey Aegis\u{201D} stay on this Mac, and your data and memory are stored "
         + "only here."
 
+    /// The local model setup counts for this brain (#174): with Claude, the small one as the offline fallback.
+    static func model(for brain: Brain, memory: UInt64) -> ModelChoice {
+        brain == .claude ? .small : .forMemory(memory)
+    }
+
     /// The sign-in check's result for the owner; nil when all is well.
     static func status(_ ending: ClaudeCodeRunner.Ending) -> String? {
         switch ending {
@@ -45,6 +50,10 @@ final class BrainSettings {
             Brain.current = brain
             // A running Claude job ends at once, and what it was told so far is forgotten.
             PanelModel.revokeBrain(forget: true)
+            // The model the new brain needs is fetched in the background if it's missing (#174).
+            if brain != oldValue {
+                ModelDownloads.shared.start()
+            }
         }
     }
 

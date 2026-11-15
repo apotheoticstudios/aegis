@@ -161,4 +161,41 @@ final class SetupTests: XCTestCase {
         settings.reads = Set(ClaudeTools.Category.allCases)
         settings.choice = .standard
     }
+
+    /// With Claude as the brain only the small model is fetched, as the offline fallback (#174); on this Mac, the
+    /// recorded model, which this never changes.
+    func testClaudeNeedsOnlyTheSmallModel() {
+        let big: UInt64 = 64_000_000_000
+        XCTAssertEqual(Brain.model(for: .claude, memory: big), .small)
+        XCTAssertEqual(Brain.model(for: .local, memory: big), .medium)
+        XCTAssertEqual(Brain.model(for: .local, memory: 16_000_000_000), .small)
+        Brain.current = .claude
+        XCTAssertEqual(ModelDownloads.needed, .small)
+        Brain.current = .local
+        XCTAssertEqual(ModelDownloads.needed, ModelChoice.current, "on this Mac, the recorded model")
+        Brain.current = .claude
+        var wizard = SetupWizard(mac: Self.sampleMac)
+        wizard.mac.memoryBytes = 36 << 30
+        let claudeModel = SetupText.budget(wizard).first?.gigabytes
+        Brain.current = .local
+        let localModel = SetupText.budget(wizard).first?.gigabytes
+        XCTAssertEqual(
+            claudeModel,
+            Double(ModelChoice.small.files.bytes + ModelFiles.meaning.bytes) / 1e9,
+            "the Storage step counts the small model"
+        )
+        XCTAssertEqual(localModel, Double(ModelChoice.medium.files.bytes + ModelFiles.meaning.bytes) / 1e9)
+    }
+
+    /// Setup waits until the Brain step is behind it before downloading, so a Claude choice skips the large model.
+    func testDownloadsWaitForTheBrainStep() {
+        var wizard = SetupWizard(mac: Self.sampleMac)
+        for step in [SetupStep.welcome, .mac, .brain] {
+            XCTAssertEqual(wizard.current, step)
+            XCTAssertFalse(SetupModel.mayDownload(wizard), "\(step)")
+            wizard.next()
+        }
+        XCTAssertEqual(wizard.current, .storage)
+        XCTAssertTrue(SetupModel.mayDownload(wizard))
+    }
 }
