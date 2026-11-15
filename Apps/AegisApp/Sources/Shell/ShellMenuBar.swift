@@ -395,7 +395,7 @@ struct ShellGlyph: View {
 }
 
 /// The menu under the bar's hexagon (the design system's ShellMenu), its own glass panel rather than a native menu: the
-/// emblem, name and status; the urgent item; the workspaces with their shortcuts; the launcher, the panel and Talk; the
+/// emblem, name and status; the urgent item; the workspaces with their shortcuts; the launcher, the panel, Settings and Talk; the
 /// privacy switches; and Disengage.
 struct ShellMenu: View {
     let shell: ShellController
@@ -440,6 +440,7 @@ struct ShellMenu: View {
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))
             row("Launcher", keys: shell.panelKey) { ShellLauncher.shared.open() }
             row("Open the panel", keys: nil) { shell.openPanel() }
+            row("Settings", keys: nil) { SettingsWindow.open() }
             row("Talk to \(shell.model?.personality.name ?? "Aegis")", keys: shell.talkKey) { shell.talk() }
             Text("Privacy").hudCaps(10, tracking: 0.2).foregroundStyle(HUD.primary)
                 .padding(EdgeInsets(top: 10, leading: 12, bottom: 4, trailing: 12))

@@ -41,6 +41,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published private(set) var hotKeyLabel: String?
     @Published private(set) var talkKeyLabel: String?
 
+    func applicationWillFinishLaunching(_: Notification) {
+        // The panel's gear and AegisShell's menu open Settings through this.
+        SettingsWindow.open = { [weak self] in self?.showSettings() }
+    }
+
     func applicationDidFinishLaunching(_: Notification) {
         DiagnosticLog.shared.startSession()
         if DiagnosticLog.shared.isEnabled {
@@ -164,6 +169,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     /// Settings (#177), from the menu; Run setup again there closes it and opens the wizard.
     func showSettings() {
+        // The panel floats above ordinary windows, so it steps aside for Settings.
+        if panel.isVisible {
+            panel.toggle()
+        }
         let app = SetupApp(model: model, wake: wake, hotKey: hotKeyLabel, shellKey: ShellController.shared.hotKeyLabel)
         SettingsWindow.show(app) { [weak self] in self?.showSetup(again: true) }
     }

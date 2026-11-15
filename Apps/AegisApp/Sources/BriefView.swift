@@ -132,6 +132,17 @@ struct HUDTopBar: View {
                 HUDTag(word: "Sample", tone: HUD.warn).help("Synthetic sample data, not your day")
             }
             HUDTag(word: status.word, tone: status.tone)
+            // A small gear rather than a plate, so the menu keeps its room.
+            Button { SettingsWindow.open() } label: {
+                Image(systemName: "gearshape").font(.system(size: 14, weight: .light)).foregroundStyle(HUD.inkMuted)
+                    .frame(width: 28, height: 28)
+                    .overlay(Rectangle().strokeBorder(HUD.frame, lineWidth: 1))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(",")
+            .help("Settings (⌘,)")
+            .accessibilityLabel("Settings")
         }
     }
 

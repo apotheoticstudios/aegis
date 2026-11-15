@@ -153,6 +153,8 @@ final class SettingsModel {
 enum SettingsWindow {
     private(set) static var window: NSWindow?
     static let model = SettingsModel()
+    /// Opens Settings with what it needs from the running app, for the panel and AegisShell's menu; set at launch.
+    static var open: () -> Void = {}
 
     /// Shows Settings (on `page`, if given); `runSetup` closes it and opens the wizard again. Each opening builds the
     /// window's content afresh, so the status, shortcuts and answers are current and no Undo outlives a closing.
