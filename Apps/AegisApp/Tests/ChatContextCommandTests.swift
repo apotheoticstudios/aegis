@@ -40,6 +40,15 @@ final class ChatContextCommandTests: XCTestCase {
         XCTAssertEqual(try file.load().count, 0)
     }
 
+    func testWhatIsSaidBeforeARequestDoesNotHideIt() async throws {
+        let model = try model()
+        await model.submit("Sweet. Open the panel")
+        guard case let .answered(question, answer) = model.askState else { return XCTFail("no answer") }
+        XCTAssertEqual(question, "Sweet. Open the panel", "shown as the owner said it")
+        XCTAssertEqual(answer.text, "The panel's already open.")
+        XCTAssertFalse(core.requests.contains("ask"), "never handed to the model")
+    }
+
     func testAgainAfterAFixedAnswerIsNotTheCommandBefore() async throws {
         let model = try model()
         _ = await model.worldAnswer("run the Work shortcut")

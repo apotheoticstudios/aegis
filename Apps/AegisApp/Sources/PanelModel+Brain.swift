@@ -46,14 +46,16 @@ extension PanelModel {
     /// already spoken while Claude wrote.
     @discardableResult
     func requestAnswer(_ trimmed: String, id: UUID, speak: Bool = false) async -> String {
-        if let world = await worldAnswer(trimmed) {
+        // "Sweet. What's on today?", "Jarvis, open Safari": read without the lead-in (#203); shown as the owner said it.
+        let asked = Chat.request(trimmed, name: personality.name)
+        if let world = await worldAnswer(asked) {
             guard isCurrentQuestion(id) else { return "" }
             askState = .answered(question: trimmed, answer: world)
             remember(Exchange(question: trimmed, answer: world, failure: nil))
             return ""
         }
         // The Performance Monitor answers from this Mac's own readings, whichever brain is chosen.
-        if SystemReading.asksWhySlow(trimmed) {
+        if SystemReading.asksWhySlow(asked) {
             let answer = await systemAnswer()
             guard isCurrentQuestion(id) else { return "" }
             askState = .answered(question: trimmed, answer: answer)
@@ -67,7 +69,7 @@ extension PanelModel {
         // With a Claude or OpenAI key saved, AegisCore may hand the question off (#223); never in place of Claude.
         let available = CloudKeys.availability
         let request: CoreRequest = available.providers.isEmpty || claude
-            ? .ask(question: trimmed) : .converse(question: trimmed, cloud: available)
+            ? .ask(question: asked) : .converse(question: asked, cloud: available)
         let response = await service.handle(request)
         guard isCurrentQuestion(id) else { return "" }
         switch response {

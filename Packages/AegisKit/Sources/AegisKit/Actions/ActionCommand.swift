@@ -97,7 +97,8 @@ public enum ActionCommand: Sendable, Equatable {
                 options: [.regularExpression, .caseInsensitive]
             )
             .replacingOccurrences(
-                of: #"^(?:please |can you |could you |would you )+"#,
+                of: #"^(?:please |can you |could you |would you |will you |can u |just |go ahead and |"#
+                    + #"i (?:want|need) you to |i'?d like you to )+"#,
                 with: "",
                 options: [.regularExpression, .caseInsensitive]
             )

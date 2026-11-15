@@ -58,7 +58,10 @@ public enum CommandPlan {
         let line = ActionCommand.cleaned(text)
         return line.count <= 160 && line.range(
             of: #"^(?:run|open|start|launch|go to|visit|take me to|pull up|bring up|load|play|turn|switch|kick off|begin|"#
-                + #"trigger|activate|set|put on|pause|resume|skip|reveal|mute|unmute|navigate|directions|get directions|louder|quieter)\b"#,
+                + #"trigger|activate|set|put on|pause|resume|skip|reveal|mute|unmute|navigate|directions|get directions|louder|quieter|"#
+                // Everyday ways of asking (#203): "fire up Spotify", "make it louder", "get me to the airport", "I want some music".
+                + #"fire up|get|show|find|make|put|close|quit|lower|raise|increase|decrease|crank|dim|"#
+                + #"i (?:want|wanna|need)|i'?d like|let'?s|lets)\b"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
     }

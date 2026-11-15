@@ -35,7 +35,10 @@ struct AskQuery {
     ]
 
     /// "What have I got on", "what's on", "anything coming up": the calendar, said the everyday way.
-    static let schedulePhrases = [" got on ", " have on ", " what s on ", " whats on ", " anything on ", " on for ", " coming up "]
+    static let schedulePhrases = [
+        " got on ", " have on ", " what s on ", " whats on ", " anything on ", " on for ", " coming up ", " am i doing ", " are we doing ",
+        " am i up to ", " are we up to ",
+    ]
 
     /// This weekend (the one under way, or the next to come), or the one after it.
     static func weekend(_ now: Date, next: Bool, calendar: Calendar) -> DateInterval? {
@@ -56,7 +59,9 @@ struct AskQuery {
         let text = " " + words.joined(separator: " ") + " "
         let stopText = "what when where who did does the about asked ask tell me my from with have has was were any there that this "
             + "and for are can could would should how why you your please today yesterday tomorrow morning tonight week last next days plans s"
+        // Conversation, not topics (#203): "Sweet. What are we doing today, mate?" asks about the calendar, not "sweet".
         let filler = " want wants wanted need needs say says said anything something anyone someone everything get got"
+            + " sweet cool nice great awesome okay alright mate thanks cheers just like actually really hey our ours doing going guys"
         let stop = Set((stopText + filler).split(separator: " ").map(String.init))
         var seen = Set<String>()
         keywords = words.filter { $0.count >= 3 && !stop.contains($0) && seen.insert($0).inserted }
