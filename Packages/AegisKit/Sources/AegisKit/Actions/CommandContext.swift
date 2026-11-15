@@ -77,6 +77,10 @@ public enum FollowUp: Sendable, Equatable {
         let said = #"^(?:(?:no|nope|sorry|oh|ah)[,.!]?\s+)?(?:i (?:mean|meant|said|was asking for|asked for)|what i (?:meant|said) was)"#
             + #"[,:]?\s+(.+)$"#
         guard let thing = ActionCommand.capture(said, line) ?? ActionCommand.capture(#"^no,\s+(.+)$"#, line) else { return nil }
+        // "I said run the Music shortcut" stays whole: without "shortcut" it would open the Music app.
+        if CommandPlan.looksLikeCommand(thing) || ActionCommand.parse(thing, now: Date(), calendar: .current) != nil {
+            return .instead(thing)
+        }
         let bare = thing.replacingOccurrences(
             of: #"^(?:the|my)\s+|\s+(?:one|shortcut|app|file|folder|site|website)$"#,
             with: "",

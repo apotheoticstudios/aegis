@@ -185,9 +185,9 @@ extension PanelModel {
         ActionPresence.shared.chattedSince = false
     }
 
-    /// "Open the other one", "the second one", "close it", "show it in Finder", "again", "do the same for X" (#49), "I mean X" (#203):
-    /// a follow-up to the owner's own last command, within the conversation's ten minutes. Each becomes a new request
-    /// through the policy, or the owner's own words asked again.
+    /// "Open the other one", "the second one", "close it", "show it in Finder", "again", "do the same for X" (#49) and
+    /// "I mean X" (#203): a follow-up to the owner's own last command, within the conversation's ten minutes. Each becomes
+    /// a new request through the policy, or the owner's own words asked again.
     func followUpAnswer(_ question: String, origin: ActionOrigin) async -> Answer? {
         let presence = ActionPresence.shared
         guard let followUp = FollowUp.parse(question), let context = presence.context, context.isFresh(at: Date()) else { return nil }
@@ -225,6 +225,9 @@ extension PanelModel {
     /// A bare "cancel" and requests about Aegis's own windows (#203): fixed answers, never a model reply, which once
     /// claimed it had cleared the calendar.
     private func fixedAnswer(_ question: String) async -> Answer? {
+        guard ActionReply.cancels(question) || SelfCommand.parse(question, name: personality.name) != nil else { return nil }
+        // Not a command to follow up: "again" next means this, not the command before it.
+        ActionPresence.shared.chattedSince = true
         if ActionReply.cancels(question) {
             guard ActionPresence.shared.pending != nil else { return Self.said("There's nothing to cancel.") }
             await cancelAction()

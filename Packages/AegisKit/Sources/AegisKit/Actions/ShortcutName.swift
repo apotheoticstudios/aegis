@@ -13,8 +13,13 @@ public enum ShortcutName {
     public static func match(_ said: String, in names: [String]) -> Match? {
         let key = folded(said)
         guard !key.isEmpty else { return nil }
-        let exact = names.first { $0.caseInsensitiveCompare(said) == .orderedSame }
-        if let same = exact ?? names.first(where: { folded($0) == key }) {
+        if let exact = names.first(where: { $0.caseInsensitiveCompare(said) == .orderedSame }) {
+            return .same(exact)
+        }
+        // "ExampleDev" and "Example-Dev" are both "Example Dev": never guessed between.
+        let same = names.filter { folded($0) == key }
+        guard same.count < 2 else { return nil }
+        if let same = same.first {
             return .same(same)
         }
         // About one letter in four may differ; two near names are too close to guess between.

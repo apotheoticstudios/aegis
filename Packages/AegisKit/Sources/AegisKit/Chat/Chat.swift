@@ -207,6 +207,16 @@ public enum Chat {
     /// passive ones ("has been cancelled") only after a request to act, since otherwise they may report a message.
     static func claimsAction(_ text: String, owner: String) -> Bool {
         let text = text.replacingOccurrences(of: "’", with: "'")
+            // Wording for the owner ("You could say: I'll cancel…", quotes) and hypotheticals ("if I set x…") claim nothing.
+            .replacingOccurrences(of: #"[“"][^”"\n]*[”"]"#, with: "\"\"", options: .regularExpression)
+            .replacingOccurrences(
+                of: #"\b(?:say|write|reply|text|put|try|something like)(?: something like)?:[^\n]*"#, with: ":",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(
+                of: #"\b(?:if|when|whenever|unless|suppose|say)\s+I\b[^,.;!?\n]*"#, with: "",
+                options: [.regularExpression, .caseInsensitive]
+            )
         func has(_ pattern: String) -> Bool {
             text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
         }
@@ -246,7 +256,12 @@ public enum Chat {
         // "Opening Safari now", "Open the panel for you", "Done.", "Consider it done".
         + start + #"(?:now )?(?:open|launch|run|start|pull|bring|cancel|clear|delet|remov|send|add|set|play|turn|switch)\w*"#
         + #"(?: [\w'-]+){0,4}? for you\b|"# + start + #"(?:opening|launching|running|cancell?ing|clearing|deleting|sending|pulling|"#
-        + #"bringing)\b(?: [\w'-]+){0,4}? now\b|"# + start + #"(?:all )?done(?=[.!,;]|\s*$| for you)|\bconsider it done\b"#
+        + #"bringing)\b(?: [\w'-]+){0,4}? now\b|"#
+        // "Opening Safari.", "Cancelling your 3pm.": a short sentence, so "Running a marathon takes training." isn't one.
+        + start + #"(?:opening|launching|running|cancell?ing|clearing|deleting|sending)(?: [\w'-]+){1,3}[.!]|"#
+        // "I'll open Safari now", "I'm running Work for you".
+        + #"\bI(?:'ll| will|'m going to|'m| am)? (?:just )?(?:open|run|launch|start|play|cancel|clear|delet|send|add|set|turn|switch|"#
+        + #"pull|bring)\w*(?: [\w'-]+){1,4}? (?:now|for you|right away)\b|"# + start + #"(?:all )?done(?=[.!,;]|\s*$| for you)|\bconsider it done\b"#
 
     /// "Noted", "I'll note that down", "I've made a note".
     private static let notedClaim = start + #"noted\b|\bI(?:'ve|'ll| have| will)?(?: (?:just|now|already|also))* "#
@@ -254,7 +269,7 @@ public enum Chat {
 
     /// "The command has been executed", "the events are now cleared from your calendar", "Cancelled."
     private static let passiveClaim = start + #"(?:cancell?ed|cleared|deleted|removed|opened|launched|sent|added|saved|executed)[.!,]|"#
-        + #"\b(?:has|have|had) (?:now |just |already )?been (?:executed|carried out|completed|done|"#
+        + #"(?:\b(?:has|have|had)|'s|'ve) (?:now |just |already )?been (?:executed|carried out|completed|done|"#
         + #"cancell?ed|cleared|deleted|removed|wiped|erased|opened|launched|run|started|sent|added|scheduled|saved|noted|booked|"#
         + #"set up|turned (?:on|off)|switched (?:on|off)|paid|ordered|moved|closed)\b|\b(?:is|are) now (?:cleared|deleted|removed|"#
         + #"cancell?ed|gone|open|opened|running|set|saved|off|on|done|booked|scheduled|sent|playing|closed)\b|"#

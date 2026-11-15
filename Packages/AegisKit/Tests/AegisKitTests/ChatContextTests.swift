@@ -8,10 +8,14 @@ final class ChatContextTests: XCTestCase {
     func testTheReportedRepliesNeverReachTheOwner() {
         let exchanges = [
             ("Open the panel", "Open the Panel for you, sir. I've got it pulling up now; looking good, isn't it?"),
-            ("I mean, Example Dev.", "Ah, you want to address the developer directly? Got it. I'll note that down for future reference."),
+            (
+                "I mean, Example Dev.",
+                "Ah, you want to address the developer directly? Got it. I'll note that down for future reference."
+            ),
             (
                 "Cancel",
-                "Understood, sir. The command to cancel has been executed; the scheduled events for Sunday are now cleared from your calendar."
+                "Understood, sir. The command to cancel has been executed; the scheduled events for Sunday are now cleared from "
+                    + "your calendar."
             ),
         ]
         for (owner, raw) in exchanges {
@@ -29,6 +33,8 @@ final class ChatContextTests: XCTestCase {
             ("clear my afternoon", "Cleared."), ("clear my afternoon", "I've cleared your afternoon."),
             ("delete it", "It's been deleted from your calendar."), ("remember the code", "Noted."),
             ("add milk to my list", "I'll add milk to your list."), ("turn off the lights", "I've turned the lights off."),
+            ("open Safari", "I'll open Safari now."), ("run Work", "I'll run Work now."), ("open Safari", "Opening Safari."),
+            ("cancel my 3pm", "It's been cancelled."),
         ]
         for (owner, reply) in claims {
             XCTAssertTrue(Chat.claimsAction(reply, owner: owner), reply)
@@ -47,6 +53,10 @@ final class ChatContextTests: XCTestCase {
             ("any ideas?", "I'm open to ideas. I'm not sure yet."),
             ("could you open it?", "I'd open it if I could, but I can't from here."),
             ("how long does bread take?", "Done right, a loaf takes about four hours."),
+            ("How would you solve it?", "If I set the variable to zero, the loop stops."),
+            ("help me word a text cancelling my booking", "You could say: I'll cancel the booking tomorrow, sorry for the short notice."),
+            ("what should I tell them", "Tell them “I've cancelled it” and leave it there."),
+            ("how do I train for a marathon", "Running a marathon takes about four months of training."),
         ]
         for (owner, reply) in fine {
             XCTAssertFalse(Chat.claimsAction(reply, owner: owner), reply)
@@ -62,6 +72,7 @@ final class ChatContextTests: XCTestCase {
         XCTAssertNil(ShortcutName.match("Synthetic", in: names))
         XCTAssertNil(ShortcutName.match("Report 3", in: ["Report 1", "Report 2"]), "two near names are too close to guess")
         XCTAssertEqual(ShortcutName.match("Example Dev", in: ["Example Dev", "ExampleDev"]), .same("Example Dev"), "exact first")
+        XCTAssertNil(ShortcutName.match("Example dev", in: ["ExampleDev", "Example-Dev"]), "never guessed between two of the same")
     }
 
     func testCorrectionsReplayTheLastCommand() {
@@ -83,6 +94,9 @@ final class ChatContextTests: XCTestCase {
         )
         XCTAssertEqual(misheard.resolve(.instead("Example Dev")), .ask("Run the Example Dev shortcut."))
         XCTAssertEqual(misheard.resolve(.instead("open Safari")), .ask("open Safari"), "a whole command stands on its own")
+        let whole = FollowUp.parse("I said run the Music shortcut")
+        XCTAssertEqual(whole, .instead("run the Music shortcut"), "kept whole, so it stays a shortcut")
+        XCTAssertEqual(whole.map(misheard.resolve), .ask("run the Music shortcut"))
         let missing = CommandContext(words: "run the Synthetic shortcut", command: nil, target: "Synthetic", at: now)
         XCTAssertEqual(missing.resolve(.instead("Work")), .ask("run the Work shortcut"))
         let reminder = CommandContext(words: "remind me to call the bank", command: nil, at: now)
