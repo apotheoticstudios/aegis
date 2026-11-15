@@ -10,7 +10,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
-| #203 | Everyday wording: lead-ins ("Sweet.", "Jarvis,") and filler never become the topic; more ways of asking reach the command picker | agent:claude | claude/203-chat-understanding | In review |
+| #203 | Everyday wording: lead-ins ("Sweet.", "Jarvis,") and filler never become the topic; more ways of asking reach the command picker | agent:claude | merged | Merged (#206), installed; needs the owner's first real try |
 | #203 | Chat in context: no claimed actions (opened, noted, cancelled, cleared…), "I mean X" corrections, shortcut names matched like speech (near ones offered), a bare "cancel", fixed answers about the panel | agent:claude | merged | Merged (#205), installed; needs the owner's first real try by voice |
 | #174 | Claude as the brain (ADR-0038): with Claude chosen, only the small local model is downloaded as the fallback; setup's downloads wait for the Brain step | agent:claude | claude/174-claude-small-model | In review |
 | #172 | Claude as the brain (ADR-0038), stage 5: questions, command planning, meeting prep and reply drafts on the chosen brain, streaming and spoken, with the local fallback said once | agent:claude | claude/172-brain-jobs | Merged (#173). Needs `claude auth login` on the Mac to try for real |
