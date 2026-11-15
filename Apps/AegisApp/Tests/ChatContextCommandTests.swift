@@ -50,7 +50,7 @@ final class ChatContextCommandTests: XCTestCase {
     }
 
     func testARequestNothingCouldDoIsAskedInstead() async throws {
-        let answer = try await model().actionAnswer("crank it up and make it brighter")
+        let answer = try await model().actionAnswer("make it brighter and make it warmer")
         XCTAssertNil(answer, "no “I can't do any of that”: it goes on as a question")
     }
 
