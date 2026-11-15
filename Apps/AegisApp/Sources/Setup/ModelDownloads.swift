@@ -26,14 +26,29 @@ final class ModelDownloads {
     /// Aegis's Models folder.
     static let folder = ModelChoice.aegisFolder?.appendingPathComponent("Models", isDirectory: true)
 
-    /// This Mac's local model: with Claude as the brain, only the small fallback (#174).
+    /// The local model this Mac needs (#174): with Claude as the brain, only the small one, which ModelService falls
+    /// back to when the recorded model isn't installed; otherwise the recorded one (the tune-up's, or the memory's).
+    /// The record itself is never changed here, so nothing points at a model that isn't there.
     static var needed: ModelChoice {
         Brain.current == .claude ? .small : .current
     }
 
-    /// Starts, or retries after a failure; does nothing while running.
-    func start(_ models: [ModelFiles] = [ModelDownloads.needed.files, .meaning]) {
-        Task { await fetch(models) }
+    private var again = false
+    private var loop: Task<Void, Never>?
+
+    /// Starts, or retries after a failure. Asked again while a fetch runs (the brain changed), it checks once more
+    /// when that fetch ends, so the latest brain's model is never missed. Never in tests.
+    func start() {
+        guard !WorldSidecar.isTestHost else { return }
+        again = true
+        guard loop == nil else { return }
+        loop = Task {
+            while again {
+                again = false
+                await fetch([Self.needed.files, .meaning])
+            }
+            loop = nil
+        }
     }
 
     /// Fetches what isn't in place yet; true once everything is, false if a file failed or a fetch is already running.

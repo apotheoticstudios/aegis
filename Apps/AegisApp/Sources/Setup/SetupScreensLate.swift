@@ -656,7 +656,7 @@ enum SetupText {
     }
 
     static func budget(_ wizard: SetupWizard) -> [Part] {
-        let model = Double(Brain.model(for: Brain.current, before: nil, memory: wizard.mac.memoryBytes).files.bytes + ModelFiles.meaning
+        let model = Double(Brain.model(for: Brain.current, memory: wizard.mac.memoryBytes).files.bytes + ModelFiles.meaning
             .bytes) / 1e9
         let voice = Double(voiceBytes) / 1e9
         let app = max(0, Double(appBytes) / 1e9 - voice)

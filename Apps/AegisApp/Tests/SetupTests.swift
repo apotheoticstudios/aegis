@@ -162,16 +162,18 @@ final class SetupTests: XCTestCase {
         settings.choice = .standard
     }
 
-    /// With Claude as the brain only the small model is fetched, as the offline fallback (#174); on this Mac, the model
-    /// it had before, else the one its memory runs.
+    /// With Claude as the brain only the small model is fetched, as the offline fallback (#174); on this Mac, the
+    /// recorded model, which this never changes.
     func testClaudeNeedsOnlyTheSmallModel() {
         let big: UInt64 = 64_000_000_000
-        XCTAssertEqual(Brain.model(for: .claude, before: .medium, memory: big), .small)
-        XCTAssertEqual(Brain.model(for: .local, before: .medium, memory: 16_000_000_000), .medium, "the tune-up's choice comes back")
-        XCTAssertEqual(Brain.model(for: .local, before: nil, memory: big), .medium)
-        XCTAssertEqual(Brain.model(for: .local, before: nil, memory: 16_000_000_000), .small)
+        XCTAssertEqual(Brain.model(for: .claude, memory: big), .small)
+        XCTAssertEqual(Brain.model(for: .local, memory: big), .medium)
+        XCTAssertEqual(Brain.model(for: .local, memory: 16_000_000_000), .small)
         Brain.current = .claude
         XCTAssertEqual(ModelDownloads.needed, .small)
+        Brain.current = .local
+        XCTAssertEqual(ModelDownloads.needed, ModelChoice.current, "on this Mac, the recorded model")
+        Brain.current = .claude
         var wizard = SetupWizard(mac: Self.sampleMac)
         wizard.mac.memoryBytes = 36 << 30
         let claudeModel = SetupText.budget(wizard).first?.gigabytes

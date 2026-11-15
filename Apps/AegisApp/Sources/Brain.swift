@@ -22,31 +22,9 @@ enum Brain: String, CaseIterable, Sendable {
         + "limits can be billed. Voice and \u{201C}Hey Aegis\u{201D} stay on this Mac, and your data and memory are stored "
         + "only here."
 
-    private static let localModelKey = "brainLocalModel"
-
-    /// The local model for this brain (#174): with Claude, the small one as the offline fallback; on this Mac, the one
-    /// it had before Claude was chosen (the tune-up's), else the one its memory runs.
-    static func model(for brain: Brain, before: ModelChoice?, memory: UInt64) -> ModelChoice {
-        brain == .claude ? .small : before ?? .forMemory(memory)
-    }
-
-    /// Fetches the brain's local model, then records it for AegisCore and ModelService's next start, as the tune-up
-    /// does, so nothing ever points at a missing model. Never in tests: no downloads, nothing written to the Mac.
-    /// shortcut: a fetch already running (setup's) makes this one return early without recording; switching again,
-    /// or the next setup run, records it.
-    @MainActor static func followModel(_ brain: Brain) {
-        guard !WorldSidecar.isTestHost, let folder = ModelChoice.aegisFolder else { return }
-        let current = ModelChoice.current
-        if brain == .claude, current != .small {
-            UserDefaults.aegis.set(current.name, forKey: localModelKey)
-        }
-        let before = [ModelChoice.small, .medium].first { $0.name == UserDefaults.aegis.string(forKey: localModelKey) }
-        let model = model(for: brain, before: before, memory: ProcessInfo.processInfo.physicalMemory)
-        guard model != current else { return }
-        Task {
-            guard await ModelDownloads.shared.fetch([model.files, .meaning]) else { return }
-            try? model.choose(in: folder)
-        }
+    /// The local model setup counts for this brain (#174): with Claude, the small one as the offline fallback.
+    static func model(for brain: Brain, memory: UInt64) -> ModelChoice {
+        brain == .claude ? .small : .forMemory(memory)
     }
 
     /// The sign-in check's result for the owner; nil when all is well.
@@ -72,8 +50,9 @@ final class BrainSettings {
             Brain.current = brain
             // A running Claude job ends at once, and what it was told so far is forgotten.
             PanelModel.revokeBrain(forget: true)
+            // The model the new brain needs is fetched in the background if it's missing (#174).
             if brain != oldValue {
-                Brain.followModel(brain)
+                ModelDownloads.shared.start()
             }
         }
     }

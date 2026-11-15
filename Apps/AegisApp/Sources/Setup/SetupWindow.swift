@@ -13,9 +13,11 @@ final class SetupModel {
     }
 
     /// The models download in the background once the owner has chosen a brain (ADR-0030, #174): with Claude, only
-    /// the small fallback model, so the large one isn't fetched for nothing. Never in tests.
-    func startDownloads() {
-        guard Self.mayDownload(wizard), ModelDownloads.shared.state == .idle, !WorldSidecar.isTestHost else { return }
+    /// the small fallback model, so the large one isn't fetched for nothing. `retry` (setup opening again) also
+    /// retries a download that failed; answer changes don't.
+    func startDownloads(retry: Bool = false) {
+        let state = ModelDownloads.shared.state
+        guard Self.mayDownload(wizard), state == .idle || retry && state != .downloading else { return }
         ModelDownloads.shared.start()
     }
 
@@ -129,7 +131,7 @@ enum SetupWindow {
         ))
         window = created
         // A setup resumed past the Brain step carries on downloading at once; otherwise it starts there.
-        setup.startDownloads()
+        setup.startDownloads(retry: true)
         HUDPresence.shared.setup = true
         NSApp.activate()
         created.center()
