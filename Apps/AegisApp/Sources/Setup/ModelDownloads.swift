@@ -26,8 +26,13 @@ final class ModelDownloads {
     /// Aegis's Models folder.
     static let folder = ModelChoice.aegisFolder?.appendingPathComponent("Models", isDirectory: true)
 
+    /// This Mac's local model: with Claude as the brain, only the small fallback (#174).
+    static var needed: ModelChoice {
+        Brain.current == .claude ? .small : .current
+    }
+
     /// Starts, or retries after a failure; does nothing while running.
-    func start(_ models: [ModelFiles] = [ModelChoice.current.files, .meaning]) {
+    func start(_ models: [ModelFiles] = [ModelDownloads.needed.files, .meaning]) {
         Task { await fetch(models) }
     }
 

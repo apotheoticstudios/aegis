@@ -161,4 +161,39 @@ final class SetupTests: XCTestCase {
         settings.reads = Set(ClaudeTools.Category.allCases)
         settings.choice = .standard
     }
+
+    /// With Claude as the brain only the small model is fetched, as the offline fallback (#174); on this Mac, the model
+    /// it had before, else the one its memory runs.
+    func testClaudeNeedsOnlyTheSmallModel() {
+        let big: UInt64 = 64_000_000_000
+        XCTAssertEqual(Brain.model(for: .claude, before: .medium, memory: big), .small)
+        XCTAssertEqual(Brain.model(for: .local, before: .medium, memory: 16_000_000_000), .medium, "the tune-up's choice comes back")
+        XCTAssertEqual(Brain.model(for: .local, before: nil, memory: big), .medium)
+        XCTAssertEqual(Brain.model(for: .local, before: nil, memory: 16_000_000_000), .small)
+        Brain.current = .claude
+        XCTAssertEqual(ModelDownloads.needed, .small)
+        var wizard = SetupWizard(mac: Self.sampleMac)
+        wizard.mac.memoryBytes = 36 << 30
+        let claudeModel = SetupText.budget(wizard).first?.gigabytes
+        Brain.current = .local
+        let localModel = SetupText.budget(wizard).first?.gigabytes
+        XCTAssertEqual(
+            claudeModel,
+            Double(ModelChoice.small.files.bytes + ModelFiles.meaning.bytes) / 1e9,
+            "the Storage step counts the small model"
+        )
+        XCTAssertEqual(localModel, Double(ModelChoice.medium.files.bytes + ModelFiles.meaning.bytes) / 1e9)
+    }
+
+    /// Setup waits until the Brain step is behind it before downloading, so a Claude choice skips the large model.
+    func testDownloadsWaitForTheBrainStep() {
+        var wizard = SetupWizard(mac: Self.sampleMac)
+        for step in [SetupStep.welcome, .mac, .brain] {
+            XCTAssertEqual(wizard.current, step)
+            XCTAssertFalse(SetupModel.mayDownload(wizard), "\(step)")
+            wizard.next()
+        }
+        XCTAssertEqual(wizard.current, .storage)
+        XCTAssertTrue(SetupModel.mayDownload(wizard))
+    }
 }
