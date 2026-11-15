@@ -401,4 +401,10 @@ public enum ActionReply {
         }
         return nil
     }
+
+    /// A bare "cancel" (#203): with nothing waiting it gets a plain answer, never a model reply that might claim a deletion.
+    public static func cancels(_ text: String) -> Bool {
+        ActionCommand.cleaned(text).lowercased()
+            .range(of: #"^(?:(?:no|ok|okay|oh),?\s+)?cancel$"#, options: .regularExpression) != nil
+    }
 }

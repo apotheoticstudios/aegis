@@ -24,8 +24,8 @@ public enum Chat {
     public static let maxReplyScalars = 5000
     /// Spoken when the model's reply can't be used.
     public static let fallback = "Sorry, I lost my train of thought there. Could you say that again?"
-    /// Spoken when the model claimed or promised an action Aegis can't take yet (#241), instead of the fallback.
-    public static let cannotAct = "I can't do that myself yet, sorry. I can help you word it, though."
+    /// Spoken when the model claimed or promised an action (#241, #203): conversation never acts.
+    public static let cannotAct = "I haven't done that: I can't from here. Try saying it as a command, like “open Safari”."
 
     /// The chat instructions with Aegis's identity and personality (#241).
     public static func systemPrompt(_ personality: Personality = .standard) -> String {
@@ -60,8 +60,7 @@ public enum Chat {
         for match in sentence.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
             guard let range = Range(match.range, in: text) else { continue }
             let piece = String(text[start ..< range.upperBound])
-            let unsafe = piece.contains("\u{1}")
-                || piece.range(of: claimedAction, options: [.regularExpression, .caseInsensitive]) != nil
+            let unsafe = piece.contains("\u{1}") || claimsAction(piece, owner: owner)
             guard !unsafe, text[..<range.upperBound].unicodeScalars.count <= maxReplyScalars else { break }
             end = range.upperBound
             start = range.upperBound
@@ -85,7 +84,7 @@ public enum Chat {
         if let text = check(named, owner: owner) {
             return text
         }
-        return named.range(of: claimedAction, options: [.regularExpression, .caseInsensitive]) != nil ? cannotAct : fallback
+        return claimsAction(named, owner: owner) ? cannotAct : fallback
     }
 
     /// Greetings and small talk go straight to conversation (no search of the owner's data).
@@ -106,9 +105,12 @@ public enum Chat {
         return text.range(of: actRequest, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
-    private static let actRequest = #"^\s*(?:(?:hey |ok |okay )?aegis,?\s+)?(?:(?:can|could|would|will) you\s+|please\s+)?"#
+    private static let actPrefix = #"^\s*(?:(?:hey |ok |okay )?aegis,?\s+)?(?:(?:can|could|would|will) you\s+|please\s+)?"#
+    private static let actRequest = actPrefix
         + #"(?:text|send|message|email|e-mail|call|ring|phone|book|order|buy|pay|remind me|set (?:a|an|up)|schedule|"#
         + #"reply to|tell|turn (?:on|off)|switch (?:on|off)|open|play|delete|move|add)\b"#
+    /// Commands that never change where a question is routed, only how a reply's claims are judged (#203).
+    private static let moreActs = #"(?:cancel|clear|run|launch|start|close|quit|remove|erase|wipe|mute|unmute|pause|lock|unlock)\b"#
 
     private static let smallTalk = [
         "hi", "hey", "hello", "yo", "hiya", "g'day", "gday", "good morning", "good afternoon", "good evening", "good night",
@@ -156,7 +158,7 @@ public enum Chat {
     /// The reply to speak, or nil when it can't be used: empty, raw record IDs, or a claim of an action Aegis
     /// can't take. Thinking tags are removed; an over-long reply is cut at a sentence.
     public static func check(_ raw: String, owner: String = "") -> String? {
-        guard !EventEvidence.exposesIdentity(raw), let text = cleaned(raw) else { return nil }
+        guard !EventEvidence.exposesIdentity(raw), let text = cleaned(raw), !claimsAction(text, owner: owner) else { return nil }
         return redacted(text, owner: owner)
     }
 
@@ -190,8 +192,7 @@ public enum Chat {
             text = String(text.dropFirst("Aegis:".count)).trimmingCharacters(in: .whitespaces)
         }
         guard !text.isEmpty,
-              text.range(of: #"\b(?:ev|cal|rem|occ)_[0-9a-f]{6,}"#, options: .regularExpression) == nil,
-              text.range(of: claimedAction, options: [.regularExpression, .caseInsensitive]) == nil
+              text.range(of: #"\b(?:ev|cal|rem|occ)_[0-9a-f]{6,}"#, options: .regularExpression) == nil
         else { return nil }
         guard text.unicodeScalars.count > maxReplyScalars else { return text }
         let cut = String(String.UnicodeScalarView(text.unicodeScalars.prefix(maxReplyScalars)))
@@ -201,9 +202,61 @@ public enum Chat {
         return cut + "…"
     }
 
-    private static let claimedAction = #"\bI(?:'ve| have)? (?:just )?(?:sent|texted|emailed|messaged|booked|scheduled|called|"#
-        + #"deleted|paid|bought|ordered|replied|forwarded|turned (?:on|off)|unlocked|locked)\b|"#
-        // Promises to act are as false as claims: Aegis can't do these yet.
-        + #"\bI(?:'ll| will) (?:go ahead and )?(?:send|text|email|message|book|schedule|call|pay|transfer|buy|order|reply|"#
-        + #"forward|delete|remind)\b"#
+    /// Whether a reply says Aegis did, is doing or will do something (#241, #203). Conversation never acts, so each is
+    /// false: first-person claims always; "noted" unless the owner told it a fact automatic memory reads (#282);
+    /// passive ones ("has been cancelled") only after a request to act, since otherwise they may report a message.
+    static func claimsAction(_ text: String, owner: String) -> Bool {
+        let text = text.replacingOccurrences(of: "’", with: "'")
+        func has(_ pattern: String) -> Bool {
+            text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        if has(claimedAction) {
+            return true
+        }
+        let asked = isRequestToAct(owner)
+            || owner.range(of: actPrefix + moreActs, options: [.regularExpression, .caseInsensitive]) != nil
+        // A correction ("I mean X") is worth reading by length, but holds no fact to learn.
+        if has(notedClaim), asked || !FactExtractor.worthReading(owner) || FollowUp.parse(owner) != nil {
+            return true
+        }
+        return asked && has(passiveClaim)
+    }
+
+    /// Each verb needs a form or an object that only an action has: "I call it…", "I'm reminded of…", "if I add 3…" and
+    /// "I'm playing it safe" are conversation.
+    private static let actVerbs = #"(?:sen[dt]|sending|text(?:ed|ing)?|e-?mail(?:ed|ing)?|messag(?:e|ed|ing)|book(?:ed|ing)?|"#
+        + #"schedul(?:e|ed|ing)|call(?:ed|ing)|call (?:them|him|her|your)|delet(?:e|ed|ing)|pa(?:y|id|ying)|b(?:uy|ought|uying)|"#
+        + #"order(?:ed|ing)?|repl(?:y|ied|ying)|forward(?:ed|ing)?|transfer(?:red|ring)?|remind(?:ing)? you|(?:un)?lock(?:ed|ing)?|"#
+        + #"(?:turn|switch)(?:ed|ing)? (?:(?:it|that|them|the \w+) )?(?:on|off)|open(?:ed|ing)|open (?:it|that|this|them|the|your|up)|"#
+        + #"launch(?:ed|ing)?|(?:ran|running|run) (?:it|that|this|the|your)|start(?:ed|ing) (?:it|that|this|the|your)|"#
+        + #"pull(?:ed|ing)? (?:(?:it|that|this|them|the \w+) )?up|br(?:ing|inging) (?:(?:it|that|this|them|the \w+) )?up|"#
+        + #"sav(?:ed|ing)|save (?:it|that|this|the|your)|added (?:it|that|this|them)|add(?:ed|ing)?(?: [\w'-]+){0,4}? to your|"#
+        + #"creat(?:ed|ing) (?:a|an|the|it|that|your)|set(?:ting)? (?:it|that|this|a|an|the|up|your)|cancel(?:l?ed|l?ing)?|"#
+        + #"clear(?:ed|ing)|clear (?:it|that|this|the|your|out)|remov(?:e|ed|ing)|wip(?:e|ed|ing)|eras(?:e|ed|ing)|execut(?:e|ed|ing)|"#
+        + #"clos(?:ed|ing) (?:it|that|this|the|your)|close (?:it|that|this|the|your)|quit(?:ting)?|play(?:ed|ing)? (?:your|some)|"#
+        + #"paus(?:e|ed|ing)|mov(?:ed|ing) (?:it|that|this|the|your)|move (?:it|that|this|the|your)|done (?:it|that|this))\b"#
+
+    /// Where a sentence starts.
+    private static let start = #"(?:^\s*|[.!?;:]\s+|\n\s*)"#
+
+    private static let claimedAction =
+        // "I've opened it", "I'm pulling it up", "I've got it pulling up", "I'll go ahead and cancel that".
+        #"\bI(?:'ve|'m|'ll| have| am| will)?(?: (?:just|now|already|also|quickly|successfully|go ahead and|gone ahead and|"#
+        + #"got (?:it|that|this|them)|been))* "# + actVerbs + "|"
+        // "Opening Safari now", "Open the panel for you", "Done.", "Consider it done".
+        + start + #"(?:now )?(?:open|launch|run|start|pull|bring|cancel|clear|delet|remov|send|add|set|play|turn|switch)\w*"#
+        + #"(?: [\w'-]+){0,4}? for you\b|"# + start + #"(?:opening|launching|running|cancell?ing|clearing|deleting|sending|pulling|"#
+        + #"bringing)\b(?: [\w'-]+){0,4}? now\b|"# + start + #"(?:all )?done(?=[.!,;]|\s*$| for you)|\bconsider it done\b"#
+
+    /// "Noted", "I'll note that down", "I've made a note".
+    private static let notedClaim = start + #"noted\b|\bI(?:'ve|'ll| have| will)?(?: (?:just|now|already|also))* "#
+        + #"(?:not(?:ed|ing)|note (?:it|that|this) down|jot(?:ted|ting)? (?:it|that|this) down|(?:made|make|making) a note)\b"#
+
+    /// "The command has been executed", "the events are now cleared from your calendar", "Cancelled."
+    private static let passiveClaim = start + #"(?:cancell?ed|cleared|deleted|removed|opened|launched|sent|added|saved|executed)[.!,]|"#
+        + #"\b(?:has|have|had) (?:now |just |already )?been (?:executed|carried out|completed|done|"#
+        + #"cancell?ed|cleared|deleted|removed|wiped|erased|opened|launched|run|started|sent|added|scheduled|saved|noted|booked|"#
+        + #"set up|turned (?:on|off)|switched (?:on|off)|paid|ordered|moved|closed)\b|\b(?:is|are) now (?:cleared|deleted|removed|"#
+        + #"cancell?ed|gone|open|opened|running|set|saved|off|on|done|booked|scheduled|sent|playing|closed)\b|"#
+        + #"\b(?:cleared|deleted|removed|wiped|erased) (?:from|off) your\b"#
 }
