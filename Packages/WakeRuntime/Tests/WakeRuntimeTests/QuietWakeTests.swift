@@ -27,21 +27,27 @@ final class QuietWakeTests: XCTestCase {
         XCTAssertFalse(wakes([Float](repeating: 0, count: 16000 * 10)), "Silence must never wake.")
         XCTAssertFalse(wakes(room(16000 * 30)), "A quiet room must never wake.")
         XCTAssertFalse(wakes(room(16000 * 30, level: 0.06)), "Loud steady noise (about -35 dBFS) must never wake.")
-        for voice in Self.voices {
-            let clip = try XCTUnwrap(Self.speech("Hey Jarvis", voice: voice), "The Mac's \(voice) voice is missing.")
-            let peak = clip.map(abs).max() ?? 1
-            // Peaks near -46 dBFS: a soft voice at a laptop microphone. Without the boost, Flo, Shelley and Grandpa
-            // are missed here while louder copies of the same clips wake.
-            let quiet = clip.map { $0 * 0.005 / peak }
-            var samples = [Float](repeating: 0, count: 16000) + quiet + [Float](repeating: 0, count: 16000)
+        // The clip scaled to a peak level, with a second of the room either side.
+        func spoken(_ clip: [Float], peak: Float) -> [Float] {
+            let scale = peak / (clip.map(abs).max() ?? 1)
+            var samples = [Float](repeating: 0, count: 16000) + clip.map { $0 * scale } + [Float](repeating: 0, count: 16000)
             for (index, noise) in room(samples.count).enumerated() {
                 samples[index] += noise
             }
-            XCTAssertTrue(wakes(samples), "A soft \"Hey Jarvis\" by \(voice) must wake.")
+            return samples
+        }
+        // Peaks near -46 dBFS: a soft voice at a laptop microphone. Without the boost, Flo, Shelley and Grandpa
+        // are missed here. Loud copies (-6 dBFS) must still wake, so the boost can't be too strong.
+        for voice in Self.voices {
+            let clip = try XCTUnwrap(Self.speech("Hey Jarvis", voice: voice), "The Mac's \(voice) voice is missing.")
+            XCTAssertTrue(wakes(spoken(clip, peak: 0.005)), "A soft \"Hey Jarvis\" by \(voice) must wake.")
+            XCTAssertTrue(wakes(spoken(clip, peak: 0.5)), "A loud \"Hey Jarvis\" by \(voice) must wake.")
         }
         for phrase in ["I told Jarvis about it", "Hey Travis", "Hey there. The jar is on the shelf."] {
             let clip = try XCTUnwrap(Self.speech(phrase, voice: "Samantha"))
-            XCTAssertFalse(wakes([Float](repeating: 0, count: 16000) + clip + room(16000)), "\"\(phrase)\" must not wake.")
+            for peak: Float in [0.005, 0.5] {
+                XCTAssertFalse(wakes(spoken(clip, peak: peak)), "\"\(phrase)\" at peak \(peak) must not wake.")
+            }
         }
     }
 

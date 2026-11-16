@@ -10,6 +10,7 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
+| #207 | "Hey Aegis" (or the chosen name) wakes at a normal speaking volume: a fixed 10× boost before the wake model, which scored normal-volume speech too low without the panel's voice processing | agent:claude | claude/207-quiet-wake | In review; needs the owner's first real try |
 | #203 | Everyday wording: lead-ins ("Sweet.", "Jarvis,") and filler never become the topic; more ways of asking reach the command picker | agent:claude | merged | Merged (#206), installed; needs the owner's first real try |
 | #203 | Chat in context: no claimed actions (opened, noted, cancelled, cleared…), "I mean X" corrections, shortcut names matched like speech (near ones offered), a bare "cancel", fixed answers about the panel | agent:claude | merged | Merged (#205), installed; needs the owner's first real try by voice |
 | #174 | Claude as the brain (ADR-0038): with Claude chosen, only the small local model is downloaded as the fallback; setup's downloads wait for the Brain step | agent:claude | claude/174-claude-small-model | In review |

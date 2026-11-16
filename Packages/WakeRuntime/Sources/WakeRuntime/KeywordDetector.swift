@@ -6,8 +6,11 @@ import SherpaOnnxC
 public final class KeywordDetector {
     /// The wake microphone runs without voice processing, so speech at a normal volume reaches the model far quieter
     /// than the speech it was trained on, and the keyword scored too low unless the owner raised their voice (#207).
-    /// A fixed boost moves normal speech into range. Loud input stays safe: samples remain floats, nothing clips,
-    /// and the model scores loud speech as before. Silence stays silent and room noise keeps its distance below speech.
+    /// A fixed boost moves normal speech into range. Speech and noise rise together, so silence stays silent and the
+    /// gap between them is unchanged; on synthetic tests loud speech still wakes and noise never does. Distant speech
+    /// (a TV) also gets easier to hear, which synthetic tests can't fully rule out. An adaptive gain did worse: it
+    /// lifted the pauses before speech above the noise within it. Samples stay floats, so nothing clips.
+    /// shortcut: sherpa-onnx documents input as [-1, 1] but v1.13.8 passes larger floats through; recheck on upgrade.
     static let inputGain: Float = 10
 
     private let spotter: OpaquePointer
