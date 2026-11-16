@@ -4,6 +4,12 @@ import SherpaOnnxC
 /// A local, wake-keyword detector. It exposes only a wake match, never arbitrary speech text.
 /// Confine an instance to one serial worker; no microphone, files, logs or network are used after initialization.
 public final class KeywordDetector {
+    /// The wake microphone runs without voice processing, so speech at a normal volume reaches the model far quieter
+    /// than the speech it was trained on, and the keyword scored too low unless the owner raised their voice (#207).
+    /// A fixed boost moves normal speech into range. Loud input stays safe: samples remain floats, nothing clips,
+    /// and the model scores loud speech as before. Silence stays silent and room noise keeps its distance below speech.
+    static let inputGain: Float = 10
+
     private let spotter: OpaquePointer
     private var stream: OpaquePointer
 
@@ -52,7 +58,7 @@ public final class KeywordDetector {
     /// Consumes a short mono PCM chunk in memory and returns only whether the configured keyword occurred.
     public func accept(_ samples: [Float], sampleRate: Int) -> Bool {
         guard (8000 ... 192_000).contains(sampleRate), !samples.isEmpty, samples.count <= sampleRate else { return false }
-        SherpaOnnxOnlineStreamAcceptWaveform(stream, Int32(sampleRate), samples, Int32(samples.count))
+        SherpaOnnxOnlineStreamAcceptWaveform(stream, Int32(sampleRate), samples.map { $0 * Self.inputGain }, Int32(samples.count))
         while SherpaOnnxIsKeywordStreamReady(spotter, stream) != 0 {
             SherpaOnnxDecodeKeywordStream(spotter, stream)
             guard let result = SherpaOnnxGetKeywordResult(spotter, stream) else { continue }

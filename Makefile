@@ -69,6 +69,7 @@ clean:
 test-voice:
 	cd Packages/VoiceRuntime && swift test
 
-# Pure keyword-runtime checks; optional synthetic inference benchmark uses packaged public models.
+# Keyword-runtime checks with synthetic speech and noise on the pinned public model (packaged into build/, never real audio).
 test-wake:
-	cd Packages/WakeRuntime && swift test
+	./scripts/package-wake-model.sh build/WakeTest
+	cd Packages/WakeRuntime && AEGIS_TEST_WAKE_MODEL_DIR="$(CURDIR)/build/WakeTest/WakeModels" swift test
