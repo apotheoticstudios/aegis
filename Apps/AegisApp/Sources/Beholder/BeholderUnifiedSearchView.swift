@@ -4,7 +4,6 @@ struct BeholderUnifiedSearchView: View {
     private enum Section { case saved, alternate, publicLookups }
 
     let research: BeholderModel
-    let onSources: () -> Void
     let onOpenPerson: (UUID) -> Void
     let onReview: (BeholderPeopleView.Target) -> Void
 
@@ -20,10 +19,14 @@ struct BeholderUnifiedSearchView: View {
                     prompt: "find >", text: $search.query,
                     placeholder: "Name, @username, email, phone or IP address", hint: "⏎ search"
                 )
-                .onSubmit { search.prepare() }
+                .onSubmit { search.run(in: research) }
                 .accessibilityLabel("Unified research search")
-                Button("Search") { search.prepare() }
+                Button("Search") { search.run(in: research) }
                     .buttonStyle(HUDPlateStyle(kind: .primary)).disabled(!search.canPrepare)
+                if research.searching || research.githubDiscovery.searching {
+                    Button("Stop") { research.stopLookup(); research.githubDiscovery.stop() }
+                        .buttonStyle(HUDPlateStyle(kind: .critical))
+                }
             }
             HStack(spacing: HUD.space3) {
                 Menu {
@@ -50,6 +53,12 @@ struct BeholderUnifiedSearchView: View {
                 }
                 Spacer(minLength: 0)
             }
+            Text(search.requestSummary).hudType(.caption).foregroundStyle(HUD.inkMuted)
+            if search.canPrepare, search.kind != .phone, search.kind != .ip {
+                DisclosureGroup("Search destinations") {
+                    ScrollView { VStack(alignment: .leading, spacing: HUD.space2) { destinations } }.frame(height: 120)
+                }
+            }
             if let problem = search.problem ?? search.inputHint {
                 Text(problem).hudType(.caption).foregroundStyle(HUD.warn)
             }
@@ -58,9 +67,9 @@ struct BeholderUnifiedSearchView: View {
             } else {
                 VStack(alignment: .leading, spacing: HUD.space3) {
                     Text("Start with what you know.").hudType(.bodyStrong)
-                    Text("Enter an identifier above. Search checks saved evidence and prepares the relevant public lookup options.")
+                    Text("Enter an identifier above. Search checks saved evidence and retrieves matching public profiles.")
                         .hudType(.caption).foregroundStyle(HUD.inkMuted)
-                    Text("Public checks show their destinations before you run them.").hudType(.caption)
+                    Text("Results appear here with their sources and matching evidence.").hudType(.caption)
                         .foregroundStyle(HUD.inkMuted)
                 }
             }
@@ -74,17 +83,20 @@ struct BeholderUnifiedSearchView: View {
         return ScrollViewReader { proxy in
             if input.kind != .ip {
                 HStack {
+                    Button("Search results") { proxy.scrollTo(Section.publicLookups, anchor: .top) }
                     Button((alternate == nil ? "Saved matches · " : "As username · ") + count(saved)) {
                         proxy.scrollTo(Section.saved, anchor: .top)
                     }
                     if let alternate {
                         Button("As name · " + count(alternate)) { proxy.scrollTo(Section.alternate, anchor: .top) }
                     }
-                    Button("Public lookups") { proxy.scrollTo(Section.publicLookups, anchor: .top) }
                 }.buttonStyle(HUDChipStyle()).frame(maxWidth: .infinity, alignment: .leading)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: HUD.space4) {
+                    if input.kind != .ip {
+                        publicLookups(input).id(Section.publicLookups)
+                    }
                     BeholderLocalResultsView(
                         report: saved, ip: search.ip, kind: input.kind, onOpenPerson: onOpenPerson, onReview: onReview
                     ).id(Section.saved)
@@ -101,12 +113,9 @@ struct BeholderUnifiedSearchView: View {
                             )
                         }.id(Section.alternate)
                     }
-                    if input.kind != .ip {
-                        publicLookups(input).id(Section.publicLookups)
-                    }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, HUD.space2)
             }
-            .onChange(of: input) { proxy.scrollTo(Section.saved, anchor: .top) }
+            .onChange(of: input) { proxy.scrollTo(input.kind == .ip ? Section.saved : .publicLookups, anchor: .top) }
         }
     }
 
@@ -116,73 +125,49 @@ struct BeholderUnifiedSearchView: View {
         return "\(people) \(people == 1 ? "person" : "people") · \(accounts) \(accounts == 1 ? "account" : "accounts")"
     }
 
-    private func publicLookups(_ input: BeholderPublicSearch.Input) -> some View {
-        VStack(alignment: .leading, spacing: HUD.space4) {
-            if input.kind == .username {
-                profiles(input)
-            } else if input.kind == .name || input.kind == .email {
-                Text("PUBLIC GITHUB DISCOVERY").hudType(.data)
-                if research.githubDiscovery.prepared == nil {
-                    Button("Prepare GitHub search") { search.chooseGitHub() }.buttonStyle(HUDChipStyle())
-                    if let problem = research.githubDiscovery.problem {
-                        Text(problem.message).hudType(.caption).foregroundStyle(HUD.warn)
-                    }
-                } else {
-                    BeholderGitHubDiscoveryView(
-                        discovery: research.githubDiscovery, research: research, embedded: true, onReview: onReview
-                    )
+    @ViewBuilder private var destinations: some View {
+        if search.kind == .username, let name = BeholderCaseSearch.username(search.query) {
+            ForEach(BeholderProvider.automaticSources) { provider in
+                if let url = provider.endpoint(name) {
+                    Text(provider.title + " · " + url.absoluteString).hudType(.caption).textSelection(.enabled)
                 }
             }
-            BeholderPublicSearchView(input: input, ownerTyped: true)
-        }
-    }
-
-    private func profiles(_ input: BeholderPublicSearch.Input) -> some View {
-        VStack(alignment: .leading, spacing: HUD.space3) {
-            Text("PUBLIC PROFILE CHECKS").hudType(.data)
-            Button("Sources · " + BeholderSources.summary(research.selected), action: onSources).buttonStyle(HUDChipStyle())
-            Text(profileSummary(input))
+            Text("The supported sources receive this username, your IP address and app request metadata.")
                 .hudType(.caption).foregroundStyle(HUD.inkMuted)
-            DisclosureGroup("Preview selected destinations") {
-                ForEach(research.providers) { provider in
-                    if let name = BeholderCaseSearch.username(input.value), let url = provider.endpoint(name) {
-                        Text(provider.title + " · " + url.absoluteString).hudType(.caption).textSelection(.enabled)
-                    }
-                }
-                Text("Manual source links open in your browser only when you choose them.").hudType(.caption)
-            }
-            if research.searching {
-                Button("Stop checks") { research.stopLookup() }.buttonStyle(HUDChipStyle(muted: true))
-            } else {
-                Button("Search selected profiles") { search.searchProfiles(in: research) }
-                    .buttonStyle(HUDChipStyle()).disabled(research.providers.isEmpty)
-            }
-            if search.profileQuery == research.username, search.profileQuery != nil {
-                if let problem = research.problem {
-                    Text(problem).hudType(.caption).foregroundStyle(HUD.warn)
-                }
-                Text("Completed public checks are also retained in the saved evidence above.")
-                    .hudType(.caption).foregroundStyle(HUD.inkMuted)
-                BeholderResultsView(
-                    findings: research.findings, username: research.username, searching: research.searching,
-                    research: research, embedded: true
-                ) { finding in onReview(.init(username: research.username, finding: finding)) }
-            }
+        } else if search.kind == .name || search.kind == .email,
+                  let request = BeholderGitHubDiscovery.prepare(.init(
+                      value: search.query, kind: search.kind == .name ? .name : .email
+                  ))
+        {
+            Text(verbatim: request.endpoint.absoluteString).hudType(.caption).textSelection(.enabled)
+            Text("GitHub receives this query and requests for up to 20 returned profiles, with your IP address and app request metadata.")
+                .hudType(.caption).foregroundStyle(HUD.inkMuted)
         }
     }
 
-    private func profileSummary(_ input: BeholderPublicSearch.Input) -> String {
-        guard let name = BeholderCaseSearch.username(input.value) else { return "" }
-        let eligible = research.providers.filter { $0.supports(name) }
-        let automatic = eligible.filter { !$0.isManual }
-        let manualCount = eligible.filter(\.isManual).count
-        var summary = "“\(name)” · \(automatic.count) automatic checks · \(manualCount) manual browser links."
-        if !automatic.isEmpty {
-            summary += " Automatic sources receive the handle, your IP address and app identifier."
+    private func publicLookups(_ input: BeholderPublicSearch.Input) -> some View {
+        VStack(alignment: .leading, spacing: HUD.space3) {
+            if input.kind == .username {
+                Text("AUTOMATIC PROFILE RESULTS").hudType(.data)
+                if search.profileQuery == research.username, search.profileQuery != nil {
+                    if let problem = research.problem {
+                        Text(problem).hudType(.caption).foregroundStyle(HUD.warn)
+                    }
+                    BeholderResultsView(
+                        findings: research.findings, username: research.username, searching: research.searching,
+                        research: research, embedded: true
+                    ) { finding in onReview(.init(username: research.username, finding: finding)) }
+                } else {
+                    Text("Press Search to retrieve public profiles.").hudType(.caption).foregroundStyle(HUD.inkMuted)
+                }
+            } else if input.kind == .name || input.kind == .email {
+                Text("GITHUB PROFILE RESULTS").hudType(.data)
+                BeholderGitHubDiscoveryView(
+                    discovery: research.githubDiscovery, research: research, embedded: true, onReview: onReview
+                )
+            } else {
+                Text("Phone searches currently use saved case evidence.").hudType(.caption).foregroundStyle(HUD.inkMuted)
+            }
         }
-        if automatic.contains(.bluesky) {
-            summary += " Bluesky uses “\(BeholderProvider.bluesky.lookupHandle(name))”."
-        }
-        return summary
     }
 }
