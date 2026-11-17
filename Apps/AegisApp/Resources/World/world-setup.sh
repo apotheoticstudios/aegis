@@ -5,8 +5,9 @@
 set -euo pipefail
 node_version=v24.22.0
 node_sha=6a9724d9b50a5f22b4816cded441b5a8d9ddae546191a5e5b7efa5a5e2ee26d5
-commit=93ea088f4556a5a65b3292a2d15142d5a6c562bc
-app_sha=52bca648c93f0437ad9e0897aff3c9bccc9f5d66a8ecb8586a050f4f6f57cfb0
+repository=apotheoticstudios/aegis-world
+commit=f5bd43ca909aadd62545d5a2d17194e105200586
+app_sha=5ccddb6c2fee79726c8369c9c818326c360bfea8007258e70662cf1fc91d15c6
 root="${AEGIS_WORLD_DIR:-$HOME/Library/Application Support/Aegis/World}"
 cache="$root/cache"
 status() { printf '%s\n' "$1" > "$root/setup-status"; }
@@ -44,7 +45,7 @@ if [ "$(cat "$app/.aegis-commit" 2>/dev/null || true)" != "$commit" ] || [ ! -f 
     archive="$cache/gods-eye-view-$commit.tar.gz"
     if [ ! -f "$archive" ] || [ "$(sha "$archive")" != "$app_sha" ]; then
         curl --fail --silent --location --retry 2 --max-time 600 --output "$archive.download" \
-            "https://codeload.github.com/bilawalsidhu/gods-eye-view/tar.gz/$commit" || fail "app download" # privacy-guard: allow-network pinned public app download, ADR-0024
+            "https://codeload.github.com/$repository/tar.gz/$commit" || fail "app download" # privacy-guard: allow-network pinned public app download, ADR-0024
         mv "$archive.download" "$archive"
     fi
     if [ "$(sha "$archive")" = "$app_sha" ]; then
@@ -52,11 +53,27 @@ if [ "$(cat "$app/.aegis-commit" 2>/dev/null || true)" != "$commit" ] || [ ! -f 
     elif command -v git >/dev/null 2>&1; then
         # GitHub's archives aren't byte-stable forever; the commit itself is the identity then.
         git -C "$fresh" init --quiet
-        git -C "$fresh" fetch --quiet --depth 1 https://github.com/bilawalsidhu/gods-eye-view.git "$commit" || fail "app download" # privacy-guard: allow-network pinned public app download, ADR-0024
+        git -C "$fresh" fetch --quiet --depth 1 https://github.com/$repository.git "$commit" || fail "app download" # privacy-guard: allow-network pinned public app download, ADR-0024
         [ "$(git -C "$fresh" rev-parse FETCH_HEAD)" = "$commit" ] || fail "app commit"
         git -C "$fresh" checkout --quiet FETCH_HEAD
     else
         fail "app checksum"
+    fi
+    # Preserve owner-managed provider settings; do not copy executable files or symlinks.
+    for name in .env .env.local .env.production .env.production.local .env.development .env.development.local; do
+        if [ -f "$app/$name" ] && [ ! -L "$app/$name" ]; then
+            cp -p "$app/$name" "$fresh/$name"
+            chmod 600 "$fresh/$name"
+        fi
+    done
+    if [ -d "$app/config" ] && [ ! -L "$app/config" ]; then
+        mkdir -p "$fresh/config"
+        for source in "$app"/config/cctv_sources.*.json; do
+            [ -f "$source" ] && [ ! -L "$source" ] || continue
+            name="${source##*/}"
+            # Keep new upstream defaults; retain additional local camera catalogs.
+            [ -e "$fresh/config/$name" ] || cp -p "$source" "$fresh/config/$name"
+        done
     fi
     status "Installing packages"
     (cd "$fresh" && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error) || fail "packages" # privacy-guard: allow-network pinned npm packages, ADR-0024
