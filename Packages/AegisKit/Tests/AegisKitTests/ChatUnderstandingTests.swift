@@ -68,6 +68,43 @@ final class ChatUnderstandingTests: XCTestCase {
         XCTAssertEqual(input.eventIDs, [], "a message that says “sweet” isn't what was asked about")
     }
 
+    /// #209: "What have I got on today?" got the couldn't-find line although the model answered from today's calendar.
+    /// It had filed the calendar citations under event_ids, as the real local model does with several events.
+    func testCalendarCitationsCountWhereverTheModelFilesThem() async throws {
+        let now = try time("2026-10-07T09:00:00Z")
+        let store = MemoryStore()
+        let items = ["Example standup", "Lunch with Example Sam"].enumerated().map { index, title in
+            CalendarOccurrence(
+                itemID: "example-\(index)", occurrenceDate: nil, calendarTitle: nil, title: title,
+                start: now.addingTimeInterval(Double(index + 1) * 3600), end: now.addingTimeInterval(Double(index + 2) * 3600),
+                isAllDay: false, timeZone: nil, location: nil, status: .confirmed, captureTime: now, attendees: []
+            )
+        }
+        try await store.ingest(CollectionBatch(
+            source: .calendar, status: .init(ok: true, code: .ok), events: [], occurrences: items, reminders: [], checkpoint: nil
+        ))
+        let input = try await Ask.prepare(question: "What have I got on today?", now: now, calendar: calendar, store: store, contacts: nil)
+        XCTAssertEqual(input.scheduleIDs.count, 2)
+        let said = "You have Example standup at 10am and Lunch with Example Sam at 11am."
+        let misfiled: [String: Any] = ["answer": said, "event_ids": input.scheduleIDs, "schedule_ids": [String]()]
+        let answer = try Ask.check(misfiled, input: input, model: "example", generatedAt: now).get()
+        XCTAssertEqual(answer.text, said)
+        XCTAssertEqual(answer.scheduleIDs, input.scheduleIDs)
+        XCTAssertEqual(answer.eventIDs, [])
+        let swapped: [String: Any] = ["answer": said, "event_ids": [String](), "schedule_ids": input.scheduleIDs]
+        XCTAssertEqual(try Ask.check(swapped, input: input, model: "example", generatedAt: now).get().scheduleIDs, input.scheduleIDs)
+        // Its own list's order comes first: a repeat filed under the other list never pushes out the model's first choice.
+        let messages = (0 ..< Answer.maxCitations - 1).map { "ev_\($0)" }
+        let crowded = AskInput(text: "", eventIDs: messages, scheduleIDs: ["cal_a", "cal_b"])
+        let mixed: [String: Any] = ["answer": said, "event_ids": messages + ["cal_b"], "schedule_ids": ["cal_a", "cal_b"]]
+        let kept = try Ask.check(mixed, input: crowded, model: "example", generatedAt: now).get()
+        XCTAssertEqual(kept.eventIDs, messages)
+        XCTAssertEqual(kept.scheduleIDs, ["cal_a"])
+        // An ID that isn't in this question's context still backs nothing.
+        let invented: [String: Any] = ["answer": said, "event_ids": ["cal_0123456789abcdef"], "schedule_ids": [String]()]
+        XCTAssertEqual(try Ask.check(invented, input: input, model: "example", generatedAt: now).get().text, Ask.notFound)
+    }
+
     func testEverydayCommandsReachTheModel() {
         for line in [
             "fire up Spotify",
