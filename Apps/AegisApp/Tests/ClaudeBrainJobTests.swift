@@ -177,6 +177,14 @@ final class ClaudeBrainJobTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(lengths.filter { $0 > 0 && $0 < reply.count }.count, 3, "shown in steps, not whole")
     }
 
+    /// A question that replaces a running one never shows that one's partial reply (#210).
+    func testANewQuestionNeverShowsTheLastOnesPartialReply() {
+        let model = PanelModel(service: FixtureCore())
+        model.partialAnswer = "From the last question"
+        _ = model.beginQuestion("What else?")
+        XCTAssertEqual(model.partialAnswer, "")
+    }
+
     /// A fast reply's passages are synthesised one at a time and in order: the bundled voice refuses a second one
     /// meanwhile. After a failure the rest are left for the system voice without asking again (#210).
     func testSpokenPassagesAreSynthesisedOneAtATime() async {

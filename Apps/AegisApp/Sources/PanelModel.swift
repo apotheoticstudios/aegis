@@ -740,6 +740,8 @@ extension PanelModel {
         let id = UUID()
         questionID = id
         handingOff = nil
+        // A stopped job leaves its partial reply behind; never show it under this question (#210).
+        partialAnswer = ""
         voice.stopSpeaking()
         askState = .asking(question)
         return id

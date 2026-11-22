@@ -39,6 +39,8 @@ final class Voice {
     @ObservationIgnored private var live: AnyObject?
     private let localSpeech = VoiceXPCClient()
     private var voiceSession: Task<Void, Never>?
+    /// The streamed reply could not be played: the rest is left unsynthesised for the system voice (#210).
+    @ObservationIgnored private var playbackFailed = false
     /// Pace, air, a small room and gentle compression for the built-in voice clips (#204).
     @ObservationIgnored private let finish = VoiceFinish(rate: Voice.speakingRate)
     /// The words heard so far of a question spoken after "Hey Aegis", shown live in CHAT.
@@ -225,6 +227,8 @@ final class Voice {
     /// Plays passages from the built-in voice, fetching the next while one plays. Returns how many were spoken.
     private func speakWithLocalVoice(_ parts: [String]) async -> Int {
         guard !parts.isEmpty else { return 0 }
+        // The voice makes one passage at a time: let the panel's warm-up "Yes" finish first (#210).
+        await voiceSession?.value
         guard var next = await localSpeech.audio(for: parts[0]) else {
             if !Task.isCancelled {
                 DiagnosticLog.shared.record(.synthesisFailed)
@@ -438,8 +442,15 @@ extension Voice {
 
     private func playStream(_ parts: AsyncStream<String>) async {
         let (ready, sink) = AsyncStream<(String, Data?)>.makeStream()
+        let warmUp = voiceSession
+        playbackFailed = false
         let feeder = Task { [localSpeech] in
-            await Self.synthesize(parts, into: sink) { await localSpeech.audio(for: $0) }
+            // The voice makes one passage at a time: let the panel's warm-up "Yes" finish first.
+            await warmUp?.value
+            await Self.synthesize(parts, into: sink) { part in
+                guard await !self.playbackFailed else { return nil }
+                return await localSpeech.audio(for: part)
+            }
         }
         defer { feeder.cancel() }
         var leftover: [String] = []
@@ -463,6 +474,7 @@ extension Voice {
                     return
                 }
                 DiagnosticLog.shared.record(.playbackFailed)
+                playbackFailed = true
                 leftover.append(part)
                 continue
             }
