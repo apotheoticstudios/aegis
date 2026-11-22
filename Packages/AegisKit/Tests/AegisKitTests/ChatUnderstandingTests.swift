@@ -93,6 +93,13 @@ final class ChatUnderstandingTests: XCTestCase {
         XCTAssertEqual(answer.eventIDs, [])
         let swapped: [String: Any] = ["answer": said, "event_ids": [String](), "schedule_ids": input.scheduleIDs]
         XCTAssertEqual(try Ask.check(swapped, input: input, model: "example", generatedAt: now).get().scheduleIDs, input.scheduleIDs)
+        // Its own list's order comes first: a repeat filed under the other list never pushes out the model's first choice.
+        let messages = (0 ..< Answer.maxCitations - 1).map { "ev_\($0)" }
+        let crowded = AskInput(text: "", eventIDs: messages, scheduleIDs: ["cal_a", "cal_b"])
+        let mixed: [String: Any] = ["answer": said, "event_ids": messages + ["cal_b"], "schedule_ids": ["cal_a", "cal_b"]]
+        let kept = try Ask.check(mixed, input: crowded, model: "example", generatedAt: now).get()
+        XCTAssertEqual(kept.eventIDs, messages)
+        XCTAssertEqual(kept.scheduleIDs, ["cal_a"])
         // An ID that isn't in this question's context still backs nothing.
         let invented: [String: Any] = ["answer": said, "event_ids": ["cal_0123456789abcdef"], "schedule_ids": [String]()]
         XCTAssertEqual(try Ask.check(invented, input: input, model: "example", generatedAt: now).get().text, Ask.notFound)

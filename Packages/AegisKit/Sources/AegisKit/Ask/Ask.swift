@@ -74,10 +74,10 @@ public enum Ask {
         }
         // Small slips are repaired rather than losing the answer: invented citations are dropped, raw record IDs
         // leave the text, extra lines join and an overlong answer ends at its last full sentence.
-        // The model often files calendar IDs under event_ids (#209): a real ID from this context counts in either list.
-        let ids = unique(rawEvents + rawSchedule)
-        let events = ids.filter(input.eventIDs.contains)
-        let schedule = ids.filter(input.scheduleIDs.contains)
+        // The model often files calendar IDs under event_ids (#209): a real ID from this context counts in either list,
+        // after its own list's, so the model's first choices stay first under the citation cap.
+        let events = unique(rawEvents + rawSchedule).filter(input.eventIDs.contains)
+        let schedule = unique(rawSchedule + rawEvents).filter(input.scheduleIDs.contains)
         var text = drafted.replacingOccurrences(
             of: #"\s*[\[(]?\b(?:ev|cal|rem|occ)_[0-9a-f]{6,}[\])]?"#,
             with: "",
