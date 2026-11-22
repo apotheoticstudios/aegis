@@ -1,5 +1,6 @@
 @testable import Aegis
 import AegisKit
+import AppKit
 import XCTest
 
 /// ADR-0038 stage 5: with Claude chosen, the panel's questions go to a stand-in for Claude Code; when it can't answer,
@@ -154,6 +155,51 @@ final class ClaudeBrainJobTests: XCTestCase {
         XCTAssertEqual(PanelModel.sentences("Done."), "Done.")
     }
 
+    /// Claude's reply types out at CHAT's pace even when it arrives in one large piece (#210).
+    func testTheReplyTypesOutRatherThanAppearingAtOnce() async throws {
+        try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "reduce motion shows it at once")
+        let reply = String(repeating: "Saturday works for the picnic. ", count: 6).trimmingCharacters(in: .whitespaces)
+        PanelModel.brainRunner = try ClaudeCodeRunner(executable: standIn(turn: """
+          delta '\(reply)'
+          sleep 1
+          result '\(reply)'
+        """))
+        let model = PanelModel(service: FixtureCore())
+        let asking = Task { await model.answerQuestion("What do you make of the picnic plan?", spoken: false) }
+        var lengths: Set<Int> = []
+        let deadline = Date().addingTimeInterval(60)
+        while Self.answer(model) == nil, Date() < deadline {
+            lengths.insert(model.partialAnswer.count)
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        await asking.value
+        XCTAssertEqual(Self.answer(model)?.text, reply)
+        XCTAssertGreaterThanOrEqual(lengths.filter { $0 > 0 && $0 < reply.count }.count, 3, "shown in steps, not whole")
+    }
+
+    /// A fast reply's passages are synthesised one at a time and in order: the bundled voice refuses a second one
+    /// meanwhile. After a failure the rest are left for the system voice without asking again (#210).
+    func testSpokenPassagesAreSynthesisedOneAtATime() async {
+        let (parts, queue) = AsyncStream<String>.makeStream()
+        for part in ["One.", "Two.", "Three.", "Four."] {
+            queue.yield(part)
+        }
+        queue.finish()
+        let (ready, sink) = AsyncStream<(String, Data?)>.makeStream()
+        let synthesis = Synthesis()
+        await Voice.synthesize(parts, into: sink) { await synthesis.make($0) }
+        var results: [(String, Bool)] = []
+        for await (part, data) in ready {
+            results.append((part, data != nil))
+        }
+        XCTAssertEqual(results.map(\.0), ["One.", "Two.", "Three.", "Four."])
+        XCTAssertEqual(results.map(\.1), [true, true, false, false])
+        let asked = await synthesis.asked
+        let most = await synthesis.most
+        XCTAssertEqual(asked, ["One.", "Two.", "Three."], "nothing asked after the failure")
+        XCTAssertEqual(most, 1, "never two at once")
+    }
+
     private static func answer(_ model: PanelModel) -> Answer? {
         if case let .answered(_, answer) = model.askState {
             return answer
@@ -193,5 +239,21 @@ final class ClaudeBrainJobTests: XCTestCase {
         try script.write(to: file, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
         return file.path
+    }
+}
+
+/// A stand-in for the bundled voice that counts overlapping requests and fails on "Three.".
+private actor Synthesis {
+    private(set) var asked: [String] = []
+    private(set) var most = 0
+    private var running = 0
+
+    func make(_ text: String) async -> Data? {
+        asked.append(text)
+        running += 1
+        most = max(most, running)
+        try? await Task.sleep(for: .milliseconds(20))
+        running -= 1
+        return text == "Three." ? nil : Data(text.utf8)
     }
 }

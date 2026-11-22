@@ -1,4 +1,5 @@
 import AegisKit
+import AppKit
 import Foundation
 
 /// Aegis's jobs on the chosen brain (ADR-0038 stage 5). With Claude chosen and the panel open, questions that aren't
@@ -194,13 +195,17 @@ extension PanelModel {
         let live: @Sendable @MainActor () -> Bool = { generation == PanelModel.brainGeneration && PanelModel.claudeFor([]) }
         let runner = Self.brainRunner
         let (pieces, sink) = AsyncStream.makeStream(of: String.self)
+        let typist = Typist { [weak self] text in
+            guard let self, let id, live(), isCurrentQuestion(id) else { return }
+            partialAnswer = text
+        }
         let shown = Task { @MainActor [weak self] in
             var text = ""
             var said = ""
             for await piece in pieces {
                 text += piece
                 guard let self, let id, live(), isCurrentQuestion(id) else { continue }
-                partialAnswer = text
+                typist.text = text
                 let done = Self.sentences(text)
                 guard speak, done.count > said.count else { continue }
                 if said.isEmpty {
@@ -228,6 +233,7 @@ extension PanelModel {
         }
         sink.finish()
         let spoken = await shown.value
+        typist.stop()
         if live() {
             partialAnswer = ""
         }
@@ -302,5 +308,31 @@ extension PanelModel {
             index = next
         }
         return end.map { String(text[..<$0]) } ?? ""
+    }
+}
+
+/// Claude's reply shown at CHAT's typing pace, not in the few large pieces Claude Code sends: a short reply arrives
+/// whole in about a second (#210). What's left when the reply ends types out in its CHAT line, from where this got to.
+@MainActor private final class Typist {
+    var text = ""
+    private var ticking: Task<Void, Never>?
+
+    init(show: @escaping @MainActor (String) -> Void) {
+        ticking = Task { @MainActor [weak self] in
+            var shown = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(12))
+                guard let self else { return }
+                guard shown < text.count else { continue }
+                let still = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || !HUDPresence.shared.animating
+                // About 80 characters a second, like CHAT's typing, and faster while far behind.
+                shown = still ? text.count : shown + max(1, (text.count - shown) / 60)
+                show(String(text.prefix(shown)))
+            }
+        }
+    }
+
+    func stop() {
+        ticking?.cancel()
     }
 }

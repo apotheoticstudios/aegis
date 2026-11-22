@@ -421,7 +421,7 @@ extension Voice {
         }
     }
 
-    /// More of the reply: each passage is synthesised as soon as it arrives and played after the ones before it.
+    /// More of the reply: each passage is synthesised in turn as it arrives and played after the ones before it.
     func continueStreaming(_ text: String) {
         guard let streamQueue, !text.isEmpty else { return }
         spokenText += (spokenText.isEmpty ? "" : " ") + text
@@ -437,27 +437,20 @@ extension Voice {
     }
 
     private func playStream(_ parts: AsyncStream<String>) async {
-        let (ready, sink) = AsyncStream<(String, Task<Data?, Never>)>.makeStream()
+        let (ready, sink) = AsyncStream<(String, Data?)>.makeStream()
         let feeder = Task { [localSpeech] in
-            for await part in parts {
-                sink.yield((part, Task { await localSpeech.audio(for: part) }))
-            }
-            sink.finish()
+            await Self.synthesize(parts, into: sink) { await localSpeech.audio(for: $0) }
         }
         defer { feeder.cancel() }
         var leftover: [String] = []
-        for await (part, audio) in ready {
-            guard !Task.isCancelled else {
-                audio.cancel()
-                return
-            }
+        for await (part, data) in ready {
+            guard !Task.isCancelled else { return }
             // Once the bundled voice fails, the system voice says the rest at the end.
             guard leftover.isEmpty else {
-                audio.cancel()
                 leftover.append(part)
                 continue
             }
-            guard let data = await audio.value, !Task.isCancelled else {
+            guard let data, !Task.isCancelled else {
                 if Task.isCancelled {
                     return
                 }
@@ -482,6 +475,22 @@ extension Voice {
         } else {
             speakWithSystem(leftover.joined(separator: " "))
         }
+    }
+
+    /// Each passage synthesised as it arrives, one at a time and in order, ahead of playback. The bundled voice makes
+    /// one passage at a time and refuses another meanwhile, so asking for several at once handed the rest of a fast
+    /// reply to the system voice (#210). After a failure the rest pass through unsynthesised, for the system voice.
+    nonisolated static func synthesize(
+        _ parts: AsyncStream<String>, into sink: AsyncStream<(String, Data?)>.Continuation,
+        by audio: @Sendable (String) async -> Data?
+    ) async {
+        var failed = false
+        for await part in parts {
+            let data = failed ? nil : await audio(part)
+            failed = failed || data == nil
+            sink.yield((part, data))
+        }
+        sink.finish()
     }
 }
 
