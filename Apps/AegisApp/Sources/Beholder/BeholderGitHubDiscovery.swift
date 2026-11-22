@@ -26,7 +26,7 @@ enum BeholderGitHubDiscovery {
         case input, unavailable, limited, response, context, profile
         var message: String {
             switch self {
-            case .input: "Enter a complete name or email, then prepare a GitHub request."
+            case .input: "Enter a complete name or email and press Search."
             case .unavailable: "GitHub could not be reached. No search result was established."
             case .limited: "GitHub refused or rate-limited this request. Try again later; nothing retries automatically."
             case .response: "GitHub's response could not be validated. This is not evidence that no accounts exist."
@@ -142,7 +142,7 @@ struct BeholderGitHubDiscoveryClient: BeholderGitHubDiscovering {
 
     func inspect(_ login: String) async -> BeholderFinding {
         guard BeholderGitHubDiscovery.validLogin(login) else { return BeholderFinding(provider: .github, status: .unsupported) }
-        // privacy-guard: allow-network ADR-0037, #144; separate owner Inspect reuses the fixed GitHub profile adapter
+        // privacy-guard: allow-network ADR-0037/0039, #159; owner-started research reuses the fixed GitHub profile adapter
         return await BeholderClient(transport: transport).lookup(.github, username: login)
     }
 }
@@ -169,6 +169,9 @@ final class BeholderGitHubResearch {
     private(set) var problem: BeholderGitHubDiscovery.Problem?
     private(set) var searching = false
     private(set) var inspecting: String?
+    private(set) var automatic = false
+    private(set) var profiles: [String: BeholderFinding] = [:]
+    private(set) var rejectedProfiles = Set<String>()
     private var generation = UUID()
     private var job: Task<Void, Never>?
     private let client: any BeholderGitHubDiscovering
@@ -185,10 +188,32 @@ final class BeholderGitHubResearch {
         BeholderGitHubDiscovery.prepare(input) != nil
     }
 
+    /// Display groups preserve the search provider's order; they never infer identity or start requests.
+    var foundHits: [BeholderGitHubDiscovery.Hit] {
+        (page?.hits ?? []).filter { profiles[$0.login]?.status == .candidate }
+    }
+
+    var pendingHits: [BeholderGitHubDiscovery.Hit] {
+        (page?.hits ?? []).filter { profiles[$0.login] == nil && !rejectedProfiles.contains($0.login) }
+    }
+
+    var otherHits: [BeholderGitHubDiscovery.Hit] {
+        (page?.hits ?? []).filter { rejectedProfiles.contains($0.login) || profiles[$0.login].map { $0.status != .candidate } == true }
+    }
+
+    var checkedCount: Int {
+        profiles.count + rejectedProfiles.count
+    }
+
+    var unresolvedCount: Int {
+        rejectedProfiles.count + profiles.values.filter { [.limited, .unavailable].contains($0.status) }.count
+    }
+
     func invalidate() {
         generation = UUID(); job?.cancel(); job = nil
         prepared = nil; page = nil; inspected = nil; inspectedLogin = nil
         problem = nil; searching = false; inspecting = nil
+        automatic = false; profiles.removeAll(); rejectedProfiles.removeAll()
     }
 
     func reset() {
@@ -208,25 +233,62 @@ final class BeholderGitHubResearch {
         }
     }
 
-    func search() {
+    func search(into model: BeholderModel? = nil) {
         guard let request = prepared, request.input == input else { return }
-        invalidate(); prepared = request; searching = true
-        let token = generation, client = client
+        invalidate(); prepared = request; searching = true; automatic = model != nil
+        let token = generation, client = client, context = model?.discoveryContextID
         job = Task { [weak self] in
             guard !Task.isCancelled else { return }
             let result = await client.search(request)
             guard let self, generation == token, !Task.isCancelled else { return }
-            searching = false; job = nil
             switch result {
-            case let .success(page) where page.request == request: self.page = page
+            case let .success(page) where page.request == request && page.hits.count <= 20 &&
+                page.hits.allSatisfy { BeholderGitHubDiscovery.validLogin($0.login) } && Set(page.hits.map(\.id)).count == page.hits.count:
+                self.page = page
+                if let model, let context {
+                    await fetchProfiles(page, token: token, context: context, into: model)
+                }
             case .success: problem = .response
             case let .failure(problem): self.problem = problem
+            }
+            guard generation == token else { return }
+            searching = false; job = nil
+        }
+    }
+
+    private func fetchProfiles(_ page: BeholderGitHubDiscovery.Page, token: UUID, context: UUID, into model: BeholderModel) async {
+        guard model.discoveryContextID == context else { problem = .context; return }
+        let client = client
+        await withTaskGroup(of: (String, BeholderFinding).self) { group in
+            var remaining = page.hits.makeIterator()
+            var limited = false
+            for _ in 0 ..< BeholderModel.parallelLimit {
+                guard !Task.isCancelled, generation == token, model.discoveryContextID == context,
+                      let hit = remaining.next() else { break }
+                group.addTask { await (hit.login, client.inspect(hit.login)) }
+            }
+            for await (login, finding) in group {
+                guard !limited, !Task.isCancelled, generation == token else { group.cancelAll(); continue }
+                guard model.discoveryContextID == context else { problem = .context; group.cancelAll(); continue }
+                if model.recordGitHubInspection(login: login, finding: finding) {
+                    profiles[login] = finding
+                } else {
+                    rejectedProfiles.insert(login)
+                    problem = .profile
+                }
+                if finding.status == .limited {
+                    limited = true; problem = .limited; group.cancelAll()
+                }
+                if !limited, let hit = remaining.next(), !Task.isCancelled {
+                    group.addTask { await (hit.login, client.inspect(hit.login)) }
+                }
             }
         }
     }
 
     func inspect(_ hit: BeholderGitHubDiscovery.Hit, into model: BeholderModel) {
-        guard let page, page.request == prepared, page.hits.contains(hit), BeholderGitHubDiscovery.validLogin(hit.login) else { return }
+        guard !automatic, let page, page.request == prepared, page.hits.contains(hit),
+              BeholderGitHubDiscovery.validLogin(hit.login) else { return }
         job?.cancel(); generation = UUID(); searching = false; inspecting = hit.login
         inspected = nil; inspectedLogin = nil; problem = nil
         let token = generation, caseToken = model.discoveryContextID, client = client

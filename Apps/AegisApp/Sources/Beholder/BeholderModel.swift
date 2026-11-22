@@ -67,8 +67,9 @@ final class BeholderModel {
         BeholderProvider.allCases.filter { selected.contains($0) }
     }
 
-    func start() {
-        guard let name = preparedUsername, !providers.isEmpty else {
+    func start(providers requested: [BeholderProvider]? = nil) {
+        let chosen = requested ?? providers
+        guard let name = preparedUsername, !chosen.isEmpty else {
             problem = BeholderCaseSearch.usernameProblem(query) ??
                 "Enter one username using letters, numbers, dots, dashes or underscores, and choose at least one source."
             return
@@ -78,11 +79,11 @@ final class BeholderModel {
         generation = token
         username = name
         problem = nil
-        findings = providers.map { $0.manualFinding(name) ?? BeholderFinding(provider: $0, status: .queued, sourceURL: $0.endpoint(name)) }
+        findings = chosen.map { $0.manualFinding(name) ?? BeholderFinding(provider: $0, status: .queued, sourceURL: $0.endpoint(name)) }
         for finding in findings {
             archive(finding)
         }
-        let sources = providers.filter { !$0.isManual }
+        let sources = chosen.filter { !$0.isManual }
         searching = !sources.isEmpty
         guard searching else { return }
         let client = client
@@ -189,7 +190,7 @@ final class BeholderModel {
         )
     }
 
-    /// Only a separately inspected, exact public GitHub profile may reach the case; search queries/hits never do.
+    /// Only a validated exact public GitHub profile may reach the case; search queries/hits never do.
     func recordGitHubInspection(login: String, finding: BeholderFinding) -> Bool {
         guard BeholderGitHubDiscovery.validLogin(login), finding.provider == .github,
               finding.sourceURL == BeholderProvider.github.endpoint(login), finding.checkedAt != nil,
