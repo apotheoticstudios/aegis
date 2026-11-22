@@ -10,7 +10,8 @@ Updated by whoever changes an issue's state (Claude's `/handoff` does it automat
 
 | Issue | Title | Owner | Branch | State |
 | --- | --- | --- | --- | --- |
-| #209 | "What have I got on today?" said it found nothing: calendar citations the model files under event_ids now count | agent:claude | claude/209-cited-calendar | In review |
+| #210 | Claude replies type out at CHAT's pace, and the bundled voice gets one passage at a time, so it no longer drops to the Mac voice | agent:claude | merged | Merged (#212), installed; needs the owner's first real try by voice |
+| #209 | "What have I got on today?" said it found nothing: calendar citations the model files under event_ids now count | agent:claude | merged | Merged (#211), installed |
 | #207 | "Hey Aegis" (or the chosen name) wakes at a normal speaking volume: a fixed 10× boost before the wake model, which scored normal-volume speech too low without the panel's voice processing | agent:claude | merged | Merged (#208), installed; needs the owner's first real try |
 | #203 | Everyday wording: lead-ins ("Sweet.", "Jarvis,") and filler never become the topic; more ways of asking reach the command picker | agent:claude | merged | Merged (#206), installed; needs the owner's first real try |
 | #203 | Chat in context: no claimed actions (opened, noted, cancelled, cleared…), "I mean X" corrections, shortcut names matched like speech (near ones offered), a bare "cancel", fixed answers about the panel | agent:claude | merged | Merged (#205), installed; needs the owner's first real try by voice |
